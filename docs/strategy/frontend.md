@@ -117,27 +117,27 @@ A **deterministic 240-second stage controller** (`demo/controller.ts`) drives th
 
 ## §6 — Suggested color system
 
-A dark, terminal/IDE-adjacent palette — the product reads as a *compiler for traders*, so it should feel like a code tool with live-market accents. WCAG-AA contrast against the dark backgrounds.
+A dark, Atlantic-adjacent palette tuned to the colors of **Carcavelos beach** (Lisboa) — the product reads as a *compiler for traders*, so it should feel like a code tool with live-market accents, but the chrome is the Lisbon sea at dusk: deep ocean for backgrounds, turquoise shallows for brand. WCAG-AA contrast against the dark backgrounds.
 
 | Token | Hex | Use |
 |---|---|---|
-| `bg-base` | `#0B0E14` | App background (near-black, faint blue) |
-| `bg-surface` | `#121622` | Pane / card backgrounds |
-| `bg-surface-2` | `#1A2030` | Raised surfaces, the bytecode pane |
-| `border` | `#262D3D` | Pane borders, dividers |
-| `text-primary` | `#E6EAF2` | Primary text |
-| `text-muted` | `#8A93A6` | Labels, secondary text, token lengths |
-| `accent-brand` | `#5B8DEF` | Brand/links, the live `ship()` action, AST move-arrows |
-| `ok` (green card) | `#3DD68C` | Safety card green, hash-match, monotonicity pass |
-| `danger` (red card) | `#FF5C5C` | REJECTED card, hash mismatch, halt, oracle-guard trigger |
-| `warn` | `#FFB454` | Cached/fallback badge ("disclosed cached"), stale-state hints |
-| `opcode-skew` | `#C792EA` | `_inventorySkew2D` token accent |
-| `opcode-guard` | `#F78C6C` | `_oracleGuard2D` token accent |
+| `bg-base` | `#01293A` | App background (deep Atlantic, darkest of the sea) |
+| `bg-surface` | `#024055` | Pane / card backgrounds (deep-ocean blue) |
+| `bg-surface-2` | `#006994` | Raised surfaces, the bytecode pane (mid-depth ocean blue) |
+| `border` | `#0A6E8C` | Pane borders, dividers (shallow-sea edge) |
+| `text-primary` | `#EAF6FB` | Primary text (sunlit foam white) |
+| `text-muted` | `#8FD2E6` | Labels, secondary text, token lengths (sea-spray blue) |
+| `accent-brand` | `#48D1CC` | Brand/links, the live `ship()` action, AST move-arrows (Caravelos turquoise) |
+| `ok` (green card) | `#7FE3B0` | Safety card green, hash-match, monotonicity pass (sunlit sea-glass) |
+| `danger` (red card) | `#FF6B6B` | REJECTED card, hash mismatch, halt, oracle-guard trigger (sunset coral) |
+| `warn` | `#FFD66B` | Cached/fallback badge ("disclosed cached"), stale-state hints (beach-flag yellow) |
+| `opcode-skew` | `#B5A0FF` | `_inventorySkew2D` token accent (lisbon azulejo lilac) |
+| `opcode-guard` | `#FFB088` | `_oracleGuard2D` token accent (sunset sand peach) |
 
 **Conventions:**
 - **Safety card** = solid `ok` or `danger` background with the verdict word large (`SAFE` / `REJECTED`); the 4 numbers in a row beneath.
 - **Bytecode tokens** = monospaced (`ui-monospace`); opcode byte tinted by its accent (`opcode-skew`/`opcode-guard` for our two custom opcodes, `text-muted` for the rest), `[len]` in `text-muted`, args in `text-primary`.
-- **Reject-and-rewrite diff** = standard unified-diff coloring: removed lines `danger`-tinted bg (`rgba(255,92,92,.12)`), added lines `ok`-tinted bg (`rgba(61,214,140,.12)`); the AST move-arrow in `accent-brand`.
+- **Reject-and-rewrite diff** = standard unified-diff coloring: removed lines `danger`-tinted bg (`rgba(255,107,107,.12)`), added lines `ok`-tinted bg (`rgba(127,227,176,.12)`); the AST move-arrow in `accent-brand`.
 - **`EnsDiscovery`** = two hash columns; on match both render `ok`, on mismatch both flip `danger` with a "TAMPERED" tag.
 - **Fallback badge** = small `warn`-colored chip ("cached" / "subgraph syncing") so canned paths are always disclosed — honesty is a judging criterion.
 
