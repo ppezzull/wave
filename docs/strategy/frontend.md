@@ -134,6 +134,23 @@ A dark, Atlantic-adjacent palette tuned to the colors of **Carcavelos beach** (L
 | `opcode-skew` | `#B5A0FF` | `_inventorySkew2D` token accent (lisbon azulejo lilac) |
 | `opcode-guard` | `#FFB088` | `_oracleGuard2D` token accent (sunset sand peach) |
 
+**Sea gradient** — a vertical gradient that reads as the Caravelos water column from seabed to surf line. Use it on hero/backdrop surfaces, the safety-card frame, and the `ship()` CTA hover. It descends through four depth stops so it works as a tall backdrop (full-screen hero) or compressed (a button):
+
+```css
+/* `--sea-gradient` — deep Atlantic → turquoise shallows → foam */
+--sea-gradient: linear-gradient(
+  180deg,
+  #01293A 0%,    /* bg-base — the seabed / deepest water */
+  #024055 28%,   /* bg-surface — deep-ocean blue */
+  #006994 58%,   /* bg-surface-2 — mid-depth ocean */
+  #0A6E8C 78%,   /* border — shallow-sea edge */
+  #48D1CC 93%,   /* accent-brand — Caravelos turquoise, where light breaks the surface */
+  #AFEEEE 100%   /* pale aqua — the surf line */
+);
+```
+
+Stops map 1:1 onto the palette tokens above, so any later token retune keeps the gradient consistent. A horizontal `90deg` variant reads as the sea meeting the shore (left = deep water, right = foam) — use it for the app header strip and progress/depth bars. For a flatter, calmer surface (subtle section dividers) drop the last two stops and end at `#0A6E8C`. Keep text off the bottom ~15% (the turquoise→foam band) unless it sits on a `bg-surface` chip — contrast fails there.
+
 **Conventions:**
 - **Safety card** = solid `ok` or `danger` background with the verdict word large (`SAFE` / `REJECTED`); the 4 numbers in a row beneath.
 - **Bytecode tokens** = monospaced (`ui-monospace`); opcode byte tinted by its accent (`opcode-skew`/`opcode-guard` for our two custom opcodes, `text-muted` for the rest), `[len]` in `text-muted`, args in `text-primary`.
