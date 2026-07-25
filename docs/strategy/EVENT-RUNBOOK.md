@@ -36,15 +36,15 @@ The retune's action arm (`recompileAndShip()`, delivered by P2 at h20) and its d
 
 - **07:00–08:30** — P3: submission form prose (description, how-it's-made, 3 partner write-ups + feedback). Others: final fixture run + fallback recording.
 - **08:30–09:00** — submit. Buffer is the buffer; do not code into it.
-- **Post-09:00 staffing:** ENS booth (mandatory): **Flavio (P2)** · finalist judging session: **Flaviano (P1) + Pietro (P3)** · fresh-fork cut at T-15min before judging: **Flaviano (P1)**. (No-show at the ENS booth forfeits $3k of auto-entered ENS prizes regardless of code quality — Flavio's attendance is a hard requirement.)
+- **Post-09:00 staffing:** ENS booth (mandatory): **Flavio (P2)** · finalist judging session: **Flaviano (P1) + Pietro (P3)** · Sepolia seed + subgraph-sync check before judging: **Flaviano (P1)**. (No-show at the ENS booth forfeits $3k of auto-entered ENS prizes regardless of code quality — Flavio's attendance is a hard requirement.)
 
 ## Demo failure tree (rehearse, print before judging)
 
 - **LLM call flakes at beat 2** → P3 talks through the cached-but-real response (pre-warmed, disclosed as cached); P2 retries silently.
 - **x402 hiccups at beat 3** → env-var swap to Studio key (rehearsed); line: "the agent normally pays per query — falling back to our key."
-- **Fork RPC dies at beat 5** → second anvil instance already running on backup laptop; P1 swaps RPC URL while P3 narrates the ENS records already on screen.
+- **Sepolia RPC dies / tx fails at a beat** → backup Sepolia RPC URL (Alchemy/Infura) + second funded wallet already warm on backup laptop; P1 swaps while P3 narrates the ENS records already on screen. No fork to re-cut, no canned twin.
 - **Total demo loss** → the pre-recorded fallback video (recorded at G3), narrated live. Never debug on stage past 20 seconds.
-- **Oracle staleness fires spuriously** → shouldn't happen (feed-age check at fork cut); if it does: that IS the circuit breaker working — narrate it as such, honestly, and re-cut the demo path to the mock-oracle scenario.
+- **Oracle staleness fires spuriously** → shouldn't happen (Sepolia Chainlink feeds update live); if it does: that IS the circuit breaker working — narrate it as such, honestly, and switch the demo path to the mock-oracle scenario.
 
 ## Key/wallet matrix
 
@@ -52,8 +52,7 @@ The retune's action arm (`recompileAndShip()`, delivered by P2 at h20) and its d
 |---|---|---|---|---|
 | Mainnet ENS-owner key | strategist.eth (or chosen name) | dust ETH | ___ (minimize exposure — this is a real mainnet key on a demo laptop) | ___ |
 | Base mainnet key | x402 payments | ~$5 USDC + gas | ___ | ___ |
-| Sepolia key | ENS mirror | faucet ETH | ___ | ___ |
-| Fork keys | everything on-fork | anvil defaults | all | shared |
+| Sepolia key | deployer + seed + demo wallets | faucet ETH (pre-funded ×3–4 faucets) | ___ | ___ |
 
 Assign owners and machines at kickoff.
 

@@ -21,7 +21,7 @@ block-beta
     L1 -.-> L3
 ```
 
-All demo runs target a **mainnet fork (anvil)** — the fork does the real work; the UI is a view layer.
+All demo runs target **live Sepolia** — the chain does the real work; the UI is a view layer. No anvil fork, no mock data. Full plan: [PROD-TESTNET.md](./PROD-TESTNET.md).
 
 ## By layer
 
@@ -46,8 +46,8 @@ All demo runs target a **mainnet fork (anvil)** — the fork does the real work;
 ### L7 — UI (P3) · Next.js (App Router) + React, SSR
 - Three panes: intent (NL sentence) / bytecode (hex, tokenized into `[op][len][args]`) / safety card (green/red verdict from the `quote()` battery). Plus an ENS-discovery pane.
 - **Why SSR / server components:** keeps the **LLM call, API keys (Studio/x402), and the compile invocation server-side** — no secrets or heavy logic shipped to the browser, and the first paint can render a cached/canned safety card before the live compile returns (the latency-fallback mechanism).
-- **Server actions / route handlers** bridge to the compiler (`/compile`) + simulator (`/simulate`). The 1500ms watchdog swaps the live SSE stream to a canned `replay.json` on timeout (disclosed cached-but-real).
-- Runs against the **anvil fork RPC**; the fork does the real work, the UI is a view layer.
+- **Server actions / route handlers** bridge to the compiler (`/compile`) + simulator (`/simulate`). The 1500ms watchdog retries the live SSE stream on timeout (disclosed); there is no canned `replay.json` to fall back to — a persistent failure is narrated honestly against the on-screen state.
+- Runs against **live Sepolia** (RPC via Alchemy/Infura); the chain does the real work, the UI is a view layer. No anvil fork, no mock data.
 
 ### L2 — Data (P2) · The Graph
 - **First-party subgraph** (GraphQL `schema.graphql` + AssemblyScript `mapping.ts`) indexing our own `Swapped` events — deployed to a local **graph-node** on the fork. The monitor polls for entity deltas; a threshold breach fires `dock()`+`ship()`.
@@ -79,5 +79,5 @@ The **subgraph** (AssemblyScript + local `graph-node` syncing a fork). If it fai
 
 ## Demo infra
 
-- **anvil** mainnet fork, fresh-cut at T-15min. Chainlink `updatedAt` read at cut; happy-path `maxStalenessSecs=7200`. Backup anvil on a second laptop for fork-RPC death.
-- `MockAggregatorV3` (disclosed) drives the judge-triggered `_oracleGuard2D` halt.
+- **Live Sepolia** — real chain, real seeded strategies, real indexing (see [PROD-TESTNET.md](./PROD-TESTNET.md)). Sepolia ETH/USD heartbeat ≈ 3600s, so `maxStalenessSecs=7200` (2× heartbeat) is fine in steady state — **but testnet feeds lag, and the T-15min fork-cut freshness guarantee is gone.** So the demo's **`MockAggregatorV3` serves both the happy path and the halt scenario** (disclosed) — no demo-time dependence on live-feed freshness. Real Chainlink stays wired as the production source and is quoted on the safety card. Backup Sepolia RPC URL (Alchemy/Infura) + a second funded wallet on a second laptop.
+- `MockAggregatorV3` (deployed on Sepolia, disclosed) serves the happy path **and** drives the judge-triggered `_oracleGuard2D` halt (see [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) "Dual-oracle demo design").
