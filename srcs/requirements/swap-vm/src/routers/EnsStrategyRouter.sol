@@ -17,13 +17,14 @@ import { StrategyOpcodes } from "../opcodes/StrategyOpcodes.sol";
 /// @dev The `StrategyDeployed` signature is FROZEN (team contract):
 ///      - `strategyId` and `ensNode` are indexed (subgraph filter keys);
 ///        `programHash` is not (payload, never filtered on).
-///      - `programHash` is emitted as `bytes32(0)` until the compiler's
-///        `programHash()` is wired into the ship path; consumers must
-///        tolerate the zero value.
+///      - `programHash` is keccak256 of the announced program bytes, computed
+///        ON-CHAIN from the calldata the announcer passes — the placeholder
+///        era is over, but consumers must still tolerate `bytes32(0)` in
+///        events emitted before this landed.
 contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
     /// @notice A wave strategy went live: shipped to Aqua and bound to an ENS name
     /// @param strategyId Identifier of the shipped strategy (the order hash)
-    /// @param programHash keccak256 of the compiled program bytes (`bytes32(0)` until wired)
+    /// @param programHash keccak256 of the compiled program bytes
     /// @param ensNode ENS namehash of the strategy's subname
     event StrategyDeployed(bytes32 indexed strategyId, bytes32 programHash, bytes32 indexed ensNode);
 
@@ -50,8 +51,14 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
     ///      `onlyOwner` because the feed derives reputation from these events: an
     ///      open emitter would let anyone inject strategies that never shipped.
     ///      The owner is wave's announcer key, set at construction via `Rescuable`.
-    function announceStrategy(bytes32 strategyId, bytes32 ensNode) external onlyOwner {
-        emit StrategyDeployed(strategyId, bytes32(0), ensNode);
+    ///      Hashing the program ON-CHAIN (rather than accepting a caller-supplied
+    ///      hash) means the event can never carry a hash of bytes that were
+    ///      never shown — the ENS `v0.programhash` record verifies against this.
+    /// @param strategyId The shipped strategy's order hash
+    /// @param program The compiled program bytes (as emitted by the wave compiler)
+    /// @param ensNode ENS namehash of the strategy's subname
+    function announceStrategy(bytes32 strategyId, bytes calldata program, bytes32 ensNode) external onlyOwner {
+        emit StrategyDeployed(strategyId, keccak256(program), ensNode);
     }
 
     /// @dev Returns instruction set for VM execution
