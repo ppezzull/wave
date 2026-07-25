@@ -25,3 +25,5 @@ Owns the full deterministic spine: TS compiler → two SwapVM opcodes → `EnsSt
 
 **Never cut:** the live `swap()` through Aqua, the `_oracleGuard2D` halt, byte-identical compiler emit.
 **Cut floor:** `canonical.ts` + rules 1&2 + TS-direct emit + `OracleGuardStaleHalt`/`Clamp` + M1/M2 toggles + one RED screenshot; skew keeps penalty path only.
+**Dealbreaker:** the live `swap()` through Aqua (pull/push in trace, `Swapped` in fork logs, both opcodes hot) + a working `_oracleGuard2D` halt. Absent Sunday → 1inch is gone and finalist Practicality/WOW has no engine.
+**Demo/Q&A:** drive the fork (T-15 fresh cut, live `swap()` at Beat A's close, RPC swap on Beat-B failure while Pietro narrates). Own Q&A on opcode math + maker-favored rounding (exactIn floors, exactOut `ceilDiv`), "why a native opcode vs `_extruction`?" (cite `Extruction.sol`'s own header warning — never "impossible"), and license compliance. Sunday: finalist judging session with Pietro; you cut the fresh fork at T-15.

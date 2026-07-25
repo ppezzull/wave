@@ -21,4 +21,5 @@ Owns everything the judge sees: first-party subgraph + Supabase, the social UI (
 
 **Never cut:** safety-card verdict, ENS hash-verify chip, public description, live `swap()` beat, judge-triggered halt.
 **Cut order:** social interactions (follow/like/comment) → x402 → Studio insurance → `EnsDiscovery` polish → Beat C live.
-**Dealbreaker:** a feed that never dead-airs (every beat has a rehearsed canned twin).
+**Dealbreaker:** the autonomous zero-click retune provably driven by a live subgraph entity delta (log cites the entity ID) + a demo that never dead-airs (every beat has a rehearsed canned twin). A time/button-triggered retune scores ~0 on the Graph judge's "effective use" weight; a stage-melt loses the finalist slot for everyone.
+**Demo/Q&A:** you ARE the stage — run the controller, narrate Beats B and C, execute the failure tree, hold the fallback video. Own Q&A on "is The Graph load-bearing?" (the retune evidence log — query, entity ID, decision, tx hash; "unplug the subgraph and the position stops adapting"), demo integrity ("what was canned?" — everything except the live `swap()` has a disclosed twin), and product framing. Sunday: finalist judging session with Flaviano; Flavio covers the ENS booth.

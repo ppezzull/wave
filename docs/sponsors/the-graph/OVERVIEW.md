@@ -19,7 +19,7 @@ Weak spot either way is **Breadth (20%)** — one protocol. Treat as an upside, 
 Hard rules — **every track**: live data from a Graph provider (mocked/static disqualifies); public repo; 2–4 min demo video.
 Track-specific: AI Use Case + Continuity also require an agent that *reasons over or acts on* the data (not raw query output), a short description of which subgraphs/endpoints/tools are used, and that the project be built during the event. AI Tooling additionally requires open-sourcing with a clear README or SKILL.md.
 
-⚠️ **Open qualification risk:** AI Use Case requires "live data from a Graph provider" and names Nuthatch (self-hosted) as acceptable, but our plan runs a **local graph-node against an anvil fork**. Cheapest mitigation: also publish the subgraph to **Subgraph Studio** so the submission carries a Studio link, while the demo runs locally (you cannot fork-index from Studio). This is the "Studio insurance" decision point already on Pietro's sheet — **greenlight only if G2 landed on time**, per [../../strategy/Pietro.md](../../strategy/Pietro.md).
+⚠️ **Open qualification risk:** AI Use Case requires "live data from a Graph provider" and names Nuthatch (self-hosted) as acceptable, but our plan runs a **local graph-node against an anvil fork**. Cheapest mitigation: also publish the subgraph to **Subgraph Studio** so the submission carries a Studio link, while the demo runs locally (you cannot fork-index from Studio). This is the "Studio insurance" decision point already on Pietro's sheet — **greenlight only if G2 landed on time**, per [../../tasks/Pietro.md](../../tasks/Pietro.md).
 
 ## Ground truth
 

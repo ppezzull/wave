@@ -22,4 +22,5 @@ Owns identity + the agentic brain: ENS agent side (resolveVerify, register, prog
 
 **Never cut:** the hash-verify chain + negative path (compiler keccak == ENS record == on-chain hash, abort on mismatch), the zero-click retune citing an entity ID.
 **Cut order:** Studio insurance → x402 → ENSIP-26 JSON richness → fuzz coverage.
-**Mandatory:** at the ENS booth Sunday morning — no-show forfeits $3k of auto-entered prizes.
+**Dealbreaker:** the program-hash chain with the negative path live (no hard-coded values; settle aborts on mismatch in front of the judge) + at the ENS booth Sunday morning (mandatory for both ENS tracks; no-show forfeits $3k).
+**Demo/Q&A:** narrate Beat A (sentence → bytecode → safety card → live `ship()`) + the judge-typed reject. Own Q&A on "is this really a compiler?" (determinism property test, typed total verdicts, disassembler round-trip — show don't argue), "why can't the agent deploy something harmful?" (LLM freedom only inside Zod bounds; everything downstream deterministic), and ENSIP-25/26 (say "draft standard"). Sunday: ENS booth, in person, morning — mandatory attendee.
