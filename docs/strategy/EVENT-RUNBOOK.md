@@ -24,13 +24,13 @@ No person under 3h/night. Rotation: one of us sleeps 02–06, one 04–08, one 0
 
 Final division of work across the three-person team:
 
-- **P1 (Flaviano)** — on-chain core: the two custom opcodes (`_inventorySkew2D`, `_oracleGuard2D`), the mainnet fork deploy, and the subgraph's on-chain landing (`graph deploy` + first `Swapped` entity).
+- **P1 (Flaviano)** — on-chain core: the two custom opcodes (`_inventorySkew2D`, `_oracleGuard2D`), the Sepolia deploy, and the subgraph's on-chain landing (`graph deploy` + first `Swapped` entity).
 - **P2 (Flavio)** — compiler and ENS identity: `resolveVerify`, `register`, `programHash`. P2 also owes the autonomous-retune action arm `recompileAndShip()` by hour 20.
 - **P3 (Pietro)** — the data→agent→product stack: `graphDelta`, the autonomous retune, the subgraph `schema`/`mapping`, x402, the UI, the demo, and all submission prose.
 
 The retune's action arm (`recompileAndShip()`, delivered by P2 at h20) and its data source (P1's `graph deploy` at h18–20) are the only true cross-person dependencies; co-locating the consumer (P3) with the evidence log and UI is simpler than splitting the agent layer across two people.
 
-⚠️ P3 carries a heavy load (subgraph mapping + retune + x402 + UI + demo + all prose). Mitigations baked into the build: P1 lands `graph deploy` (owns fork infra), P2 owes `recompileAndShip()` by h20, x402 is post-G2 only, the agent runs in-process inside Next.js (no separate service). **P3's cut order: x402 first → `EnsDiscovery` polish second → never the retune or the safety card.** P3 owns all prose (submission form, partner write-ups, video script) from hour 0 — not "when free." Full Gantt: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) §3.
+⚠️ P3 carries a heavy load (subgraph mapping + retune + x402 + UI + demo + all prose). Mitigations baked into the build: P1 lands `graph deploy` (owns Sepolia deploy infra), P2 owes `recompileAndShip()` by h20, x402 is post-G2 only, the agent runs in-process inside Next.js (no separate service). **P3's cut order: x402 first → `EnsDiscovery` polish second → never the retune or the safety card.** P3 owns all prose (submission form, partner write-ups, video script) from hour 0 — not "when free." Full Gantt: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) §3.
 
 ## Sunday morning (hard schedule)
 
@@ -79,10 +79,10 @@ Commits pushed (no giant batches) · AI-attribution log current · spec/prompt f
 
 ### Per-sponsor
 
-**1inch** — [ ] official Aqua/SwapVM contracts (modified redeploy allowed) · [ ] on-chain token transfer in final demo (fork OK) · [ ] proper git history · [ ] license compliance (custom opcodes under `LicenseRef-Degensoft-SwapVM-1.1`, "Powered by SwapVM — © Degensoft Ltd 2025" in README+UI, changes marked/dated; see `../sponsors/1inch/LICENSING.md`).
+**1inch** — [ ] official Aqua/SwapVM contracts (modified redeploy allowed) · [ ] on-chain token transfer in final demo (Sepolia OK — the rule's "local fork" bar is cleared by a public, verifiable chain) · [ ] proper git history · [ ] license compliance (custom opcodes under `LicenseRef-Degensoft-SwapVM-1.1`, "Powered by SwapVM — © Degensoft Ltd 2025" in README+UI, changes marked/dated; see `../sponsors/1inch/LICENSING.md`).
 **The Graph (AI Use Case)** — [ ] **live** data from a Graph provider (mocked/static disqualifies) · [ ] load-bearing (agent reasons over data) · [ ] public repo + 2–4 min video + writeup of which subgraphs/endpoints · [ ] bonus: reusable SKILL/MCP.
 **ENS (AI Agents)** — [ ] load-bearing identity/discoverability, no hard-coded values · [ ] video or live demo link · [ ] **present at ENS booth Sunday morning (mandatory)**.
 
 ### Judging session
 
-7 min: 4 demo + 3 Q&A. Prepped answers: inspiration / tools & why / hardest challenge. Insurance: deterministic fork fixtures + offline fallback recording.
+7 min: 4 demo + 3 Q&A. Prepped answers: inspiration / tools & why / hardest challenge. Insurance: fresh Sepolia deployment (redeploy-if-needed) + offline fallback recording.

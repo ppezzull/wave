@@ -60,7 +60,7 @@ The whitepaper's own thesis IS our product's reason to exist:
 - release/1.1 instruction set is much bigger than whitepaper v1.0 (LimitSwap, MinRate, DutchAuction, TWAP, BaseFeeAdjuster, progressive fees, unwired OraclePriceAdjuster) — see internals doc.
 
 ### Open
-- Which chain to fork for the demo (pick from `AQUA_CONTRACT_ADDRESSES`; needs a live Chainlink feed for `_oracleGuard2D`) — likely mainnet or Base fork.
+- ~~Which chain to fork for the demo~~ — **Decided: Sepolia** (see [PROD-TESTNET.md](../../strategy/PROD-TESTNET.md)). 1inch does NOT deploy Aqua on Sepolia, so we deploy the Aqua + SwapVM stack ourselves on Sepolia (`yarn deploy sepolia` / `make deploy-swap-vm-aqua` with `OPS_NETWORK=sepolia`); Sepolia has the live Chainlink feed `_oracleGuard2D` needs and real WETH/USDC.
 - Review the SwapVM 1.1 license file (custom Degensoft license — fine for hackathon redeploy per prize rules, check anyway).
 
 ## Links
