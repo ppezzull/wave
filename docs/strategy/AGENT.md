@@ -139,7 +139,7 @@ From `docs/sponsors/the-graph/OVERVIEW.md` L40/L45: the retune must be data-caus
 
 ## Contradictions resolved
 
-- **Agent is its own container** — matches `srcs/docker-compose.yml` L95–110. The stale "in-process inside Next.js" wording across the strategy/task docs has been corrected to match.
+- **Agent is its own container** — matches `srcs/docker-compose.yml` L95–110. The stale "in-process inside Next.js" wording across the strategy/task docs (`TECH-STACK.md`, `frontend.md`, `EVENT-RUNBOOK.md`, `PROD-TESTNET.md`, `Flavio.md`, `Plan.md`) has been corrected to match. The client-side invariant still holds — the UI owns no business logic on the client; only the topology changed (the agent is now a separate service, reached over `AGENT_URL`, not imported in-process).
 - **Ownership split:** P2 (Flavio) owns the agent brain + action arms + ENS writes; P3 (Pietro) owns subgraph schema/mapping + UI + the `/review` queue surface; P1 (Flaviano) owns on-chain + deploy.
 - **Handshake:** the subgraph endpoint (P3 authors, P1 deploys, P2 consumes).
 

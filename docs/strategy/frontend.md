@@ -2,7 +2,7 @@
 
 _The UI spec — pages, routes, panes, data flow, colors, the demo beats, the failure tree, and build windows. **Owner: P3 (Pietro)** — owns the Next.js SSR UI, demo choreography, and all submission prose. This is the single source of truth for the frontend. Companion docs: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md), [PITCH.md](./PITCH.md), [EVENT-RUNBOOK.md](./EVENT-RUNBOOK.md), and [Pietro.md](./Pietro.md)._
 
-> **Hard rule (carries finalist weight):** the UI owns **no business logic on the client**. The compiler, `resolveVerify`, and `graphDelta` are libraries imported in-process by the Next.js server (API routes / server actions). The browser receives one stream of events from the server agent — it never calls the LLM, never holds API keys, never queries GraphQL directly. The agent is the single subgraph client.
+> **Hard rule (carries finalist weight):** the UI owns **no business logic on the client**. The agent (compiler, `resolveVerify`, `graphDelta`, MCP tools, z.ai) runs in **its own container** — see [AGENT.md](./AGENT.md) — and the Next.js server reaches it over `AGENT_URL=http://agent:3002` (HTTP/SSE). The browser receives one stream of events from the server, proxied to the agent — it never calls the LLM, never holds API keys, never queries GraphQL directly. The agent is the single subgraph client; LLM + wallet keys never live in the UI process.
 
 ---
 
@@ -12,11 +12,11 @@ _The UI spec — pages, routes, panes, data flow, colors, the demo beats, the fa
 |---|---|---|
 | Framework | **Next.js (App Router, SSR)** | SSR keeps the LLM call, API keys, and `/compile` invocation server-side. The feed SSR-renders from `getFeed()` (subgraph + ENS) on first paint. |
 | Rendering | **Server Components default**; client only for live event subscribers | No business logic on the client. |
-| Agent transport | **SSE (browser ↔ Next.js)** for `/api/compile` + `/api/stream`; `getFeed()` is a plain async fn for SSR | No separate service, no inter-service IPC. The UI consumes the server agent's event stream for compose/retune; the feed reads from the agent's subgraph+ENS helpers at render. |
+| Agent transport | **SSE (browser ↔ Next.js)** for `/api/compile` + `/api/stream`; Next.js ↔ agent over `AGENT_URL` (HTTP/SSE); `getFeed()` is a plain async fn for SSR that calls the agent | The agent **is** a separate service (its own container). Next.js is a thin proxy: it streams the browser's compose/retune events to the agent and reads the feed from the agent's subgraph+ENS tools at render. No business logic in the UI process — only transport. |
 | Network | **Sepolia** (live) — no anvil fork, no mock. See [PROD-TESTNET.md](./PROD-TESTNET.md). | Every demo moment is a real on-chain action a judge can verify on Etherscan. |
 | Attributions | **"Powered by SwapVM — © Degensoft Ltd 2025"** in the UI footer from hour 1 | 1inch license compliance (Classic track). |
 
-**Files (real repo paths):** `srcs/requirements/ui/src/` — Next.js App Router. Key modules: `app/page.tsx` (the feed, SSR via `getFeed()`), `app/[handle]/page.tsx` (profile), plus the compose panes/cards below. Agent modules (`compiler`, `resolveVerify`, `graphDelta`, `getFeed`) are imported in-process server-side, not duplicated in the UI.
+**Files (real repo paths):** `srcs/requirements/ui/src/` — Next.js App Router. Key modules: `app/page.tsx` (the feed, SSR via `getFeed()`), `app/[handle]/page.tsx` (profile), plus the compose panes/cards below. The agent lives in `srcs/requirements/agent/` (its own container); the UI never imports agent modules — it calls them over `AGENT_URL`. No business logic is duplicated into the UI.
 
 **Scope-cut floor:** three panes + green/red card rendering from live subgraph+ENS data. **Never cut:** the safety-card verdict, the `EnsDiscovery` pane, the live on-chain `ship()`/`swap()`, the global ranked feed.
 
@@ -137,18 +137,19 @@ There is **no `/demo` route, no 240s controller, no canned twins, no `DEMO_LIVE=
 ## §5 — Data flow (the one diagram that matters)
 
 ```
- Browser (/, /[handle])  ──SSE (compose)──►  Next.js server  ──in-process──►  compiler (emit + reject)
-      │                                            │                          resolveVerify (ENS)
-      │                                            │                          graphDelta (subgraph)
-      │                                            └─►  /api/compile (POST)   └─►  Sepolia (live ship/swap)
+ Browser (/, /[handle])  ──SSE (compose)──►  Next.js server  ──HTTP/SSE (AGENT_URL)──►  AGENT CONTAINER
+      │                                            │                                    compiler (emit + reject)
+      │                                            │                                    resolveVerify (ENS)
+      │                                            │                                    graphDelta (subgraph)
+      │                                            └─►  /api/compile (POST)              └─►  Sepolia (live ship/swap)
       │
       └── SSR feed (/) ◄── getFeed() = subgraph (Swapped, capital, volume, fills)
                                  + ENS (description, avatar, wave.following, v0.programhash)
 ```
 
-- **Two read paths, no off-chain store.** The compose/retune flow is SSE from `/api/stream`; the feed is SSR via `getFeed()` (subgraph + ENS). Both resolve to **chain + ENS — no database**.
-- **No client → GraphQL path.** The browser never queries the subgraph directly; the agent does, server-side.
-- **No second service.** Agent = server libraries imported in-process, not a separate process.
+- **Two read paths, no off-chain store.** The compose/retune flow is SSE from `/api/stream`, proxied to the agent; the feed is SSR via `getFeed()` (subgraph + ENS), served by the agent. Both resolve to **chain + ENS — no database**.
+- **No client → GraphQL path.** The browser never queries the subgraph directly; the agent does.
+- **The agent is its own service.** Next.js is a thin transport layer — it holds no LLM/wallet keys and imports no agent modules. Everything past it lives in the agent container ([AGENT.md](./AGENT.md)).
 - **No mock fallback.** If the subgraph lags, the feed shows what's indexed (disclosed via a `warn` "indexing" chip); if a compose call fails, it fails visibly. There is no `replay.json` to silently swap in.
 
 ---
