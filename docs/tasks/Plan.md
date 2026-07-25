@@ -21,7 +21,7 @@
 | ☐ | Agent parse verified against Flaviano's frozen spec; ENS register base | Flavio | ← Flaviano (spec) |
 | ☐ | Clean `_inventorySkew2D` + `_oracleGuard2D` rewrite (per §1.5, not spike) → stale-halt/clamp tests → `rules.ts` stubs (impl rules 1&2 first) → `ir.ts`/`emit.ts` (byte-identical, TS-direct) | Flaviano | — |
 | ☐ | `register.ts` writes `v0.programhash` → `resolveVerify.ts` (negative path: tampered fixture → abort) | Flavio | ← Flaviano (`StrategyDeployed` ABI) |
-| ☐ | UI scaffold (landing + 3-col feed shell on fixtures); feed card; `parseProgram`/`safetyReport`; `/api/feed` (Supabase + fixtures) | Pietro | ← Flaviano (spec) |
+| ☐ | UI scaffold (landing + 3-col feed shell on fixtures); feed card; `parseProgram`/`safetyReport`; `getFeed()` direct Server-Component query (Supabase counts + fixtures) | Pietro | ← Flaviano (spec) |
 | ☐ | **G1 — walking skeleton** — clean opcodes + guard tests green; `slots.json` self-check (compiler + VM both Flaviano's, snapshot both sides); canonical reorder visibly fixes unsafe order; agent parse + `resolveVerify` abort works; landing→feed on fixture → **merge to `main`** | All | cut floor: keep `OracleGuardStaleHalt`+band-containment, `canonical.ts`+rules 1&2+TS-direct emit, fixture-only UI |
 | ☐ | Liveness/additivity invariants → byte-identical emit + **disassembler** (hand to Pietro) → `programHash()` (hand to Flavio) | Flaviano | → Pietro (bytecode pane), Flavio (hash-verify input) |
 | ☐ | Author `subgraph/{schema.graphql,mapping.ts,subgraph.yaml}`: `Strategy{id,programHash,ensNode}` + `Swap{amounts,cumulativeVolume}` | Pietro | → Flaviano (lands `graph deploy`) |
@@ -33,7 +33,7 @@
 | ☐ | Mutation harness (`MUTATION=M1|M2|M3 forge test`); pair with Flavio until retune fires through router | Flaviano | → Pietro (RED/GREEN proof) |
 | ☐ | Commit swap-trace artifact: one trace showing `IAqua` pull/push + both opcodes + `Swapped` (the 1inch 30s proof) | Flaviano | — |
 | ☐ | **Zero-click retune** (`graphDelta` delta→decision→`recompileAndShip()`→dock/ship); retune evidence log (entity ID, delta, decision, tx hash) streamed to Pietro | Flavio | → Pietro (retune badge + evidence) |
-| ☐ | Render Flavio's retune evidence as badge + history; `/api/feed` joins Supabase + live Graph; follow/like/comment live | Pietro | ← Flavio (stream) |
+| ☐ | Render Flavio's retune evidence as badge + history; `getFeed()` joins Supabase (counts) + live Graph; follow/like/comment live as server actions | Pietro | ← Flavio (stream) |
 | ☐ | **G2 — real pipeline** — autonomous retune zero-click (log cites entity ID); reject+rewrite+diff green; bytecode matches ENS hash; Flaviano re-reads 5 deleted spikes vs rewrites, confirms zero copy; full social feed + ENS chip live → **merge to `main`** | All | miss → `eth_getLogs` fallback labeled "subgraph syncing" (keeps demo, costs Graph track) |
 | ☐ | `make demo-up` green **twice** (cut fork→deploy→register ENS→ship→reset graph-node→fixture swaps→battery→green checklist); subgraph re-sync < T-15min window; 240s dry-run recorded; canned twins for every beat | All | — |
 | ☐ | **G3 — feature freeze** — demo + video + fallbacks only → **merge to `main`** | All | snapshot within 5% (CI gate); no new features |
