@@ -14,7 +14,7 @@ block-beta
     L5["L5 · Compiler (P2)\nTypeScript — Zod → AST → IR → bytecode\ndeterministic · reject-and-rewrite"]
     L4["L4 · On-chain (P1)\nSolidity 0.8.30 / Foundry\nSwapVM + 2 custom opcodes + StrategyFactory"]
     L3["L3 · Settlement\nAqua (1inch) — ship/dock/pull/push\nliquidity stays in-wallet"]
-    L2["L2 · Data (P2)\nThe Graph — first-party subgraph\n(graph-node on fork; eth_getLogs fb)"]
+    L2["L2 · Data (P2)\nThe Graph — first-party subgraph\n(decentralized network; graph-node on Sepolia RPC fb)"]
     L1["L1 · Identity (P2)\nENS — ENSIP-25/26 text records\nprogram-hash verify · subnames"]
     L7 --> L6 --> L5 --> L4 --> L3
     L2 -.-> L6
@@ -50,8 +50,8 @@ All demo runs target **live Sepolia** — the chain does the real work; the UI i
 - Runs against **live Sepolia** (RPC via Alchemy/Infura); the chain does the real work, the UI is a view layer. No anvil fork, no mock data.
 
 ### L2 — Data (P2) · The Graph
-- **First-party subgraph** (GraphQL `schema.graphql` + AssemblyScript `mapping.ts`) indexing our own `Swapped` events — deployed to a local **graph-node** on the fork. The monitor polls for entity deltas; a threshold breach fires `dock()`+`ship()`.
-- **Fallback if `graph-node` won't sync the fork:** poll `Swapped` via **`eth_getLogs`** directly (same threshold math; label "subgraph syncing"). Never cuts the retune.
+- **First-party subgraph** (GraphQL `schema.graphql` + AssemblyScript `mapping.ts`) indexing our own `Swapped` events — deployed to the **decentralized Graph network** (with self-hosted graph-node pointed at Sepolia RPC as fallback). The monitor polls for entity deltas; a threshold breach fires `dock()`+`ship()`.
+- **Fallback if `graph-node` won't sync our Sepolia deployment:** poll `Swapped` via **`eth_getLogs`** directly (same threshold math; label "subgraph syncing"). Never cuts the retune.
 - **x402** pay-per-query is the agent-native demo beat (optional, mainnet gateway, ~$5 Base USDC); **Studio API key** as one-env-var fallback.
 
 ### L1 — Identity (P2) · ENS
@@ -75,7 +75,7 @@ Deps are **npm-managed** (`package.json` + `node_modules`), **not git submodules
 
 ## Riskiest non-core element
 
-The **subgraph** (AssemblyScript + local `graph-node` syncing a fork). If it fails at 3am, the Move #5 fallback is `eth_getLogs` — same retune behavior, labeled "subgraph syncing." Everything else is either core (Solidity/TS compiler — defend at all costs) or has a trivial fallback (Studio key for x402, canned replay for the live compile).
+The **subgraph** (AssemblyScript + local `graph-node` syncing our Sepolia deployment). If it fails at 3am, the Move #5 fallback is `eth_getLogs` — same retune behavior, labeled "subgraph syncing." Everything else is either core (Solidity/TS compiler — defend at all costs) or has a trivial fallback (Studio key for x402, canned replay for the live compile).
 
 ## Demo infra
 

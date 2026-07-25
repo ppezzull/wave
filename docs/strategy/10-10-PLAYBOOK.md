@@ -4,7 +4,7 @@ _This is the team's **build document**._
 
 > **Read §0 first.** Finalist = best overall project. Optimize for finalist, not for sponsor EV.
 
-**Operating principles:** (1) **Core depth** — glue doesn't survive a Q&A where judges probe the core → ~60% of build hours on the on-chain core. (2) **Pitch = mechanism** — the pitch sentence and the code's mechanism must be the same thing. (3) **Everything ships or gets cut** — no unwired subsystems in a 7-min slot; everything in the repo appears in the demo. **Roles:** P1 Solidity (opcodes, tests, fork deploy) · P2 Agent (compiler, Graph, ENS) · P3 Product (UI, demo, video, compliance). **Q&A prep is a deliverable**, not an afterthought.
+**Operating principles:** (1) **Core depth** — glue doesn't survive a Q&A where judges probe the core → ~60% of build hours on the on-chain core. (2) **Pitch = mechanism** — the pitch sentence and the code's mechanism must be the same thing. (3) **Everything ships or gets cut** — no unwired subsystems in a 7-min slot; everything in the repo appears in the demo. **Roles:** P1 Solidity (opcodes, tests, Sepolia deploy) · P2 Agent (compiler, Graph, ENS) · P3 Product (UI, demo, video, compliance). **Q&A prep is a deliverable**, not an afterthought.
 
 **Reading shelf:** Aqua SDK README · ENSIP-25/26 originals (say "draft standard") · Graph x402 docs · `swap-vm/test/` corpus (`Decay.t.sol`, `MakerHooks.t.sol`, `FeeIndifferencyToSwap.t.sol`) · the SwapVM 1.1 license (`LicenseRef-Degensoft-SwapVM-1.1`).
 
@@ -18,7 +18,7 @@ _This is the team's **build document**._
 |---|---|---|
 | Technicality | two novel opcodes + mutation-killing invariant tests | **1inch** |
 | Originality | "compiler for a swap VM" — reject-and-rewrite pass | **1inch** |
-| Practicality | live `swap()` settling through Aqua on a fork | **1inch** |
+| Practicality | live `swap()` settling through Aqua on Sepolia | **1inch** |
 | WOW | judge-triggered reject/revert on screen | (finalist-only) |
 | Usability | split-screen intent→bytecode + safety card | (finalist-only) |
 
@@ -42,9 +42,9 @@ Config A wins on EV **and** is finalist-aligned. The only world where B wins: yo
 
 For each: the **bar**, the **reason a 9 fails to reach 10**, the **one observable proof**.
 
-- **Technicality** — Bar: opcodes compile + deploy on fork + `forge test` passes incl. 2+ mutation-killing fuzz invariants on `_oracleGuard2D`. 9→10 miss: a green suite with no invariant that *fails on a mutated opcode*. Proof: `forge test --match-test invariant_` shows RED on a forced mutation, GREEN on real code.
+- **Technicality** — Bar: opcodes compile + deploy on Sepolia + `forge test` passes incl. 2+ mutation-killing fuzz invariants on `_oracleGuard2D`. 9→10 miss: a green suite with no invariant that *fails on a mutated opcode*. Proof: `forge test --match-test invariant_` shows RED on a forced mutation, GREEN on real code.
 - **Originality** — Bar: a compiler pass (NL→AST→IR→bytecode) + two genuinely new opcodes absent from upstream. 9→10 miss: a "novel" opcode that's a renamed existing one. Proof: `git diff` vs 1inch upstream shows the two opcodes + compiler pass.
-- **Practicality** — Bar: settles end-to-end on a real fork, `quote() == swap()`. 9→10 miss: demo only ever calls `quote()`, never settles. Proof: a `Swapped` event in fork logs with matching amounts.
+- **Practicality** — Bar: settles end-to-end on Sepolia, `quote() == swap()`. 9→10 miss: demo only ever calls `quote()`, never settles. Proof: a `Swapped` event in Sepolia logs (verifiable on Etherscan) with matching amounts.
 - **Usability** — Bar: judge types intent, sees bytecode + green/red verdict within the *canned* fallback path. 9→10 miss: live-compile-only, no fallback. Proof: throttled demo, verdict card still renders <2s.
 - **WOW** — Bar: a *live judge-triggered* action — typing a malicious intent and watching the compiler visibly REJECT it with a side-by-side diff. 9→10 miss: the reject is described, not shown. Proof: screen recording of reject→red card→canonicalized bytecode.
 - **1inch Aqua App** — Bar: order settles *through Aqua* (pull/push), not plain transferFrom. 9→10 miss: uses Aqua router in name only. Proof: `IAqua` calls in trace + ship/dock logs.
@@ -92,7 +92,7 @@ Canonical order enforced by the Move #1 compiler: `deadline → concentration �
 ```
 
 ### Simulation battery (gate before every ship; the report is a demo artifact)
-`router.quote()` on the fork: ~12 trade sizes × both directions × exactIn/exactOut ⇒ assert monotonic effective price, split-vs-single subadditivity, exactIn/exactOut symmetry within rounding, oracle-guard triggers on a mocked deviated feed, skew penalty ≤ cap.
+`router.quote()` on Sepolia: ~12 trade sizes × both directions × exactIn/exactOut ⇒ assert monotonic effective price, split-vs-single subadditivity, exactIn/exactOut symmetry within rounding, oracle-guard triggers on a mocked deviated feed, skew penalty ≤ cap.
 
 ### Dual-oracle demo design (live Sepolia) — ⚠️ the happy-path-staleness trap
 **Measured:** Sepolia ETH/USD (`0x694AA1769357215DE4FAC081bf1f309aDC325306`) has a **~3600s (1h) heartbeat**, same as mainnet — so `maxStalenessSecs=7200` (2× heartbeat) is *adequate in steady state*, and the happy path will *usually* quote fine.
@@ -108,7 +108,7 @@ Pure-TS deterministic compiler **after** the LLM's Zod spec, **before** Solidity
 - **6 rejection rules:** `OracleGuardMustPrecedeSkew`, `ProtocolFeeLeMakerFee`, `SaltMustBeTerminal`, `OracleStalenessRequiresGuard`, `FeeAfterCurve`, `NoDuplicateDeadline`.
 - **Timeline:** h8–10 AST+Zod freeze → h10–12 canonical+reorder diff → h14–16 IR slot-resolution (cast-decode the opcode table) + byte-identical emit + disassembler round-trip → h16–18 `programHash()` + ENS register, round-trip hash test → h20–22 reject rules + mutation-kill tests → h22–24 diff renderer for UI → h28–30 polish.
 - **TS-direct emit is PRIMARY; on-chain `StrategyFactory` demoted to a post-G2 stretch.** Equivalence is proven via `quote()`-hash match, not a factory. (The `StrategyFactory.sol` file below is a stretch goal, not the spine.)
-- **Demo proof (Act 1, 40s):** intent renders with oracleGuard *after* skew → red REJECTED card cites `OracleGuardMustPrecedeSkew`, shows AST move-arrow, emits corrected plan → shipped on fork, `quote()` returns a price.
+- **Demo proof (Act 1, 40s):** intent renders with oracleGuard *after* skew → red REJECTED card cites `OracleGuardMustPrecedeSkew`, shows AST move-arrow, emits corrected plan → shipped on Sepolia, `quote()` returns a price.
 - **3am risk + fallback:** opcode-slot map desyncs after a P1 edit → revert. Fallback: drop on-chain `StrategyFactory`, emit bytecode directly in TS (already byte-identical), verify via `quote()` hash match.
 - **Scope-cut floor:** `canonical.ts` + rules 1&2 + TS-direct emit. Still clears the bars.
 
@@ -121,7 +121,7 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 - **Scope-cut floor:** `OracleGuardStaleHalt` + `OracleGuardClamp` (band-containment) + M1/M2 toggles + one RED screenshot.
 
 ### MOVE #3 — Demo Choreography: Live Beats on Sepolia (P3, ~6h)
-**No stage controller, no canned twins, no `DEMO_LIVE=0`, no anvil fork.** A human drives the live product on `/` against **real Sepolia** state — strategies seeded before the event with real capital, real swaps, real indexing. Every beat is a real on-chain action a judge can verify on Etherscan. Full plan: [PROD-TESTNET.md](./PROD-TESTNET.md).
+**No stage controller, no canned twins, no `DEMO_LIVE=0`, no fork.** A human drives the live product on `/` against **real Sepolia** state — strategies seeded before the event with real capital, real swaps, real indexing. Every beat is a real on-chain action a judge can verify on Etherscan. Full plan: [PROD-TESTNET.md](./PROD-TESTNET.md).
 - **Beats → [frontend.md](./frontend.md) §4.** Briefly: Beat A the global ranked feed (real `returnPct × recency × followers` ranking of seeded strategies) → Beat B compose + ship (the description *is* the compiler input → bytecode → safety card → live `ship()` on Sepolia) → Beat C ENS-discover + **judge-triggered halt** (`MockAggregatorV3` deviated → `_oracleGuard2D` HALT on screen) → Beat D autonomous retune (real subgraph delta → `dock()`→recompile→`ship()`, **no-click**).
 - **3am risk:** Sepolia RPC death / subgraph sync lag at a live beat. Fallback: a second funded wallet + backup RPC URL (Alchemy/Infura); for the retune beat, fall back to a direct `eth_getLogs` poll if the subgraph lags >a few blocks. No canned fallback exists — every failure is narrated honestly against the on-screen state.
 - **Scope-cut floor:** the live feed + the live `ship()` + the judge-triggered halt; never cut those.
@@ -137,7 +137,7 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 **ENS** = identity layer: each strategy's subname carries ENSIP-25 + ENSIP-26 + a `v0.programhash` text record (= keccak256 of shipped bytecode). The taker agent resolves the subname, reads the hash, recomputes it from the live on-chain program, and **aborts on mismatch**. **Graph** = a first-party subgraph indexing your `Swapped` events (you own schema + liveness — kills the Messari-sync risk and the "mocked data" smell).
 - **Files:** `swap-vm/src/routers/EnsStrategyRouter.sol` (StrategyRouter + post-ship hook emitting `StrategyDeployed(strategyId, programHash, ensNode)`); `packages/agent/src/ens/{resolveVerify,register}.ts`; `subgraph/{schema.graphql,mapping.ts,subgraph.yaml}`; `packages/agent/src/monitor/graphDelta.ts`.
 - **Demo proof:** agent resolves subname → green "program-hash verified (0xab… == 0xab…)" → judge triggers swap → subgraph `cumulativeVolume` ticks +250 → delta crosses threshold → "RETUNE" → `dock()`→`ship()` fires autonomously.
-- **3am risk:** local `graph-node` fails to sync the fork. Fallback: bypass subgraph, poll `Swapped` via `eth_getLogs` directly (same threshold math), label source "logs (subgraph syncing)". **Never cut the hash-verify.**
+- **3am risk:** local `graph-node` fails to sync the Sepolia subgraph. Fallback: bypass subgraph, poll `Swapped` via `eth_getLogs` directly (same threshold math), label source "logs (subgraph syncing)". **Never cut the hash-verify.**
 - **Scope-cut floor:** hash-verify + `eth_getLogs` delta poll. Drop ENSIP-26 JSON and the volume rollup.
 - **Ownership split:** P1 owns the Solidity hook + subgraph deploy; P2 owns the ENS agent-side (pure TS, pairs with the compiler).
 
@@ -145,9 +145,9 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 
 ## §3 — The 36-Hour Gantt (P1 / P2 / P3, gates G1=h12 / G2=h24 / G3=h30)
 
-> **Role map (P1=Flaviano · P2=Flavio · P3=Pietro).** Ownership split: P3 (Pietro) owns the full data→agent→product stack (`graphDelta` + autonomous retune + subgraph schema/mapping); P2 (Flavio) owns compiler + ENS-register/verify; P1 (Flaviano) owns the opcodes, fork deploy, `graph deploy`, and the subgraph's on-chain landing.
+> **Role map (P1=Flaviano · P2=Flavio · P3=Pietro).** Ownership split: P3 (Pietro) owns the full data→agent→product stack (`graphDelta` + autonomous retune + subgraph schema/mapping); P2 (Flavio) owns compiler + ENS-register/verify; P1 (Flaviano) owns the opcodes, Sepolia deploy, `graph deploy`, and the subgraph's on-chain landing.
 
-| Window | P1 — Flaviano (Solidity + fork) | P2 — Flavio (Compiler + ENS agent) | P3 — Pietro (Subgraph + agent + UI + demo) |
+| Window | P1 — Flaviano (Solidity + Sepolia) | P2 — Flavio (Compiler + ENS agent) | P3 — Pietro (Subgraph + agent + UI + demo) |
 |---|---|---|---|
 | **h0–2** | #5: `EnsStrategyRouter` hook + `StrategyDeployed` + hash-match test 🔴 | #1: `ast.ts` + Zod freeze | #3: `timeline.ts` + `controller.ts` 🔴 |
 | **h2–4** | — | — | #5: graph-node setup |
@@ -156,7 +156,7 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 | **h12 = G1** 🟢 | clean opcodes + guard tests green; **`slots.json` handshake** | reorder visibly fixes order | walking skeleton on fixture |
 | **h14–16** | #2: liveness + additivity | #1: emit byte-identical + disassembler (TS-direct; factory demoted) | #3: liveSwap + mockOracle |
 | **h16–18** | — | #1: `programHash()` + round-trip hash test; ENS register | #5: schema + mapping + `subgraph.yaml` (authored, handed to P1) |
-| **h18–20** | #5: `graph deploy` lands, real `Swapped` entity (owns fork infra) | #5: `resolveVerify` into swap path; deliver `recompileAndShip()` to P3 at h20 | #4: wire SSE to real /compile |
+| **h18–20** | #5: `graph deploy` lands, real `Swapped` entity (owns Sepolia deploy infra) | #5: `resolveVerify` into swap path; deliver `recompileAndShip()` to P3 at h20 | #4: wire SSE to real /compile |
 | **h20–22** | #2: mutation harness M1/M2/M3; arm `_oracleGuard2D` + MockAggregator for Beat B | #5: ENS-resolution client for `EnsDiscovery` | #5: `graphDelta` poll + `EnsDiscovery` (shared threshold module) |
 | **h22–24** | #5: end-to-end autonomous retune support through his router | #1: reject rules + diff renderer | #5: **autonomous retune** (zero-click; `graphDelta` → `recompileAndShip`); retune evidence log |
 | **h24 = G2** 🟢 | autonomous retune fires through router | reject+rewrite+diff green; bytecode matches ENS hash | full live UI + ENS chip; retune log cites entity ID |
@@ -180,7 +180,7 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 |---|---|---|
 | Technicality | `invariant_` RED on M1/M2 mutation, GREEN real, in repo diff | ✅ |
 | Originality | `git diff` vs 1inch: 2 new opcodes + reject-and-rewrite pass, absent upstream | ✅ |
-| Practicality | `Swapped` in fork logs, `quote()==swap()` | ✅ |
+| Practicality | `Swapped` in Sepolia logs (Etherscan), `quote()==swap()` | ✅ |
 | Usability | Network-throttled: canned verdict card renders <2s | ✅ |
 | WOW | Judge types malicious intent → red REJECTED card + canonicalized bytecode | ✅ |
 | 1inch Aqua $5k | `IAqua` calls in trace + ship/dock/monitor logs | ✅ |
@@ -196,7 +196,7 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 
 **Composable is a conditional upside, not the earlier flat "no".** The earlier reading ("requires a Messari schema") was wrong: the text reads "build meaningfully on a standardized schema (**e.g.** Messari…)" and separately "**Authoring/extending a Standardized Subgraph… is in scope**", with the listed example "*a new Standardized Subgraph for a protocol category that lacks one*". Aqua is exactly such a category — 1inch ships no indexer. Cost to qualify is **schema discipline, not hours**: author the subgraph as a generic *Aqua strategy* schema any Aqua app could reuse rather than one coupled to our structs. Weak spot is **Breadth (20%)** — one protocol. Treat as upside; do not reallocate hours and do not project the dollars.
 
-Realistic Graph value: **one track, 1st $2k** (2nd $1k), plus the load-bearing "AI × live data" finalist story. Separately, the AI Use Case autonomous-retune beat still depends on local `graph-node` syncing the fork by h22 — fallback is an `eth_getLogs` delta poll (labeled "subgraph syncing"), which keeps the AI Use Case bar.
+Realistic Graph value: **one track, 1st $2k** (2nd $1k), plus the load-bearing "AI × live data" finalist story. Separately, the AI Use Case autonomous-retune beat still depends on local `graph-node` syncing the Sepolia subgraph by h22 — fallback is an `eth_getLogs` delta poll (labeled "subgraph syncing"), which keeps the AI Use Case bar.
 
 ---
 

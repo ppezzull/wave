@@ -33,12 +33,12 @@ Track-specific: AI Use Case + Continuity also require an agent that *reasons ove
 
 **We index our own events. We do not consume third-party market data.**
 
-The subgraph is **first-party**: it indexes the `Swapped` and `StrategyDeployed` events emitted by our own `EnsStrategyRouter` on the fork. Schema, mapping and liveness are all ours.
+The subgraph is **first-party**: it indexes the `Swapped` and `StrategyDeployed` events emitted by our own `EnsStrategyRouter` on Sepolia. Schema, mapping and liveness are all ours.
 
 **Why this shape, so nobody re-opens it at 3am:**
 
-1. **The retune must be *caused* by the judge's swap.** Beat C is: judge swaps → `Swapped` indexed → `cumulativeVolume` ticks → threshold crossed → `dock()`+recompile+`ship()`, zero clicks. Mainnet volatility from a public subgraph does not move when the judge swaps on a fork, so it can decorate a decision but can never *trigger* one.
-2. **It kills the Messari-sync risk** — no dependency on someone else's schema staying deployed and in sync for our fork's chain (Kill List §6).
+1. **The retune must be *caused* by the judge's swap.** Beat C is: judge swaps → `Swapped` indexed → `cumulativeVolume` ticks → threshold crossed → `dock()`+recompile+`ship()`, zero clicks. Mainnet volatility from a public subgraph does not move when the judge swaps on Sepolia, so it can decorate a decision but can never *trigger* one.
+2. **It kills the Messari-sync risk** — no dependency on someone else's schema staying deployed and in sync for our Sepolia deployment (Kill List §6).
 3. **It kills the "mocked data" smell** — the entities are real events from a real router, produced live on stage.
 4. **It is the bridge to 1inch.** Aqua deletes the pool, which deletes where takers find liquidity; asked directly for an indexer, 1inch answered "we don't provide one, use The Graph" (workshop Q&A 16:44). Our subgraph is that missing layer — see [../1inch/HOW-IT-WORKS.md](../1inch/HOW-IT-WORKS.md) §0.6.
 
@@ -51,8 +51,8 @@ The subgraph is **first-party**: it indexes the `Swapped` and `StrategyDeployed`
 ## Open questions
 
 - [ ] **Studio insurance** — does a local graph-node satisfy "live data from a Graph provider"? Mitigation and the greenlight condition are in the ⚠️ box above
-- [ ] graph-node against anvil: instant-mine vs block polling, fork-reset reorgs, `eth_getLogs` ranges — Pietro's h2–4 verdict decides whether the `eth_getLogs` fallback gets armed
-- [ ] Subgraph re-sync time must fit inside the T-15min fork-recut window (measured during the G3 dry runs)
+- [ ] graph-node against Sepolia RPC (the self-hosted fallback): block polling latency, reorgs, `eth_getLogs` ranges — Pietro's h2–4 verdict decides whether the `eth_getLogs` fallback gets armed
+- [ ] If we fall back to self-hosted graph-node (decentralized network unavailable at event time — see PROD-TESTNET.md §2), a freshly-pointed node indexes our Sepolia subgraph within the demo-prep window (measured during the G3 dry runs); if it can't, commit to the decentralized network and skip the fallback.
 - [ ] Subgraphs are **AssemblyScript** (a TypeScript subset), not TypeScript — confirm the mapping toolchain before h16. There is also an official subgraph SKILL for the IDE; *using* their tooling is fine, only *shipping* one is out
 
 ## Links
