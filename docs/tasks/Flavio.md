@@ -41,6 +41,40 @@ Own **identity + the agentic brain**: the ENS agent side (resolveVerify, registe
 
 **h34–35 — demo support** — pre-warm the z.ai cache for Beat A (runbook failure tree: flake → Pietro narrates the cached-but-real response, you retry silently). Prep tampered-record fixture for Q&A.
 
+## Definition of Done — checks & tests per step
+
+| Step (hours) | What "done" looks like — checks & tests |
+|--------------|------------------------------------------|
+| h0–2 | z.ai smoke test passes: one NL prompt → z.ai returns a Zod-validated bounded form; LLM writes no code. `tsc --noEmit` on agent scaffold passes. `register.ts` compiles and writes a test record to forked mainnet ENS registry. |
+| h8–10 | `register.ts` writes `v0.programhash` text record to forked ENS registry; test fixture reads back the exact keccak value emitted by Flaviano's `programHash()`. |
+| h10–12 | `resolveVerify.ts` negative path passes: tampered-record fixture → settle ABORTS with the typed error selector (the red abort is the ENS judge's proof). Positive path: live on-chain program hash == resolved ENS record. |
+| h12 = G1 | z.ai parse test: NL→bounded form against Flaviano's frozen spec succeeds. `resolveVerify` negative test aborts with typed selector. `tsc --noEmit` passes on all agent code. |
+| h14–16 | `graphDelta.ts` stub polls fixture endpoint; test asserts non-empty delta returned. Shared threshold module (`shouldRetune()`) has unit tests covering edge cases (zero delta, negative delta, exact threshold). |
+| h16–18 | `recompileAndShip()` module compiles; integration test calls `dock()` → recompile → `ship()` and returns non-empty tx hashes. Signature matches Flaviano's router. |
+| h18–20 | `graphDelta` pointed at live subgraph URL; test polls and asserts real `Swapped` entity delta is readable (non-empty response). Studio insurance gate documented: only greenlit IF G2 on track (checked manually). |
+| h20–22 | Retune evidence log writes a test record with all required fields (timestamp, GraphQL query, entity ID, delta values, threshold decision, dock/ship tx hashes). ENS-resolution client `tsc --noEmit` passes. |
+| h22–24 = G2 | Zero-click retune end-to-end test: stub subgraph delta crosses threshold → `shouldRetune()` returns true → `recompileAndShip()` fires → dock/ship tx hashes emitted. Retune evidence log cites the entity ID. No manual trigger. |
+| h28–30 → G3 | Fuzz test through Zod passes: for 100+ varied NL inputs, each yields either valid bounded form OR typed error — never crash, never free-form code. Round-trip hash chain test: compiler-emitted keccak == ENS `v0.programhash` record == recomputed on-chain hash — all three asserted equal. |
+| h34–35 | Demo rehearsal: Beat A (parse → safety card → ship) runs without LLM timeout; z.ai cache pre-warmed. Tampered-record fixture ready for Q&A; negative path abort visible. |
+
+## Step-by-step build ladder & merge points
+
+| Step | Hours | What ships | DoD check (gates it) | Branch → merge point |
+|------|-------|------------|---------------------|---------------------|
+| S1 | h0–2 | Foundry Agents SDK scaffold + z.ai integration stub; `register.ts` skeleton | z.ai smoke test passes; `tsc --noEmit` passes | `feat/flavio-agent-ens` |
+| S2 | h8–10 | Complete `register.ts` with `v0.programhash` wiring | Test writes and reads back exact keccak from ENS record | `feat/flavio-agent-ens` |
+| S3 | h10–12 | `resolveVerify.ts` with negative path | Tampered fixture aborts with typed selector; hash equality passes | `feat/flavio-agent-ens` |
+| S4 | h12 = G1 | Parse + verify working | G1 checks pass → merge to `main` | `feat/flavio-agent-ens` → `main` |
+| S5 | h14–16 | `graphDelta.ts` skeleton + shared threshold module | Stub poll returns delta; threshold unit tests pass | `feat/flavio-agent-ens` |
+| S6 | h16–18 | `recompileAndShip()` action arm | Integration test fires dock → recompile → ship with tx hashes | `feat/flavio-agent-ens` |
+| S7 | h18–20 | Live subgraph wiring | Real `Swapped` entity delta readable from endpoint | `feat/flavio-agent-ens` |
+| S8 | h20–22 | Retune evidence log + ENS-resolution client | Log writes all required fields; client `tsc --noEmit` passes | `feat/flavio-agent-ens` |
+| S9 | h22–24 = G2 | Autonomous zero-click retune | End-to-end test: delta → decision → recompileAndShip → tx hashes; log cites entity ID → merge to `main` | `feat/flavio-agent-ens` → `main` |
+| S10 | h28–30 = G3 | Robustness + fuzz | Fuzz through Zod passes; hash chain equality test passes → merge to `main` | `feat/flavio-agent-ens` → `main` |
+| S11 | h34–35 | Demo prep assets | Rehearsal runs; fixtures ready | `feat/flavio-agent-ens` |
+
+Feature branch commits continuously; merges to `main` only at checkpoints (Classic-track continuous-commit).
+
 ## BLOCKERS / DEPENDENCIES ON OTHERS
 
 **You need:**

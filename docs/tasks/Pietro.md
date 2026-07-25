@@ -46,6 +46,42 @@ Own **everything the judge sees**: all data (first-party subgraph + Supabase), t
 
 **Sunday 07:00–08:30** — submission prose: description, how-it's-made, 3 partner write-ups + feedback (Graph write-up MUST name the subgraph, endpoints, and cite the retune log's entity IDs — qualification requires it). 08:30–09:00 submit; choose **"Finalist and Partner Prizes"**.
 
+## Definition of Done — checks & tests per step
+
+| Step (hours) | What "done" looks like — checks & tests |
+| --- | --- |
+| h0–2 | `make demo-up` green (the end-to-end world builder); deterministic 240s controller runs with `DEMO_LIVE=0` canned twins AND `DEMO_LIVE=1`; the ONE un-cannable call is the live `swap()`; Supabase schema migrated (`profiles, strategies, follows, likes, comments` tables exist — `supabase db dump` confirms); compliance heartbeat + prose folder created |
+| h2–4 | graph-node spike verdict reported at standup: "works" / "needs workarounds" / "arm eth_getLogs fallback"; trivial one-event subgraph indexes against anvil; docker-compose graph-node + IPFS + postgres runs without errors |
+| h8–10 | UI scaffold passes `next build`; signed-out landing renders centered pane + Privy connect; signed-in three-column feed shell renders (left nav / center feed / right sidebar) on fixtures; fixtures conform to Flaviano's frozen `specVersion: 1`; SSR first paint confirmed |
+| h10–12 | Feed card component renders all fields (author + description + bytecode preview + safety badge + live stats + ENS chip + like/repost/comment); `safetyReport` returns 4 numbers + hash-verify gate; `/api/feed` joins Supabase + fixtures; first paint is canned/SSR; 1500ms watchdog fires to cached-but-real |
+| h12 = G1 | Walking skeleton complete: landing → feed of fixture cards end-to-end; fixture-only UI confirmed as cut floor if behind |
+| h14–16 | `/compose` split-screen renders (intent + bytecode + safety card + required public description field); bytecode pane shows real tokens from Flaviano's disassembler (decode(emit(ir))===ir); Beat B/C plumbing wired into controller |
+| h16 | `srcs/requirements/subgraph/{schema.graphql,mapping.ts,subgraph.yaml}` authored; schema has `Strategy{id,programHash,ensNode}` + `Swap{amounts,cumulativeVolume}`; `graph codegen && graph build` succeeds; handoff to Flaviano confirmed |
+| h16–20 | SSE bridge working between browser↔Next.js; `/compile` endpoint wired to real compile path; `/[handle]` profile page renders; `/s/[id]` strategy-detail page renders; UI's only data path confirmed |
+| h20–22 | `EnsDiscovery` chip on cards: on match both hashes render green; on mismatch both flip red with TAMPERED tag; retune badge renders from Flavio's stream (entity ID, delta, decision, tx hash) |
+| h22–24 = G2 | `/api/feed` joins Supabase + live Graph subgraph; follow/like/comment live via Supabase; public descriptions on every shipped strategy; full social feed + ENS chip live; retune badge renders from Flavio's stream |
+| h24–30 → G3 | `make demo-up` green twice (cut fork → deploy → register ENS → ship → reset graph-node → fixture swaps → battery → green checklist); subgraph re-sync measured < T-15min fork-recut window; full 240s dry-run recorded (= fallback video base); every beat has a canned twin; freeze at h30 |
+| h34–35 | Demo run completed against fresh fork cut; failure tree printed from [frontend.md](../strategy/frontend.md) §8; on-stage lines rehearsed; 20-second debug limit confirmed |
+| Sunday 07:00–08:30 | Submission prose complete: description + how-it's-made + 3 partner write-ups; Graph write-up names the subgraph + endpoints + cites retune log entity IDs; submit with "Finalist and Partner Prizes" selected |
+
+## Step-by-step build ladder & merge points
+
+| Step | Hours | What ships | DoD check (gates it) | Branch → merge point |
+| --- | --- | --- | --- | --- |
+| S1 | h0–2 | `timeline.ts` + `controller.ts` + Supabase schema + Privy wrap + prose folder | `make demo-up` green; deterministic 240s controller; `supabase db dump` confirms tables | `feat/pietro-data-ui` → merge at h0 sync |
+| S2 | h2–4 | graph-node spike + verdict | Spike verdict at standup; docker-compose runs | `feat/pietro-data-ui` → continue |
+| S3 | h8–10 | UI scaffold (landing + feed shell) + fixtures | `next build` passes; SSR first paint confirmed; fixtures conform to `specVersion: 1` | `feat/pietro-data-ui` → continue |
+| S4 | h10–12 | Feed card + `parseProgram`/`safetyReport` + `/api/feed` | Feed card renders all fields; 1500ms watchdog confirmed | `feat/pietro-data-ui` → merge at G1 (h12) |
+| S5 | h14–16 | `/compose` split-screen + Beat B/C plumbing | Bytecode pane shows real tokens; decode(emit(ir))===ir | `feat/pietro-data-ui` → continue |
+| S6 | h16 | Subgraph handoff (`schema.graphql` + `mapping.ts` + `subgraph.yaml`) | `graph codegen && graph build` succeeds; handoff to Flaviano confirmed | `feat/pietro-data-ui` → merge at checkpoint |
+| S7 | h16–20 | SSE bridge + `/compile` + `/[handle]` + `/s/[id]` | SSE working; all three routes render | `feat/pietro-data-ui` → continue |
+| S8 | h20–22 | `EnsDiscovery` chip + retune badge surface | Green on match; red+TAMPERED on mismatch; badge renders entity ID/delta/decision/tx hash | `feat/pietro-data-ui` → merge at G2 (h24) |
+| S9 | h24–30 | Dry runs + fallbacks + re-sync measurement | `make demo-up` green twice; subgraph re-sync < T-15min; 240s dry-run recorded | `feat/pietro-data-ui` → merge at G3 (h30) |
+| S10 | h34–35 | Demo run rehearsal | Failure tree printed; 20s debug limit | `feat/pietro-data-ui` → continue |
+| S11 | Sunday 07:00–08:30 | Submission prose complete | Description + how-it's-made + 3 partner write-ups; Graph write-up with subgraph/endpoints/entity IDs | `feat/pietro-data-ui` → final merge at submission |
+
+Feature branch commits continuously; merges to `main` only at checkpoints (h0/G1/G2/G3).
+
 ## BLOCKERS / DEPENDENCIES ON OTHERS
 
 **You need:**

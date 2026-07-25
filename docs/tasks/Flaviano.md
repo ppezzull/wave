@@ -51,6 +51,40 @@ Own the **full deterministic spine**: the TS compiler (NL→Zod→AST→IR→byt
 **h34–35 — demo proof + fork drill**
 - Record the RED/GREEN mutation split-screen. Rehearse the T-15min fresh-fork cut (read Chainlink `updatedAt` at cut) and the backup-anvil RPC swap (≤15s).
 
+## Definition of Done — checks & tests per step
+
+| Step (hours) | What "done" looks like — checks & tests |
+|--------------|-----------------------------------------|
+| **h0–2** | `tsc --noEmit` passes on `srcs/requirements/compiler/src/ast.ts`; `StrategyDeployed(strategyId, programHash, ensNode)` event signature frozen in `EnsStrategyRouter.sol`; ABI JSON exported to `docs/abi/` by h2; Zod spec version 1 frozen with `specVersion: 1` in published output. |
+| **h2–4** | `git log --oneline --all | grep -E "(git rm|delete spike)"` confirms deletion commit exists and precedes any rewrite commits; `git ls-files` shows 0 of the 5 spike files remain; `srcs/requirements/swap-vm/src/routers/StrategyRouter.sol` is NOT present; `tsc --noEmit` passes on `canonical.ts`. |
+| **h8–10** | `forge build` passes from `srcs/requirements/swap-vm/`; `forge fmt --check` passes on all new `.sol` files; SPDX headers `LicenseRef-Degensoft-SwapVM-1.1` present on `InventorySkew.sol` and `OracleGuard.sol`; `tsc --noEmit` passes on `rules.ts` stubs; opcode table appended at END (slot 0 reserved). |
+| **h10–12** | `forge test --match-test OracleGuardStaleHalt -vvv` passes (staleness revert in both quote/swap); `forge test --match-test OracleGuardClamp -vvv` passes (band containment + kink monotonicity); `MockOracle.sol` exists in `test/mocks/` (not inline); `vm.expectRevert()` uses exact selectors; `tsc --noEmit` passes on `ir.ts` and `emit.ts`. |
+| **h12 = G1** | `slots.json` committed with opcode-index map; `forge test` clean on `ci` profile; `forge snapshot --check --tolerance 5 --no-match-test "testFuzz_*"` passes; property test `decode(emit(ir)) === ir` round-trip passes; same-spec byte-identical emit across JSON key-order shuffles passes. |
+| **h14–16** | `forge test --match-test InventorySkewLiveness -vvv` passes (penalty cap < 100%); `forge test --match-test InventorySkewAdditivity -vvv` passes (subadditive-or-equal over size grid); `programHash()` = keccak256(emitted bytes) test passes; disassembler round-trip test passes; decoder source handed to Pietro. |
+| **h16–18** | `make deploy-swap-vm-aqua` succeeds; router address persisted to `config/constants.json`; `graph deploy` succeeds against Pietro's graph-node; fixture swap fired; `Swapped` entity queryable at subgraph endpoint (curl returns non-empty); endpoint URL handed to Flavio + Pietro. |
+| **h18–20** | `MUTATION=M1 forge test` captures RED (staleness revert dropped); `MUTATION=M2 forge test` captures RED (clamp direction flipped); `MUTATION=M3 forge test` captures RED (penalty > 1); `MockAggregatorV3` deployed; control script for deviation/restore handed to Pietro. |
+| **h20–24 = G2** | Autonomous retune fires zero-click (Flavio's `graphDelta` → `recompileAndShip()` → your `dock()`/`ship()`); `git diff` confirms 0 lines copied from deleted spike files to rewrites; swap-trace artifact shows `IAqua.pull()`, `IAqua.push()`, `_inventorySkew2D`, `_oracleGuard2D`, and `Swapped` event in one trace. |
+| **h28–30 → G3** | `forge snapshot --check --tolerance 5 --no-match-test "testFuzz_*"` passes; `forge test --match-test QuoteSwapConsistency -vvv` passes (quote-hash == swap-hash); `forge test` clean on `ci` profile; `forge fmt --check` passes; freeze commit tagged at h30. |
+| **h34–35** | RED/GREEN mutation screenshots recorded; fresh-fork cut rehearsal ≤15s; backup-anvil RPC swap ≤15s; demo runbook checked; `updatedAt` read verified at cut time. |
+
+## Step-by-step build ladder & merge points
+
+| Step | Hours | What ships | DoD check (gates it) | Branch → merge point |
+|------|-------|------------|---------------------|----------------------|
+| **S1** | h0–2 | `ast.ts` with Zod-bounded DSL + `EnsStrategyRouter.sol` skeleton + `StrategyDeployed` event + ABI export | `tsc --noEmit`, event frozen, ABI exported | `feat/flaviano-spine` (start) |
+| **S2** | h2–4 | Spike deletion commit + `canonical.ts` ordering enforcement | Deletion commit precedes rewrites (git log), `tsc --noEmit` | `feat/flaviano-spine` |
+| **S3** | h8–10 | `InventorySkew.sol` + `OracleGuard.sol` (clean rewrite) + opcode table append + `rules.ts` stubs | `forge build`, SPDX headers, `forge fmt --check`, `tsc --noEmit` | `feat/flaviano-spine` |
+| **S4** | h10–12 | `OracleGuardStaleHalt.t.sol` + `OracleGuardClamp.t.sol` + `ir.ts` + `emit.ts` | `forge test --match-test OracleGuard*`, exact selectors, `tsc --noEmit` | `feat/flaviano-spine` |
+| **S5** | **h12 = G1** 🟢 | `slots.json` commit + snapshot tests + property tests (round-trip, byte-identical) | `slots.json` committed, `forge snapshot --check`, property tests pass | **→ merge to `main` (G1 checkpoint)** |
+| **S6** | h14–16 | `InventorySkewLiveness.t.sol` + `InventorySkewAdditivity.t.sol` + disassembler + `programHash()` | Liveness/additivity tests pass, round-trip test passes, hash test passes | `feat/flaviano-spine` |
+| **S7** | h16–18 | Fork deploy (`make deploy-swap-vm-aqua`) + `graph deploy` + live `Swapped` entity query | Deploy succeeds, `graph deploy` succeeds, `Swapped` query returns data | `feat/flaviano-spine` |
+| **S8** | h18–20 | Mutation harness (`MUTATION=M1|M2|M3`) + `MockAggregatorV3` + control script | M1/M2/M3 capture RED, mock deployed, script handed to Pietro | `feat/flaviano-spine` |
+| **S9** | **h20–24 = G2** 🟢 | End-to-end retune (zero-click) + swap-trace artifact + compliance re-check | Retune fires, swap-trace shows full flow, `git diff` confirms 0 spike copy | **→ merge to `main` (G2 checkpoint)** |
+| **S10** | h28–30 → G3 🟢 | Hardening (gas snapshot, quote==swap consistency, full test suite) + freeze | `forge snapshot --check`, quote/swap test, `forge test` clean, freeze tag | **→ merge to `main` (G3 freeze)** |
+| **S11** | h34–35 | Demo proof (screenshots) + fork drill rehearsal | RED/GREEN screenshots, fork cut ≤15s, RPC swap ≤15s | `feat/flaviano-spine` (final) |
+
+Feature branch commits continuously; merges to `main` only at checkpoint sync points (Classic-track continuous-commit).
+
 ## BLOCKERS / DEPENDENCIES ON OTHERS
 
 **You need:**
