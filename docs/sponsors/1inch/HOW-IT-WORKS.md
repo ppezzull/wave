@@ -190,7 +190,7 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
 1. **In modalità Aqua NON si scrive l'istruzione dei balance.** Il README upstream è esplicito: Aqua → *"Balance Instruction: None (Aqua manages)"* + `useAquaInsteadOfSignature: true`. Se metti `_dynamicBalancesXD` **e** shippi su Aqua, il comportamento è sbagliato e il debug è doloroso.
 2. **Mai scrivere un indice opcode numerico.** Lo slot 0 è sacrificato come lunghezza dell'array → indice effettivo = posizione − 1. Usa sempre `p.build(InventorySkew._inventorySkew2D, args)`: il ProgramBuilder Solidity risolve l'indice **dal function pointer**. È anche il motivo per cui `slots.json` a G1 è un *dump* generato, non un conteggio a mano.
 3. **`internal view` → `internal`** è una conversione legale di function pointer in Solidity (`view` è più restrittivo, quindi assegnabile). Se prendi un errore di tipo criptico sulla tabella, è quasi sempre `pure` vs `view` vs non-payable — non l'architettura.
-4. **Chainlink su fork è congelato.** Al blocco del fork il feed non si muove. Happy path = fork fresco tagliato ~15 min dopo un update del feed (leggi `updatedAt` al taglio); il breaker si dimostra con un `MockAggregatorV3` che controlli tu — **dichiarato sulla slide**.
+4. **Chainlink su Sepolia lagga.** Il feed è vero ma inaffidabile (heartbeat ~3600s, ma i feed testnet lag-gano oltre l'heartbeat, e `_oracleGuard2D` halta **sempre** sullo staleness — un feed stale durante la demo = HALT sull'happy path). Quindi il `MockAggregatorV3` che deployhi serve **sia l'happy path sia il breaker** (dichiarato sulla slide); Chainlink reale resta cablato e quotato sulla safety card come sorgente di produzione. Vedi [1INCH-RUNBOOK.md](../../strategy/1INCH-RUNBOOK.md) F0.4.
 
 ---
 
@@ -211,9 +211,9 @@ Conta **proprio a causa dell'annidamento di §2**: il guard è outermost, quindi
 
 ## §6 — Ordine di lavoro (e cosa NON è tuo)
 
-**Il tuo dealbreaker** (`Flaviano.md`): la `swap()` live attraverso Aqua — `pull`/`push` visibili nel trace, evento `Swapped` nei log del fork, entrambi gli opcode nell'hot path — **più** un `_oracleGuard2D` che halta davvero. Se domenica manca, 1inch è perso e i beat finalist Practicality/WOW non hanno motore.
+**Il tuo dealbreaker** (`Flaviano.md`): la `swap()` live attraverso Aqua **su Sepolia** — `pull`/`push` visibili nel trace, evento `Swapped` indicizzato dal subgraph, entrambi gli opcode nell'hot path — **più** un `_oracleGuard2D` che halta davvero. Se domenica manca, 1inch è perso e i beat finalist Practicality/WOW non hanno motore.
 
-Hai chiesto "se non anche altro". **No.** Finché G2 non è verde: opcode, router, test, infra fork. Nient'altro.
+Hai chiesto "se non anche altro". **No.** Finché G2 non è verde: opcode, router, test, deploy Sepolia. Nient'altro.
 
 | Ordine | Cosa | Perché prima di quello dopo |
 |---|---|---|
@@ -223,7 +223,7 @@ Hai chiesto "se non anche altro". **No.** Finché G2 non è verde: opcode, route
 | 4 | `OracleGuardStaleHalt` + `OracleGuardClamp` | ← **scope-cut floor**: se tutto crolla, questo + M1/M2 + uno screenshot RED tiene in piedi Technicality |
 | 5 | `InventorySkew.sol` | il secondo opcode è ciò che rende plurale "abbiamo esteso la VM" |
 | 6 | liveness + additivity (eredita `CoreInvariants`) | |
-| 7 | deploy su fork + `graph deploy` + swap fixture | sblocca il `graphDelta` di Pietro |
+| 7 | deploy su Sepolia + `graph deploy` + swap reali | sblocca il `graphDelta` di Pietro |
 | 8 | mutation harness M1/M2/M3 | ⚠️ è il primo a slittare se sei in ritardo — l'arming del Beat B no |
 
 **La tua risposta in Q&A da imparare a memoria:** *"perché un opcode nativo e non `_extruction`?"* → l'header del loro `Extruction.sol` dice che i taker **DEVONO** validare il target esterno perché può rompere silenziosamente la consistenza quote/swap. Noi togliamo quella superficie di fiducia. **Mai dire "impossibile con extruction"** — extruction *può* esprimerlo; l'argomento è la superficie di fiducia, non la possibilità.

@@ -26,7 +26,7 @@ Un trader vuole una strategia di compravendita su misura su 1inch, ma per crearl
 
 - **SwapVM / Aqua** = il sistema di 1inch. *Aqua* = dove stanno i soldi. *SwapVM* = il motore che calcola i prezzi.
 - **Bytecode / opcode** = il linguaggio di macchina della cucina. Un *opcode* è un singolo comando (es. "metti una fee", "controlla il prezzo"). Noi ne **aggiungiamo 2 nuovi**: uno per tenere i soldi in bilancia, uno per fermarsi se il prezzo impazzisce.
-- **Fork** = una copia della blockchain vera, sul tuo computer, per fare prove **senza rischiare soldi veri**.
+- **Testnet (Sepolia)** = una blockchain pubblica di *prova*, parallela a quella vera. I soldi sono finti (ETH di test, gratuiti da un faucet) ma ogni transazione è reale e verificabile su Etherscan. Usiamo questa per la demo: niente fork locale, niente dati finti — tutto quello che vedi è una transazione vera su una chain vera. *(Se qualcuno dice "fork": noi non lo usiamo più.)*
 
 ## 4. I 3 sponsor = 3 parti dello STESSO prodotto
 
