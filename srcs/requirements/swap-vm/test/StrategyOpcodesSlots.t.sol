@@ -56,7 +56,10 @@ contract StrategyOpcodesSlotsTest is Test, StrategyOpcodes {
         assertEq(vm.parseJsonUint(json, ".tableLength"), _opcodes().length, "table length drifted");
     }
 
-    function test_WaveOpcodes_AppendedAtEnd_StockIndicesPreserved() public pure {
+    /// @dev Only pins the two wave opcodes to the tail; stock-index
+    ///      preservation is proven by test_SlotsJson_MatchesPointerResolvedTable
+    ///      (7 stock opcodes cross-checked against the committed dump).
+    function test_WaveOpcodes_AppendedAtEnd() public pure {
         Program memory p = ProgramBuilder.init(_opcodes());
         uint256 tableLength = _opcodes().length;
         assertEq(p.findOpcode(OracleGuard._oracleGuard2D), tableLength - 2, "guard must be second-to-last");

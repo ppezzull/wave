@@ -116,3 +116,28 @@ describe("scaling", () => {
     expect(hex).toContain("0de0b6b3a7640000".padStart(64, "0")); // 1e18
   });
 });
+
+describe("unverified feeds (review finding, PR #26)", () => {
+  it("refuses to emit an unverified feed without an override", () => {
+    const spec = StrategySpec.parse({
+      ...referenceSpec,
+      blocks: [
+        { type: "oracleGuard", feed: "BTC/USD", maxDeviationBps: 150, maxStalenessSecs: 3600, mode: "revert" },
+        { type: "curve", kind: "xyc" },
+      ],
+    });
+    expect(() => lower(spec, referenceOpts)).toThrowError(/UNVERIFIED/);
+  });
+
+  it("still emits an unverified symbol under feedOverride (demo path)", () => {
+    const spec = StrategySpec.parse({
+      ...referenceSpec,
+      blocks: [
+        { type: "oracleGuard", feed: "BTC/USD", maxDeviationBps: 150, maxStalenessSecs: 3600, mode: "revert" },
+        { type: "curve", kind: "xyc" },
+      ],
+    });
+    const mock = { address: "0x00000000000000000000000000000000DeaDBeef" as const, decimals: 8 };
+    expect(() => lower(spec, { ...referenceOpts, feedOverride: mock })).not.toThrow();
+  });
+});
