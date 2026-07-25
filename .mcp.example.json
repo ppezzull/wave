@@ -10,6 +10,17 @@
         "<YOUR_PROJECT_ROOT>/CLAUDE.md",
         "<YOUR_PROJECT_ROOT>/README.md"
       ]
+    },
+    "chrome4": {
+      "_comment": "Attaches to a Chrome running with remote debugging. We launch it with the chrome-dev CLI (github.com/ppezzull/chrome-dev): `chrome-dev 9226` starts a blue-colored Chrome instance on port 9226 with its own profile at ~/.chrome-dev-profiles/chrome-mcp-9226 (so it never clobbers daily browsing). `chrome-dev stop 9226` stops it. chrome-devtools-mcp does NOT launch Chrome — it only connects to --browser-url, so start the instance first. Port/color is arbitrary; pick any free chrome-dev port (9223 red / 9224 default / 9225 green / 9226 blue).",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browser-url=http://127.0.0.1:9226"
+      ],
+      "env": {}
     }
   }
 }
