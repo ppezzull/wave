@@ -5,7 +5,7 @@ _Why this project and not others. (Decision made; the build plan is [10-10-PLAYB
 ## The meta-read
 The prize board clusters into two games: **agentic payments** (Hedera, 0G, Graph AI tracks, Uniswap API, ENS AI — the most crowded space) and **deep DeFi engineering** (1inch SwapVM — hard, new, thin competition, maps directly onto the finalist Technicality axis). Winning move: **play both with one product.** Classic track ⇒ all Continuity-only prizes are ineligible.
 
-## A. Strategy Compiler ⭐ (chosen)
+## A. wave — Strategy Compiler ⭐ (chosen)
 **Natural-language intent → deployed SwapVM strategy on Aqua, live, self-retuning.** Pitch: *"LPs can't express custom market-making logic without writing a VM program by hand — we compile their intent into one."* Two custom opcodes (`_inventorySkew2D`, `_oracleGuard2D`) extend SwapVM's instruction set; the safety loop is native (`quote()` = 100%-accurate off-chain simulation → compile → quote-simulate → invariant-check → ship). Prize picks (3 max): **1inch ($2.5k 1st) · Graph AI Use Case ($2k 1st) · ENS AI Agents ($1.5k)** ≈ $6k surface + finalist slot. Full design/build: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md). Pitch + Q&A: [PITCH.md](./PITCH.md).
 
 ## B. Agent service economy (fallback — switch here only if the SwapVM core fails)

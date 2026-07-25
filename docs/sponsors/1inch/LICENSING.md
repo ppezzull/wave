@@ -14,7 +14,7 @@
 
 - "Modify" includes **"instruction programs that run in the same program/runtime"** (SwapVM §1.7b) and "instruction sets executing in the same virtual machine/address space" (Aqua §1.7). Read literally: **our custom opcodes are unambiguously Modifications, and even compiled strategy programs arguably are.**
 - Consequence: Modifications must be published, complete source, free, under the same Degensoft license, with "Powered by SwapVM — © Degensoft Ltd 2025" attribution in README and UI, changes marked and dated, reproducible build instructions.
-- §3.3 carve-out: independent code that merely *calls* the Licensed Work is NOT covered — so the Strategy Compiler's agent/UI/off-chain layers stay ours; only the on-chain opcode extensions (and possibly emitted programs) are copyleft.
+- §3.3 carve-out: independent code that merely *calls* the Licensed Work is NOT covered — so wave's agent/UI/off-chain layers stay ours; only the on-chain opcode extensions (and possibly emitted programs) are copyleft.
 
 ## Other terms that matter
 

@@ -1,10 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) working in this repository.
 
-## What this repo is
-
-An **ETHGlobal Lisboa 2026** hackathon workspace (Classic "from scratch" track). The team is building a strategy-compiler on top of 1inch's **SwapVM** — a VM where token-swap orders are bytecode programs. The Solidity protocol lives in `srcs/requirements/swap-vm/`; `docs/` holds sponsor research; `docs/review/` holds AI-assisted prep analysis.
+**wave** — a social market for natural-language on-chain strategies, built on 1inch **SwapVM**. An **ETHGlobal Lisboa 2026** hackathon workspace (Classic "from scratch" track). The Solidity protocol lives in `srcs/requirements/swap-vm/`; `docs/` holds sponsor research; `docs/review/` holds AI-assisted prep analysis.
 
 - **Core stack chosen:** 1inch SwapVM/Aqua (P0), The Graph (data), ENS (identity).
 - **Event:** build starts Fri Jul 24 2026, submission Sun Jul 26 09:00 WEST.
@@ -23,6 +21,10 @@ These live inside the main source tree (not an isolated `spikes/` dir), so a "de
 ## Working directory
 
 All Foundry/contract commands run **from `srcs/requirements/swap-vm/`**, not the repo root. Dependencies are npm-managed (`package.json` + `node_modules`), not git submodules — install with `npm install` (or `yarn`), not `forge install` alone. Remappings (`srcs/requirements/swap-vm/remappings.txt`) map `forge-std/`, `@openzeppelin/contracts/`, `@1inch/solidity-utils/`, `@1inch/aqua/` into `node_modules/`.
+
+## Git workflow
+
+**When on `main`: always `git pull --rebase` immediately before `git push`** (and before committing if unsure of remote state). This is a shared branch the whole team pushes to — pulling first avoids forced pushes and divergent histories. Commit or push only when the user asks.
 
 ## Common commands (run in `srcs/requirements/swap-vm/`)
 
@@ -78,5 +80,15 @@ Every swap instruction must hold: round-trip (no A→B→A profit), pool-drain (
 
 ## Context & strategy docs (read before event work)
 
-- `docs/strategy/` holds the build docs, one job each: `10-10-PLAYBOOK.md` (THE BUILD PLAN — finalist reframe, opcode/compiler spec §1.5, 5 moves, 36h Gantt), `PITCH.md` (demo + Q&A + sponsor lenses), `EVENT-RUNBOOK.md` (36h ops + submission checklist), `TECH-STACK.md` (the stack), `IDEAS.md` (why this idea), `COUNCIL-VERDICT.md` (decision record).
-- `docs/review/SUMMARY.md` — verified review of the prep analysis: flags that the spike code-review's "CRITICAL C2" is a **demonstrable false positive** (do not add `vm.snapshot`), and that the "heal-side discount" demo beat is weakly supported by the empirics data. Read before acting on any `docs/review/review/SPIKES-REVIEW.md` finding.
+`docs/strategy/` holds the build docs, one job each:
+
+| Doc | Job |
+|---|---|
+| [10-10-PLAYBOOK.md](./docs/strategy/10-10-PLAYBOOK.md) | **THE BUILD PLAN** — finalist reframe, opcode/compiler spec §1.5, 5 moves, 36h Gantt |
+| [TECH-STACK.md](./docs/strategy/TECH-STACK.md) | the stack |
+| [PITCH.md](./docs/strategy/PITCH.md) | demo + Q&A + sponsor lenses |
+| [EVENT-RUNBOOK.md](./docs/strategy/EVENT-RUNBOOK.md) | 36h ops + submission checklist |
+| [IDEAS.md](./docs/strategy/IDEAS.md) | why this idea |
+| [COUNCIL-VERDICT.md](./docs/strategy/COUNCIL-VERDICT.md) | decision record |
+
+> `docs/review/SUMMARY.md` — verified review of the prep analysis: flags that the spike code-review's "CRITICAL C2" is a **demonstrable false positive** (do not add `vm.snapshot`), and that the "heal-side discount" demo beat is weakly supported by the empirics data. Read before acting on any `docs/review/review/SPIKES-REVIEW.md` finding.

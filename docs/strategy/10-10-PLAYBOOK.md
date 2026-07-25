@@ -1,4 +1,4 @@
-# The 10/10 Playbook — Build Plan for a Finalist-Grade Strategy Compiler
+# The 10/10 Playbook — Build Plan for wave (a Finalist-Grade Strategy Compiler)
 
 _This is the team's **build document**._
 
