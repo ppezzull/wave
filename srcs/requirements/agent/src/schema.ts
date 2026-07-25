@@ -1,101 +1,122 @@
-// wave — LLM-facing strategy spec (DRAFT v0).
+// wave — LLM-facing StrategySpec. ❄️ MIRRORS the frozen compiler AST
+// (srcs/requirements/compiler/src/ast.ts, specVersion 1 — PR #19).
+// That file is AUTHORITATIVE; this is the agent's mirror for parse/validate.
+// Drift = a spec bug — keep them in sync (or import once the packages share a
+// workspace).
 //
-// composeAgent (NL → JSON) emits a StrategySpec; Flaviano's compiler
-// (canonical.ts) turns the ordered `blocks` into 1inch SwapVM opcodes.
+// composeAgent (NL → JSON) emits a StrategySpec; the compiler (canonical.ts)
+// turns the ordered `blocks` into 1inch SwapVM opcodes. This is the LLM shape
+// (floats, symbols, decimal strings), NOT the opcode shape — the compiler
+// scales (targetRatio → 1e18, prices → sqrt 1e18 fp) and resolves symbols →
+// addresses via compiler-owned registries. Block-kind identifiers are
+// lowerCamel nouns (`oracleGuard`, not "oracle-guard").
 //
-// Source of truth: docs/strategy/10-10-PLAYBOOK.md §1.5 "Strategy-block DSL".
-// ⚠️ DRAFT — awaiting Flaviano's frozen `ast.ts` (specVersion: 1). Every gap
-// is flagged `TODO(freeze)`; do not treat numeric bounds as final.
-//
-// This is the LLM shape, NOT the opcode shape: floats & symbols here. The
-// compiler scales (e.g. targetRatio 0..1 → targetRatioE18 1e18) and resolves
-// symbols → addresses via its own registries (oracle feed, token pair).
-// zod/v4 — Mastra is built on the zod/v4 subpath (zod 3.25.x ships it); importing
-// it here keeps our schema in the SAME zod world as @mastra/core, so structured
-// output type-checks without a compat wrapper.
+// zod/v4 subpath: same zod world as @mastra/core.
 import { z } from "zod/v4";
 
 export const SPEC_VERSION = 1 as const;
+
+/// Canonical block order (enforced by canonical.ts — NOT by this schema; parsing
+/// accepts any order so the reject-and-rewrite pass can show the move-arrow +
+/// diff instead of an opaque parse failure).
+export const CANONICAL_ORDER = [
+  "deadline",
+  "concentration",
+  "decay",
+  "oracleGuard",
+  "inventorySkew",
+  "makerFee",
+  "protocolFee",
+  "curve",
+  "salt",
+] as const;
+export type BlockKind = (typeof CANONICAL_ORDER)[number];
 
 // ── primitives ───────────────────────────────────────────────────────────
 const Address = z
   .string()
   .regex(/^0x[a-fA-F0-9]{40}$/, "expected a 0x-prefixed 40-hex address");
 
-/// basis points — bounded 0..1000 (0%..10%). TODO(freeze): confirm ceiling.
-const Bps = z.number().int().min(0).max(1000);
+/// Basis points. Ceiling 1000 (10%) — every LLM-settable bps field. On-chain
+/// args are uint16, so this is a policy bound, not a type bound.
+const BPS_MAX = 1000;
+const Bps = z.number().int().min(0).max(BPS_MAX);
 
-/// Chainlink feed *symbol* — the LLM never emits an address; the compiler
-/// resolves via its symbol registry. TODO(freeze): extend the enum.
-const FeedSymbol = z.enum(["ETH/USD", "BTC/USD", "USDC/USD"]);
+/// Chainlink feed symbols the compiler registry resolves on Sepolia. The LLM
+/// picks a symbol, never an address.
+const FEED_SYMBOLS = ["ETH/USD", "BTC/USD", "LINK/USD", "USDC/USD", "DAI/USD"] as const;
+const FeedSymbol = z.enum(FEED_SYMBOLS);
 
-// ── blocks — discriminated union ─────────────────────────────────────────
-// canonical order (PLAYBOOK §1.5), enforced by the compiler:
-//   deadline → concentration → decay → oracleGuard → inventorySkew
-//     → makerFee → protocolFee → curve → salt
-// (the 6 rejection rules — OracleGuardMustPrecedeSkew, ProtocolFeeLeMakerFee,
-//  SaltMustBeTerminal, etc. — are a compiler concern, not this schema's.)
+/// Human-readable token amount as a decimal string (≤18 fractional digits —
+/// never a JS float). Token decimals are resolved by the compiler from ERC-20
+/// metadata, not carried in the spec.
+const DecimalAmount = z.string().regex(
+  /^(0|[1-9][0-9]*)(\.[0-9]{1,18})?$/,
+  "expected a decimal amount string with at most 18 fractional digits",
+);
 
+/// Strictly positive finite price (token1 per token0, in the pair's own order).
+const Price = z.number().positive().finite();
+
+// ── blocks — discriminated union on `type` (lowerCamel) ──────────────────
 const DeadlineBlock = z.object({
   type: z.literal("deadline"),
+  /// Hours from ship time; compiler resolves to an absolute uint40 for `_deadline`.
   hours: z.number().positive().max(24 * 30),
 });
 
-// TODO(freeze): body unspecified in §1.5. Type-only placeholder keeps the
-// union complete; Flaviano's ast.ts defines the real fields.
-const ConcentrationBlock = z.object({ type: z.literal("concentration") });
+/// Maps to `_xycConcentrateGrowLiquidity2D` (2-token): on-chain args are
+/// sqrt(P_min)/sqrt(P_max) in 1e18 fp. The LLM emits a plain price band; the
+/// compiler does the sqrt + lt/gt normalization.
+const ConcentrationBlock = z
+  .object({ type: z.literal("concentration"), priceMin: Price, priceMax: Price })
+  .refine((b) => b.priceMin < b.priceMax, { message: "priceMin must be strictly less than priceMax" });
 
-// TODO(freeze): body unspecified. NB (Flaviano.md): backward jumps targeting
-// Decay break quote/swap consistency — the compiler must never emit one.
-// Type-only placeholder for now.
-const DecayBlock = z.object({ type: z.literal("decay") });
+/// Maps to `_decayXD` — one on-chain arg `period` (2 bytes, secs). NB: the
+/// compiler must never emit a backward jump targeting this block (quote/swap
+/// divergence, Decay.sol:81–83).
+const DecayBlock = z.object({
+  type: z.literal("decay"),
+  periodSecs: z.number().int().min(1).max(65_535),
+});
 
 const OracleGuardBlock = z.object({
-  type: z.literal("oracle-guard"),
+  type: z.literal("oracleGuard"),
   feed: FeedSymbol,
-  maxDeviationBps: Bps,
-  /// default 7200s on-chain (_oracleGuard2D). TODO(freeze): confirm bounds.
-  maxStalenessSecs: z.number().int().positive().max(86_400).default(7200),
+  /// Must be ≥1: a zero-width band would halt every fill.
+  maxDeviationBps: Bps.min(1),
+  /// On-chain arg is 2 bytes (uint16). Default 7200 = Chainlink ~3600s heartbeat
+  /// + margin. Floor 60s keeps the guard meaningful.
+  maxStalenessSecs: z.number().int().min(60).max(65_535).default(7200),
   mode: z.enum(["revert", "clamp"]),
-  // Band is ONE-SIDED (DECIDED — b59d5db / PLAYBOOK §1.5): the guard halts only
-  // when the implied price is unfavourable to the maker beyond maxDeviationBps;
-  // a maker-favourable price never trips it (the guard is the OUTER wrapper,
-  // reads amountOut after the inventorySkew penalty). Two-sided is a RESERVED
-  // compiler `flags` bit (unimplemented) — NOT LLM-facing, so not modelled here.
-  // `mode` governs revert(0) vs clamp(1) on that one-sided deviation.
+  // Band is ONE-SIDED (DECIDED — PR #13 / PLAYBOOK §1.5): halts only when the
+  // implied price is unfavourable to the maker beyond maxDeviationBps.
+  // Two-sided is a RESERVED compiler `flags` bit — not LLM-facing. Staleness
+  // ALWAYS reverts, in both modes.
 });
 
 const InventorySkewBlock = z.object({
-  type: z.literal("inventory-skew"),
-  /// target balanceLt/(balanceLt+balanceGt), float 0..1. Compiler scales → 1e18.
+  type: z.literal("inventorySkew"),
+  /// Target balanceLt/(balanceLt+balanceGt) share, float 0..1. Compiler → 1e18.
   targetRatio: z.number().min(0).max(1),
-  slopeBps: Bps,
-  maxSkewBps: Bps,
-  /// v2 cap on the deviation-reducing (improvement) leg — taker-favoured. MUST
-  /// stay inside the oracle band or the one-sided guard leaks a bad fill
-  /// (two-leg caveat, PLAYBOOK §1.5 / b59d5db).
+  slopeBps: Bps, // penalty bps per 10% post-trade deviation
+  maxSkewBps: Bps, // hard cap on total penalty
+  /// Improvement leg (deviation-reducing) — optional (undecided if it ships).
+  /// If it ships, MUST stay inside the oracle band (two-leg caveat, PR #13).
   maxImproveBps: Bps.optional(),
 });
 
-const MakerFeeBlock = z.object({
-  type: z.literal("maker-fee"),
-  bps: Bps,
-});
+const MakerFeeBlock = z.object({ type: z.literal("makerFee"), bps: Bps });
+const ProtocolFeeBlock = z.object({ type: z.literal("protocolFee"), bps: Bps, receiver: Address });
+const CurveBlock = z.object({ type: z.literal("curve"), kind: z.enum(["xyc"]) });
 
-const ProtocolFeeBlock = z.object({
-  type: z.literal("protocol-fee"),
-  bps: Bps,
-  receiver: Address,
+/// Maps to `_salt` (a no-op carrying args for order-hash uniqueness). `value` is
+/// REQUIRED + caller-supplied — the compiler is deterministic, never generates
+/// entropy. Emitted as uint64.
+const SaltBlock = z.object({
+  type: z.literal("salt"),
+  value: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
-
-const CurveBlock = z.object({
-  type: z.literal("curve"),
-  /// TODO(freeze): only "xyc" attested in the §1.5 example; extend the enum.
-  kind: z.enum(["xyc"]),
-});
-
-// terminal block. TODO(freeze): body unspecified — salt bytes for uniqueness?
-const SaltBlock = z.object({ type: z.literal("salt") });
 
 export const Block = z.discriminatedUnion("type", [
   DeadlineBlock,
@@ -110,13 +131,20 @@ export const Block = z.discriminatedUnion("type", [
 ]);
 
 // ── the spec ─────────────────────────────────────────────────────────────
-export const StrategySpec = z.object({
-  specVersion: z.literal(SPEC_VERSION),
-  pair: z.object({ token0: Address, token1: Address }),
-  /// human-readable amounts as strings (preserve precision). TODO(freeze): decimals.
-  size: z.object({ amount0: z.string(), amount1: z.string() }),
-  blocks: z.array(Block).min(1),
-});
+export const StrategySpec = z
+  .object({
+    specVersion: z.literal(SPEC_VERSION),
+    pair: z.object({ token0: Address, token1: Address }),
+    /// Committed maker capital per side; both strictly positive (xyc needs both).
+    size: z.object({ amount0: DecimalAmount, amount1: DecimalAmount }),
+    blocks: z.array(Block).min(1),
+  })
+  .refine((s) => s.pair.token0.toLowerCase() !== s.pair.token1.toLowerCase(), {
+    message: "pair.token0 and pair.token1 must differ",
+  })
+  .refine((s) => s.size.amount0 !== "0" && s.size.amount1 !== "0", {
+    message: "size amounts must be strictly positive",
+  });
 
 export type Block = z.infer<typeof Block>;
 export type StrategySpec = z.infer<typeof StrategySpec>;

@@ -11,10 +11,13 @@ function required(name: string): string {
 /** Self-hosted LLM (OpenAI-compatible vLLM endpoint, e.g. Gemma4-fast). */
 export const llmConfig = () => ({
   // BASE url (…/v1), NOT …/chat/completions — the SDK appends the path itself.
-  baseURL: required("LLM_BASE_URL"),
+  baseURL: required("ZAI_BASE_URL"),
   // vLLM often ignores this; the SDK requires the field to be present.
-  apiKey: process.env.LLM_API_KEY ?? "dummy",
-  model: required("LLM_MODEL"), // e.g. "Gemma4-fast"
+  apiKey: process.env.ZAI_API_KEY ?? "dummy",
+  model: required("ZAI_MODEL"), // e.g. "qwen-haiku:4b"
+  // craftshost/Langfuse only: the X-Langfuse-Public-Key header value. Undefined
+  // for the direct Ollama endpoint (no public key needed there).
+  publicKey: process.env.ZAI_PUBLIC_KEY,
 });
 
 /** LibSQL storage. `:memory:` for smoke; a real URL for durable HITL workflow runs. */
@@ -22,7 +25,5 @@ export const storageConfig = () => ({
   url: process.env.LIBSQL_URL ?? ":memory:",
 });
 
-/** HTTP port the agent exposes (Next.js UI calls AGENT_URL=http://agent:<port>). */
-export const serverConfig = () => ({
-  port: Number(process.env.PORT ?? 3002),
-});
+// PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
+// and defaulted to 3002 via ENV in the Dockerfile. (No serverConfig() helper — it was dead code.)

@@ -9,7 +9,7 @@ import { compose } from "./mastra/compose.agent.js";
 
 async function main() {
   const nl =
-    "Keep ETH/USDC balanced 50/50, halt if the ETH/USD Chainlink oracle deviates more than 1.5% (revert mode), take a 5 bps maker fee.";
+    "token0 = WETH 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2, token1 = USDC 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48. Keep ETH/USDC balanced 50/50, halt if the ETH/USD Chainlink oracle deviates more than 1.5% (revert mode), take a 5 bps maker fee.";
   console.log("prompt:", nl);
   const spec = await compose(nl);
   console.log("StrategySpec:\n" + JSON.stringify(spec, null, 2));

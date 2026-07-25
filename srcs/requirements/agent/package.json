@@ -8,7 +8,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "spike": "tsx src/spike/zai-structured.ts"
+    "spike": "tsx src/spike/zai-structured.ts",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",
@@ -27,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
+    "mastra": "^1.20.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

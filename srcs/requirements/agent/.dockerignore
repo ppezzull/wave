@@ -5,3 +5,15 @@ dist
 .git
 npm-debug.log*
 
+# secrets — NEVER bake into the image (inject via env_file at runtime)
+.env
+.env.*
+!.env.example
+
+# rebuilt in the image
+.mastra
+
+# local tooling
+.agents
+.claude
+skills-lock.json
