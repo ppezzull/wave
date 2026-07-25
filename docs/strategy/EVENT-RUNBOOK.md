@@ -30,7 +30,7 @@ Final division of work across the three-person team:
 
 The retune's action arm (`recompileAndShip()`, delivered by P2 at h20) and its data source (P1's `graph deploy` at h18–20) are the only true cross-person dependencies; co-locating the consumer (P3) with the evidence log and UI is simpler than splitting the agent layer across two people.
 
-⚠️ P3 carries a heavy load (subgraph mapping + retune + x402 + UI + demo + all prose). Mitigations baked into the build: P1 lands `graph deploy` (owns Sepolia deploy infra), P2 owes `recompileAndShip()` by h20, x402 is post-G2 only, the agent runs in-process inside Next.js (no separate service). **P3's cut order: x402 first → `EnsDiscovery` polish second → never the retune or the safety card.** P3 owns all prose (submission form, partner write-ups, video script) from hour 0 — not "when free." Full Gantt: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) §3.
+⚠️ P3 carries a heavy load (subgraph mapping + retune + x402 + UI + demo + all prose). Mitigations baked into the build: P1 lands `graph deploy` (owns Sepolia deploy infra), P2 owes `recompileAndShip()` by h20, x402 is post-G2 only, the agent runs in its **own container** (Mastra + z.ai; see [AGENT.md](./AGENT.md)) — P3 only surfaces the `/review` HITL queue in Next.js, it does not host the agent. **P3's cut order: x402 first → `EnsDiscovery` polish second → never the retune or the safety card.** P3 owns all prose (submission form, partner write-ups, video script) from hour 0 — not "when free." Full Gantt: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) §3.
 
 ## Sunday morning (hard schedule)
 
