@@ -2,7 +2,7 @@
 // output with think:false forced on?
 //   Test A: Vercel AI SDK generateObject   (the mechanism Mastra uses under the hood)
 //   Test C: Mastra Agent + structuredOutput (the real composeAgent path)
-// Run: npm run spike   (loads .env via dotenv/config — needs LLM_* → Ollama/server)
+// Run: npm run spike   (loads .env via dotenv/config — needs ZAI_* → Ollama/server)
 //
 // ⚠️ LIVE-RUN is server-side only (Ollama isn't on the dev Mac). This file
 // TYPECHECKS locally (tsc) so it's ready to run there.
@@ -18,12 +18,12 @@ import { generateObject } from "ai";
 
 // `!` satisfies TS; the runtime guard below exits with a clear message if either
 // is actually missing.
-const BASE_URL = process.env.LLM_BASE_URL!;
-const API_KEY = process.env.LLM_API_KEY ?? "dummy";
-const MODEL = process.env.LLM_MODEL!;
+const BASE_URL = process.env.ZAI_BASE_URL!;
+const API_KEY = process.env.ZAI_API_KEY ?? "dummy";
+const MODEL = process.env.ZAI_MODEL!;
 
 if (!BASE_URL || !MODEL) {
-  console.error("LLM_BASE_URL / LLM_MODEL missing from .env — populate them (Ollama/server) and re-run.");
+  console.error("ZAI_BASE_URL / ZAI_MODEL missing from .env — populate them (Ollama/server) and re-run.");
   process.exit(1);
 }
 

@@ -14,8 +14,10 @@ const COMPOSE_INSTRUCTIONS = `You are wave's strategy composer. Given one natura
 
 Rules:
 - Fill ONLY fields the schema allows. Unknown block types, unknown enum values, and out-of-range numbers must be OMITTED, never invented.
-- Pick an oracle feed by SYMBOL (ETH/USD, BTC/USD, USDC/USD), never an address.
-- amounts are human-readable decimal strings.
+- pair.token0 and pair.token1 are 0x-prefixed 40-hex ADDRESSES — take them VERBATIM from the input intent; NEVER use a symbol like "ETH" there. If the input omits addresses, you cannot fill the pair.
+- Pick an oracle feed by SYMBOL (ETH/USD, BTC/USD, LINK/USD, USDC/USD, DAI/USD), never an address.
+- amounts are human-readable decimal strings (e.g. "1.5", "3000").
+- bps fields are basis points: 1.5% = 150 (not 1500); ceiling 1000.
 - Emit nothing but the JSON object. No prose, no code, no markdown fences.`;
 
 export const composeAgent = new Agent({
@@ -41,7 +43,7 @@ export async function compose(nl: string): Promise<StrategySpec> {
     // NOT at the top level. Verified: reference-agents-generate.md L151-155.
     modelSettings: {
       temperature: 0, // form-filling, not creativity
-      maxOutputTokens: 400, // the form is small; cap so a verbose model can't ramble
+      maxOutputTokens: 1000, // the strategy form is ~250-400 chars; leave headroom
     },
   });
   if (!res.object) throw new Error("compose: model returned no structured object");

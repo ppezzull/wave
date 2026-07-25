@@ -14,13 +14,27 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { llmConfig } from "../config/env.js";
 
-/** Build the Gemma4-fast language model with think:false baked into every call. */
+// Browser UA — the craftshost gateway is behind Cloudflare, which blocks
+// non-browser clients (error 1010). Harmless on the direct Ollama endpoint.
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+/**
+ * Build the LLM. For now: qwen-haiku:4b via the craftshost gateway.
+ * - think:false injected on every body (harmless; some models honor it).
+ * - craftshost auth: `Authorization: Bearer <apiKey>` (the secret key) +
+ *   `X-Langfuse-Public-Key: <publicKey>` header. Both required by the gateway.
+ * - browser User-Agent (Cloudflare bot-block workaround).
+ */
 export const gemmaModel = () => {
-  const { baseURL, apiKey, model } = llmConfig();
+  const { baseURL, apiKey, model, publicKey } = llmConfig();
+  const headers: Record<string, string> = { "User-Agent": BROWSER_UA };
+  if (publicKey) headers["X-Langfuse-Public-Key"] = publicKey;
   const provider = createOpenAICompatible({
-    name: "vllm",
+    name: "craftshost",
     baseURL,
     apiKey,
+    headers,
     transformRequestBody: (args) => ({
       ...args,
       chat_template_kwargs: { think: false },
