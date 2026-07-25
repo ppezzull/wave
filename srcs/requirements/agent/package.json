@@ -1,0 +1,34 @@
+{
+  "name": "wave-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "wave autonomous retune agent — Mastra + z.ai + custom MCP (P2/Flavio). Policy module first.",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "spike": "tsx src/spike/zai-structured.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@instructor-ai/instructor": "^1.7.0",
+    "@mastra/core": "^1.52.1",
+    "@mastra/libsql": "^1.17.0",
+    "@mastra/mcp": "^1.15.0",
+    "@mastra/memory": "^1.23.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "ai": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "graphql-request": "^7.4.0",
+    "openai": "^4.77.0",
+    "viem": "^2.55.8",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
