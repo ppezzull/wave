@@ -1,235 +1,244 @@
-# frontend.md — the UI spec (pages, routes, data, flows, technicalities)
+# frontend.md — the UI spec (the questionnaire init flow)
 
-_The UI spec — pages, routes, panes, data flow, colors, the demo beats, the failure tree, and build windows. **Owner: P3 (Pietro)** — owns the Next.js SSR UI, demo choreography, and all submission prose. This is the single source of truth for the frontend. Companion docs: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md), [PITCH.md](./PITCH.md), [EVENT-RUNBOOK.md](./EVENT-RUNBOOK.md), and [Pietro.md](./Pietro.md)._
+_The UI spec — **rewritten in scope**: the frontend's first job is the **init flow**, a SiteLab-style multi-step questionnaire that turns a strategist's intent into a shipped strategy project. This doc mirrors the intake model of [`apps/questionnaire`](file:///Users/ppezz/Desktop/MOODGLOBAL/SiteLab/apps/questionnaire) (9-step intake → brief → auto-init → project card). **Owner: P3 (Pietro)**. Companion docs: [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) §1.5 (opcode/compiler spec), [PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md) (the verbs), [AGENT.md](./AGENT.md) (the generate step runs there)._
 
-> **Hard rule (carries finalist weight):** the UI owns **no business logic on the client**. The agent (compiler, `resolveVerify`, `graphDelta`, MCP tools, z.ai) runs in **its own container** — see [AGENT.md](./AGENT.md) — and the Next.js server reaches it over `AGENT_URL=http://agent:3002` (HTTP/SSE). The browser receives one stream of events from the server, proxied to the agent — it never calls the LLM, never holds API keys, never queries GraphQL directly. The agent is the single subgraph client; LLM + wallet keys never live in the UI process.
+> **Hard rule (carries finalist weight):** the UI owns **no business logic on the client**. The questionnaire collects inputs and POSTs them to the server; the **brief aggregation, the compile/generate, the ENS writes, the `ship()` all run in the agent container** ([AGENT.md](./AGENT.md)) reached over `AGENT_URL=http://agent:3002` (HTTP/SSE). The browser is intake + status only — it never calls the LLM, never holds API keys, never signs, never queries GraphQL directly.
+
+> **What this doc is NOT anymore.** The earlier scope (global ranked feed on `/`, split-screen compose panes, safety card, `EnsDiscovery` pane) is **out of scope for this doc**. Those surfaces still ship — they move to follow-up docs once the init flow is the source of truth here. This file now answers one question: **how does a strategist go from a blank screen to a registered, shipping strategy project?**
 
 ---
 
-## §1 — Stack & technicalities
+## §1 — The flow, end to end (SiteLab model, wave domain)
+
+SiteLab's questionnaire app does: **landing → 9-step intake → "Complete Setup" → fire-and-forget `runBuild()` → redirect to dashboard → project card with waiting animation → auto-refresh on completion.** Wave copies that shape exactly, substituting website-generation for strategy-compilation:
+
+```
+ Landing (/)  ──►  9-Step Questionnaire (/new)  ──►  Complete Setup
+                                                          │
+                                                          ▼  fire-and-forget
+                                                  runBuild()  ──►  AGENT (AGENT_URL)
+                                                          │            │ compile (reject+rewrite)
+                                                          │            │ resolveVerify (ENS)
+                                                          │            │ register subname + setText
+                                                          │            │ ship() on Sepolia
+                                                          ▼
+                                            redirect → /dashboard
+                                                          │
+                                            project card: building…  ──auto-refresh──►  live
+```
+
+- **Intake is client-side state** — persisted to `localStorage` across the 9 steps (draft only; nothing is written to chain until "Complete Setup"). There is **no database** ([PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md): "there is no off-chain store"). The draft lives in the browser; the project lives on chain + ENS.
+- **`runBuild()` is fire-and-forget** — the server action kicks the agent and returns immediately; the user never waits on the LLM/compile/ship in the request. Same pattern as SiteLab's `triggerInitForProject`.
+- **The dashboard project card is the status surface** — `building → indexing → live`, auto-refreshing (SiteLab: `project-waiting-animation.gif` → auto-refresh). For wave, "live" = the strategy is registered on ENS + `ship()` confirmed on Sepolia + the subgraph has indexed the deploy.
+- **Double-click protection** — local `isSubmitting` guard + spinner + disabled "Complete Setup", identical to SiteLab. A second `ship()` is the kind of thing that costs real gas; prevent it.
+
+---
+
+## §2 — The 9 steps (each step's items)
+
+Mirrors SiteLab's 9-step structure (`step-one` … `step-nine`) 1:1. Each row below is the **field list for that step** — what the component renders, what it collects, and the wave-domain meaning. The Zod schema in §3 is the source of truth for the field names.
+
+| Step | SiteLab analog | Wave component | Purpose | Items collected |
+|---|---|---|---|---|
+| **1** | Template selection (preview) | `step-template.tsx` | **Strategy template** with live preview | `template_id` — pick a starting strategy archetype (e.g. *guarded-eth-usdc*, *skew-rebalancer*, *decay-mean-reversion*). Each template is a pre-filled draft that loads canonical opcode defaults into the later steps. Preview = a rendered bytecode + safety-card mock of the template (read-only). |
+| **2** | Business category | `step-pair.tsx` | **Market / pair** | `pair` — the trading pair (e.g. `ETH/USDC`, `WBTC/ETH`). Drives oracle selection in step 6. |
+| **3** | Website type (landing/multi) | `step-direction.tsx` | **Direction / side** | `direction` — `exactIn` or `exactOut` (the SwapVM `SwapQuery.isExactIn` axis). Determines rounding semantics (see CLAUDE.md math conventions). |
+| **4** | Business description | `step-description.tsx` | **The strategy description — the prompt** | `description` — free-text NL. **This is load-bearing ([Pietro.md](../tasks/Pietro.md) "the post is the prompt"):** the description is BOTH the human-readable strategy text AND the literal compiler input, stored byte-for-byte as the ENS `description` record. No separate label. Must round-trip byte-for-byte into `/compile`. |
+| **5** | Goals multi-select | `step-objectives.tsx` | **Objectives** (multi-select) | `objectives[]` — the strategy's goals, drawn from the canonical opcode menu: `concentrate`, `decay`, `oracleGuard`, `inventorySkew`, `makerFee`, `protocolFee`, `curve`. Each toggled objective enables its opcode block in step 7. |
+| **6** | Brand assets (logo, colors, fonts) | `step-risk.tsx` | **Risk parameters** (the "brand" of the strategy) | `oracle_band` — the `_oracleGuard2D` deviation cap (bps) + `maxStalenessSecs`; `deadline` — order TTL; `salt` — (auto-derived, shown read-only). These are the "look and feel" of *this* strategy the way colors/fonts are for a site. |
+| **7** | Reference screenshots | `step-references.tsx` | **Reference strategies** (fork seeds) | `references[]` — ENS names or subgraph strategy IDs the strategist wants to fork from. Loads those strategies' ENS-published `description` records as additional seed context for the compiler. **Fork is the thesis verb** ([PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md)); this step promotes it. |
+| **8** | Domain ownership status | `step-ens.tsx` | **ENS identity** | `ens_name` — the parent ENS name to register the strategy subname under (e.g. `pietro.eth`); `subname` — optional explicit subname, else derived from the pair+template (e.g. `eth-usdc-guarded`). This is where identity is bound — the social handle ([PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md): "profiles are ENS"). |
+| **9** | Final details + Complete Setup | `step-review.tsx` | **Review + commit** | `capital` — committed capital amount + token; `deadline` confirm; `notes` (optional, local-only — not written on chain); then **Complete Setup** fires `runBuild()`. |
+
+**State persistence (SiteLab-parity):** draft lives in `localStorage` under three keys (mirroring SiteLab's `draft / assets / references`): `wave.draft` (steps 1–6, 8–9 scalar fields), `wave.references` (step 7 fork seeds), `wave.risk` (step 6 risk params). Cleared on successful `runBuild()` return.
+
+---
+
+## §3 — The Zod schema (`packages/schema` → `waveInitSchema`)
+
+Source of truth for the field names above. Modeled on SiteLab's `QuestionnaireSchema` (`packages/schema/src/zod/config/questionnaire.ts`): nullable fields (the user can skip non-critical steps), `nullish` throughout so a partial draft persists in `localStorage` across refreshes.
+
+```ts
+// packages/schema/src/zod/input/wave-init.ts
+import { z } from 'zod';
+
+/** Canonical opcode objectives (step 5) — drawn from §1.5 block menu. */
+const Objective = z.enum([
+  'concentrate', 'decay', 'oracleGuard', 'inventorySkew',
+  'makerFee', 'protocolFee', 'curve',
+]);
+
+export const waveInitSchema = z.object({
+  // Step 1 — strategy template (uuid of a seeded archetype, or null for blank)
+  template_id: z.string().uuid().nullish(),
+
+  // Step 2 — trading pair (e.g. "ETH/USDC")
+  pair: z.string().min(2).nullish(),
+
+  // Step 3 — swap direction
+  direction: z.enum(['exactIn', 'exactOut']).nullish(),
+
+  // Step 4 — THE PROMPT. Free-text, byte-for-byte into /compile + ENS description.
+  // No trim, no reflow, no normalization — a mismatch is a compile failure.
+  description: z.string().nullish(),
+
+  // Step 5 — objectives (multi-select from canonical opcodes)
+  objectives: z.array(Objective).nullish(),
+
+  // Step 6 — risk parameters ("brand")
+  oracle_band: z.object({
+    maxDeviationBps: z.number().int().positive(),
+    maxStalenessSecs: z.number().int().positive(),
+  }).nullish(),
+  deadline: z.number().int().positive().nullish(),   // order TTL (seconds)
+  // salt is auto-derived server-side; not collected.
+
+  // Step 7 — references (ENS names / strategy IDs to fork from)
+  references: z.array(z.string()).nullish(),
+
+  // Step 8 — ENS identity
+  ens_name: z.string().nullish(),       // parent name, e.g. "pietro.eth"
+  subname: z.string().nullish(),        // optional explicit, else derived
+
+  // Step 9 — commit + notes
+  capital: z.object({
+    amount: z.string(),                  // human-readable, parsed server-side
+    token: z.string(),
+  }).nullish(),
+  notes: z.string().nullish(),          // local-only, NOT written on chain
+});
+
+export type WaveInitData = z.infer<typeof waveInitSchema>;
+```
+
+> **Validation posture:** like SiteLab, the schema validates the **intake shape** only. Whether the assembled brief *compiles* is the agent's job (`runBuild()` → compile → `Rejection`/verdict) — that is not a Zod concern and must not be pre-flight-checked client-side (no business logic on the client).
+
+---
+
+## §4 — Brief aggregation (intake → the one string the agent compiles)
+
+SiteLab aggregates the questionnaire answers into a single `aggregatedBrief` string before `triggerInitForProject`. Wave does the same — the 9 steps' structured fields collapse into **one NL brief** that is the compiler input (and, byte-for-byte, the ENS `description`). Server-side only.
+
+```
+runBuild(draft: WaveInitData)
+  └─► aggregateBrief(draft)        // pure fn, server action
+        │  "Guarded ETH/USDC exactIn strategy: concentrate around mid with
+        │   24h decay, oracle band 200bps/1200s, inventory skew rebalance.
+        │   Forking context from eth-usdc-guarded.wave.eth. Commit 5000 USDC.
+        │   Register under pietro.eth."
+        └─► POST AGENT_URL/compile  { brief, description: draft.description }
+              │   (agent: compile → reject+rewrite → resolveVerify → register → ship)
+              └─► projectId (= strategy ENS node) → dashboard card
+```
+
+- **`aggregateBrief` is pure and server-side** — testable without the LLM. It reads the structured fields and emits one NL string. The `description` field (step 4) is passed through **verbatim**, not reflowed — the post-is-the-prompt constraint.
+- **The agent owns everything past `aggregateBrief`** — compile verdict, ENS register/setText, `ship()`. The UI never sees a private key.
+
+---
+
+## §5 — Auto-init build flow (the dashboard card)
+
+Direct port of SiteLab's auto-init (`CompletionPopup → runBuild() → /dashboard → waiting animation → auto-refresh`):
+
+| Stage | UI state | Source of truth |
+|---|---|---|
+| **Click Complete Setup** | spinner, `isSubmitting` guard, redirect to `/dashboard` | local |
+| **Building** | project card, `building` state, waiting animation | agent compile/resolve/register in progress |
+| **Shipping** | card flips to `shipping` | `ship()` tx broadcast on Sepolia |
+| **Indexing** | card shows `indexing` `warn` chip ("subgraph syncing") | subgraph lag — disclosed, never faked |
+| **Live** | card flips to `live`, safety verdict + `returnPct` placeholder | ENS record confirmed + subgraph indexed the deploy |
+
+- **Auto-refresh** polls `getBuildStatus(projectId)` (server action → agent) on an interval; flips `building → live` without a manual reload.
+- **No canned fallback in the card.** If the build fails, the card shows `failed` with the agent's `Rejection` reason (the same red-card verdict the compile step produces). Honest failure — the failure tree (subgraph lag, RPC dies, tx revert) lives with the deferred demo doc (§9), but the card itself never lies.
+
+---
+
+## §6 — Stack & technicalities (built the SiteLab way)
+
+The Next.js app is bootstrapped exactly like SiteLab's questionnaire app — pnpm monorepo, App Router, SSR, Tailwind v4.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js (App Router, SSR)** | SSR keeps the LLM call, API keys, and `/compile` invocation server-side. The feed SSR-renders from `getFeed()` (subgraph + ENS) on first paint. |
-| Rendering | **Server Components default**; client only for live event subscribers | No business logic on the client. |
-| Agent transport | **SSE (browser ↔ Next.js)** for `/api/compile` + `/api/stream`; Next.js ↔ agent over `AGENT_URL` (HTTP/SSE); `getFeed()` is a plain async fn for SSR that calls the agent | The agent **is** a separate service (its own container). Next.js is a thin proxy: it streams the browser's compose/retune events to the agent and reads the feed from the agent's subgraph+ENS tools at render. No business logic in the UI process — only transport. |
-| Network | **Sepolia** (live) — no anvil fork, no mock. See [PROD-TESTNET.md](./PROD-TESTNET.md). | Every demo moment is a real on-chain action a judge can verify on Etherscan. |
-| Attributions | **"Powered by SwapVM — © Degensoft Ltd 2025"** in the UI footer from hour 1 | 1inch license compliance (Classic track). |
+| Monorepo | **pnpm workspaces** (`apps/*`, `packages/*`) — root `package.json` + `pnpm-workspace.yaml`, matching SiteLab | Shared `packages/schema` (the Zod schemas) + `packages/agent-client` (the `AGENT_URL` RPC wrapper) live alongside the app |
+| Framework | **Next.js (App Router, SSR)**, React 19 | SSR keeps `runBuild()` server-side; Server Components render the dashboard card from agent status |
+| Styling | **Tailwind v4** (`@import "tailwindcss"` + `@theme` tokens in `app/globals.css`) | SiteLab parity; tokens map to the color system in §7 |
+| Validation | **Zod** (`waveInitSchema`, §3) in `packages/schema` | SiteLab parity; intake shape validation |
+| Network | **Sepolia** (live) | every shipped strategy is a real on-chain action |
+| Agent transport | server actions → `AGENT_URL=http://agent:3002` (HTTP/SSE) | agent is a separate container ([AGENT.md](./AGENT.md)); UI holds no keys |
+| Attributions | **"Powered by SwapVM — © Degensoft Ltd 2025"** in the footer from hour 1 | 1inch license compliance (Classic track) |
 
-**Files (real repo paths):** `srcs/requirements/ui/src/` — Next.js App Router. Key modules: `app/page.tsx` (the feed, SSR via `getFeed()`), `app/[handle]/page.tsx` (profile), plus the compose panes/cards below. The agent lives in `srcs/requirements/agent/` (its own container); the UI never imports agent modules — it calls them over `AGENT_URL`. No business logic is duplicated into the UI.
+**Files (real repo paths):** `srcs/requirements/ui/app/(app)/new/page.tsx` (the 9-step flow), `srcs/requirements/ui/app/(app)/dashboard/page.tsx` (project cards), `srcs/requirements/ui/actions/build.ts` (`runBuild`, `getBuildStatus`), `packages/schema/src/zod/input/wave-init.ts` (§3). The agent lives in `srcs/requirements/agent/`; the UI calls it over `AGENT_URL`, never imports it.
 
-**Scope-cut floor:** three panes + green/red card rendering from live subgraph+ENS data. **Never cut:** the safety-card verdict, the `EnsDiscovery` pane, the live on-chain `ship()`/`swap()`, the global ranked feed.
-
----
-
-## §2 — Pages & routes
-
-Minimal — this is a real product, not a multi-page app. Three routes:
-
-| Route | Type | Purpose |
-|---|---|---|
-| `/` | **Server Component** | The product: the **global ranked feed** of strategies (SSR via `getFeed()` = subgraph + ENS), with the split-screen compose surface. Default landing. |
-| `/[handle]` | **Server Component** | A strategist's profile: their strategies + their follow graph (`follows N / followed by M`, both resolved from ENS `wave.following` records). |
-| `/api/compile` | **Route handler (POST)** | Server-side: the description (which IS the compiler input — see "post is the prompt" below) → Zod spec → compiler → emits bytecode + `Rejection`/verdict. Streamed back via SSE. |
-| `/api/stream` | **Route handler (GET, SSE)** | The UI's single event stream for the compose/retune flow: agent emits compile verdict, bytecode tokens, safety-card numbers, ENS resolution, retune events. |
-
-No `/demo`, no auth dashboard, no settings page — the demo runs against **the live `/` route on Sepolia**, not a separate controller-driven page. If a judge asks "where's the rest," the answer is *"this IS the product — strategy authoring for the Aqua era"* ([PITCH.md](./PITCH.md) one-liner).
+**Scope-cut floor:** the 9-step intake + `runBuild()` → a project card that flips to `live`. **Never cut:** step 4 (the description/prompt), step 8 (ENS identity), the "no business logic on the client" rule, the attribution footer.
 
 ---
 
-## §3 — The compose surface (on `/`) — the panes
+## §7 — Color system (kept from the prior scope — still the design language)
 
-The split-screen that earns **Usability** (finalist criterion) and the WOW beat. Four panes + the ENS discovery pane = five total:
-
-```
-┌─────────────────────────┬─────────────────────────┐
-│  LEFT — Intent          │  RIGHT — Bytecode       │
-│  NL sentence input      │  emitted program,       │
-│  + canonical block list │  tokenized [op][len][args]│
-│  (deadline→…→salt order)│                         │
-├─────────────────────────┴─────────────────────────┤
-│  BOTTOM — Safety card (green/red)                 │
-│  4 numbers from quote() battery + hash-verify      │
-├───────────────────────────────────────────────────┤
-│  5TH — EnsDiscovery pane (full width, below)       │
-│  subname → programHash vs on-screen bytecode       │
-└───────────────────────────────────────────────────┘
-```
-
-### Pane: LEFT — Intent
-- **NL intent input** (text field / chat-style box) → POSTs to `/api/compile`.
-- **The post is the prompt (load-bearing constraint):** the description the strategist types here is BOTH the human-readable strategy text AND the literal compiler input. It must round-trip **byte-for-byte** into `/api/compile` and is stored verbatim as the ENS `description` text record. No separate "label" + "intent" fields — one string, two roles. This is what makes the feed self-describing and the strategy reproducible from its ENS record alone.
-- **Canonical block list** rendered after compile: the ordered blocks `Deadline → Concentrate → Decay → OracleGuard → InventorySkew → MakerFee → ProtocolFee → Curve → Salt`.
-- **The WOW beat lives here:** typing a malicious intent (oracle-guard placed *after* skew) → the compiler visibly **REJECTS** it → a **red card** cites the violated rule (`OracleGuardMustPrecedeSkew`), shows an **AST move-arrow** (the canonical reorder), and emits the **corrected, canonicalized program** with a **side-by-side unified diff**. *"The compiler refuses to ship anything unsafe — and shows you why."*
-
-### Pane: RIGHT — Bytecode
-- The emitted program, tokenized into **`[op:1 byte][len:1 byte][args:len bytes]`** triples — real tokens from Flavio's **disassembler decoder** (delivered h14–16). Consume the decoder output directly; one artifact serves both this pane and the "is it really a compiler?" Q&A.
-
-### Pane: BOTTOM — Safety card (green/red)
-- **Green only if ALL pass AND program hash matches the ENSIP-25 record.**
-- Pulls **4 numbers** from the `quote()` simulation battery:
-  1. **monotonicity** — 0 violations
-  2. **exactIn/exactOut symmetry** — max bps drift
-  3. **oracle-guard trigger count**
-  4. **skew penalty ≤ cap**
-
-### Pane: 5TH — `EnsDiscovery` (the ENS-prize evidence pane)
-- Resolves the strategy **subname** live (e.g. `eth-usdc-guarded.wave.eth`).
-- Shows **`programHash`** (from the ENS `v0.programhash` text record) **vs the on-screen bytecode**, **side-by-side**.
-- **Mismatch → turns red** (the ENS hash-verify negative path, shown live). *"The taker found this strategy through ENS — there is no database — and checked it wasn't tampered with."* This is what makes ENS load-bearing, not cosmetic.
-
----
-
-## §3.5 — The feed (on `/`) — global, ranked, no DB
-
-The `/` route is not just the compose surface; it's also a **global X-style feed of every live strategy**, SSR'd from `getFeed()` (subgraph + ENS). This is the social product.
-
-**Ranking (the algorithm, all terms from chain or ENS — no DB):**
-
-```
-rank = returnPct × recencyDecay × (1 + log2(1 + followers))
-```
-
-- **returnPct** — PnL ÷ committed capital, from the subgraph. *Return %, not raw PnL* — so a small strategy that 3x'd beats a huge one that barely moved. **This is the "like" signal:** the capital on the card IS the endorsement. There is no like button.
-- **recencyDecay** — `0.5^(hoursSinceLastSwap/24)`, half-life 24h. A strategy that hasn't traded in a week fades.
-- **followers** — count of distinct ENS names carrying a `wave.following/<strategy>` record. **Not resolvable by name enumeration** (ENS is forward-only; you can't list all names or reverse-lookup a record value). Instead the subgraph **indexes the ENS resolver's `TextChanged` events** and aggregates per target strategy — so this term comes from the subgraph like the other two, not from any off-chain store. (Side effect: the subgraph indexes two contracts — our router + the Sepolia ENS Public Resolver.)
-
-**Listing:** a strategy is **ranked** only if ≥3 fills AND ≥1h age; otherwise it's listed **unranked** at the top of /new (visible, but not in the ranked feed). *Stage line: "ranked by how much it's gained, decayed by age, nudged by follows."*
-
-**The feed is GLOBAL — not follow-filtered.** Everyone sees the same ranked feed. Follows are a personal graph that lives on the profile page (`/[handle]`), not a filter on `/`.
-
-### The feed card
-
-Each card shows:
-
-- **returnPct** as the headline number (the "like signal") — big, `ok`-colored if positive, `danger` if negative.
-- **committed capital, volume, fills** — from the subgraph (the evidence behind the return %).
-- **description** — the literal compiler input (ENS `description` record), one click from re-loading into the composer.
-- **avatar + strategist handle** — from ENS.
-- **ENS hash-verify chip** — `ok` if `v0.programhash` matches the on-chain program, `danger` ("TAMPERED") if not. Load-bearing, same component as the §3 `EnsDiscovery` pane.
-- **recencyDecay** as a subtle age indicator (e.g. "last swap 3h ago").
-
-**Card CTAs (two — not three):**
-- **Follow** — a single ENS write: adds a `wave.following/<strategy>` text record on the *follower's* own ENS name. Server action (`followStrategy()`). Increments the `followers` term in everyone's rank. **There is no Like button and no Comment UI** — like *is* the capital on the card, comment maps to nothing on-chain and is cut (see [README.md](../../README.md) "No database" callout).
-- **Fork** — first-class: loads the strategy's ENS-published spec (the `description` record, byte-for-byte) into the composer as the starting intent, so a strategist can branch and re-compile. Promoting fork is intentional — it's the social verb that compounds the compiler.
-
----
-
-## §4 — The demo flow (live on `/`, Sepolia) — beats, not a controller
-
-There is **no `/demo` route, no 240s controller, no canned twins, no `DEMO_LIVE=0`**. The demo is a human driving the live product on `/` against real Sepolia state — strategies seeded before the event (see [PROD-TESTNET.md](./PROD-TESTNET.md) §5), real capital, real swaps, real indexing. Every beat is a real on-chain action the judges can verify on Etherscan.
-
-| Beat | What the UI shows | Live on-chain truth |
-|---|---|---|
-| **A — the feed** | `/` SSR-renders the **global ranked feed** from `getFeed()`; the seeded strategies appear ranked by returnPct × recencyDecay × (1 + log2(1 + followers)). *"Ranked by how much it's gained, decayed by age, nudged by follows."* | subgraph `Swapped` events + ENS records on Sepolia |
-| **B — compose + ship** | Type a description (the compiler input) → split-screen bytecode → green safety card → **live `StrategyFactory` deploy + `aqua.ship()` on Sepolia**. The strategy appears in the feed once indexed. | real deploy tx, real `ship()` |
-| **C — ENS-discover + judge-triggered halt** | Click a card → ENS hash-verify chip proves `v0.programhash` matches. Judge picks a deviated oracle state → **`_oracleGuard2D` HALTS quoting on screen** (red). *"The protection lives in the VM — nothing the AI did could disable it."* | ENS resolution; real on-chain guard revert |
-| **D — autonomous retune** | A real subgraph entity delta crosses threshold → agent notices → `dock()` + recompile + `ship()` on Sepolia, **autonomously, no click**. *"Your LP position just adapted itself."* | real retune txs |
-
-**Stage discipline:** no canned twins to fall back to — every beat is live. **Cut plan if something breaks:** narrate the already-on-screen state and move on; never debug on stage past ~20s (see §7). The rubric-killer beats are B (live `ship()`), C (the halt), and D (autonomous retune) — but the feed itself (A) is now a beat too, since it's real ranking of real data.
-
-> **⚠️ Beat D autonomy boundary (the 35% question):** *"Is it really autonomous, or time-triggered?"* is the deciding question on the Graph track's "effective use" weight, and our own docs name a time-triggered retune as the 9→10 miss. The boundary, stated so a sharp judge can't probe it: **the retune transaction may be *sent* early** (to absorb Sepolia's ~12s block latency — purely a timing optimization) **but it may NEVER be *built* before the threshold-crossing decision exists.** The decision (delta-cross detected from the subgraph entity) precedes the tx construction; only the broadcast may be nudged earlier than the narration. If challenged, the retune evidence log proves the ordering: query timestamp → decision → tx hash, with the decision timestamp strictly before tx construction.
-
-> **Safety narrative:** build the protection story on the **oracle clamp** (`_oracleGuard2D`, which fires routinely in live pools) rather than a heal-side discount — the heal-side reward is ~0 in the tested regime. See [PITCH.md](./PITCH.md).
-
----
-
-## §5 — Data flow (the one diagram that matters)
-
-```
- Browser (/, /[handle])  ──SSE (compose)──►  Next.js server  ──HTTP/SSE (AGENT_URL)──►  AGENT CONTAINER
-      │                                            │                                    compiler (emit + reject)
-      │                                            │                                    resolveVerify (ENS)
-      │                                            │                                    graphDelta (subgraph)
-      │                                            └─►  /api/compile (POST)              └─►  Sepolia (live ship/swap)
-      │
-      └── SSR feed (/) ◄── getFeed() = subgraph (Swapped, capital, volume, fills)
-                                 + ENS (description, avatar, wave.following, v0.programhash)
-```
-
-- **Two read paths, no off-chain store.** The compose/retune flow is SSE from `/api/stream`, proxied to the agent; the feed is SSR via `getFeed()` (subgraph + ENS), served by the agent. Both resolve to **chain + ENS — no database**.
-- **No client → GraphQL path.** The browser never queries the subgraph directly; the agent does.
-- **The agent is its own service.** Next.js is a thin transport layer — it holds no LLM/wallet keys and imports no agent modules. Everything past it lives in the agent container ([AGENT.md](./AGENT.md)).
-- **No mock fallback.** If the subgraph lags, the feed shows what's indexed (disclosed via a `warn` "indexing" chip); if a compose call fails, it fails visibly. There is no `replay.json` to silently swap in.
-
----
-
-## §6 — Suggested color system
-
-A dark, Atlantic-adjacent palette tuned to the colors of **Carcavelos beach** (Lisboa) — the product reads as a *compiler for traders*, so it should feel like a code tool with live-market accents, but the chrome is the Lisbon sea at dusk: deep ocean for backgrounds, turquoise shallows for brand. WCAG-AA contrast against the dark backgrounds.
+A dark, Atlantic-adjacent palette tuned to the colors of **Carcavelos beach** (Lisboa). Ship as **Tailwind v4 `@theme` tokens** in `app/globals.css` (CSS custom properties consumed via `var(--*)`); no JS theme object — keeps "no business logic on the client" clean.
 
 | Token | Hex | Use |
 |---|---|---|
-| `bg-base` | `#01293A` | App background (deep Atlantic, darkest of the sea) |
-| `bg-surface` | `#024055` | Pane / card backgrounds (deep-ocean blue) |
-| `bg-surface-2` | `#006994` | Raised surfaces, the bytecode pane (mid-depth ocean blue) |
-| `border` | `#0A6E8C` | Pane borders, dividers (shallow-sea edge) |
-| `text-primary` | `#EAF6FB` | Primary text (sunlit foam white) |
-| `text-muted` | `#8FD2E6` | Labels, secondary text, token lengths (sea-spray blue) |
-| `accent-brand` | `#48D1CC` | Brand/links, the live `ship()` action, AST move-arrows (Caravelos turquoise) |
-| `ok` (green card) | `#7FE3B0` | Safety card green, hash-match, monotonicity pass (sunlit sea-glass) |
-| `danger` (red card) | `#FF6B6B` | REJECTED card, hash mismatch, halt, oracle-guard trigger (sunset coral) |
-| `warn` | `#FFD66B` | Cached/fallback badge ("disclosed cached"), stale-state hints (beach-flag yellow) |
-| `opcode-skew` | `#B5A0FF` | `_inventorySkew2D` token accent (lisbon azulejo lilac) |
-| `opcode-guard` | `#FFB088` | `_oracleGuard2D` token accent (sunset sand peach) |
+| `bg-base` | `#01293A` | App background (deep Atlantic) |
+| `bg-surface` | `#024055` | Card / pane backgrounds |
+| `bg-surface-2` | `#006994` | Raised surfaces, the bytecode pane |
+| `border` | `#0A6E8C` | Pane borders, dividers |
+| `text-primary` | `#EAF6FB` | Primary text |
+| `text-muted` | `#8FD2E6` | Labels, secondary text |
+| `accent-brand` | `#48D1CC` | Brand/links, the `ship()` action |
+| `ok` | `#7FE3B0` | Safety green, hash-match |
+| `danger` | `#FF6B6B` | REJECTED card, hash mismatch, halt |
+| `warn` | `#FFD66B` | "indexing" / stale-state chip |
 
-**Sea gradient** — a vertical gradient that reads as the Caravelos water column from seabed to surf line. Use it on hero/backdrop surfaces, the safety-card frame, and the `ship()` CTA hover. It descends through four depth stops so it works as a tall backdrop (full-screen hero) or compressed (a button):
+**Sea gradient** — use on hero/backdrop surfaces and the `ship()` CTA hover:
 
 ```css
-/* `--sea-gradient` — deep Atlantic → turquoise shallows → foam */
---sea-gradient: linear-gradient(
-  180deg,
-  #01293A 0%,    /* bg-base — the seabed / deepest water */
-  #024055 28%,   /* bg-surface — deep-ocean blue */
-  #006994 58%,   /* bg-surface-2 — mid-depth ocean */
-  #0A6E8C 78%,   /* border — shallow-sea edge */
-  #48D1CC 93%,   /* accent-brand — Caravelos turquoise, where light breaks the surface */
-  #AFEEEE 100%   /* pale aqua — the surf line */
-);
+/* app/globals.css — Tailwind v4 @theme */
+@import 'tailwindcss';
+
+@theme {
+  --color-bg-base: #01293A;
+  --color-bg-surface: #024055;
+  --color-bg-surface-2: #006994;
+  --color-border: #0A6E8C;
+  --color-text-primary: #EAF6FB;
+  --color-text-muted: #8FD2E6;
+  --color-accent-brand: #48D1CC;
+  --color-ok: #7FE3B0;
+  --color-danger: #FF6B6B;
+  --color-warn: #FFD66B;
+}
+
+/* the water column: seabed → surf line */
+--sea-gradient: linear-gradient(180deg, #01293A 0%, #024055 28%, #006994 58%, #0A6E8C 78%, #48D1CC 93%, #AFEEEE 100%);
 ```
 
-Stops map 1:1 onto the palette tokens above, so any later token retune keeps the gradient consistent. A horizontal `90deg` variant reads as the sea meeting the shore (left = deep water, right = foam) — use it for the app header strip and progress/depth bars. For a flatter, calmer surface (subtle section dividers) drop the last two stops and end at `#0A6E8C`. Keep text off the bottom ~15% (the turquoise→foam band) unless it sits on a `bg-surface` chip — contrast fails there.
-
-**Conventions:**
-- **Safety card** = solid `ok` or `danger` background with the verdict word large (`SAFE` / `REJECTED`); the 4 numbers in a row beneath.
-- **Bytecode tokens** = monospaced (`ui-monospace`); opcode byte tinted by its accent (`opcode-skew`/`opcode-guard` for our two custom opcodes, `text-muted` for the rest), `[len]` in `text-muted`, args in `text-primary`.
-- **Reject-and-rewrite diff** = standard unified-diff coloring: removed lines `danger`-tinted bg (`rgba(255,107,107,.12)`), added lines `ok`-tinted bg (`rgba(127,227,176,.12)`); the AST move-arrow in `accent-brand`.
-- **`EnsDiscovery`** = two hash columns; on match both render `ok`, on mismatch both flip `danger` with a "TAMPERED" tag.
-- **Indexing/lag badge** = small `warn`-colored chip ("subgraph syncing" / "last block N ago") when the feed is reading behind chain head — honesty is a judging criterion. (No "cached" chip anymore: there is no canned path.)
-
-> Keep it to **one typeface stack**: `ui-sans-serif` for chrome/labels, `ui-monospace` for bytecode, hashes, and any numeric/protocol value. No more than two weights per family.
+**Conventions:** safety verdict word large (`SAFE` / `REJECTED`); bytecode/numeric values in `ui-monospace`; the `building → indexing → live` card states use `warn` → `ok` respectively. One typeface stack: `ui-sans-serif` for chrome, `ui-monospace` for protocol values.
 
 ---
 
-## §7 — Failure tree (rehearse, print for stage)
-
-No canned twins means no silent fallback — every failure is narrated honestly. The mitigation is always "narrate the on-screen state, move on," never "swap to a fake."
-
-| Failure | UI response | Line |
-|---|---|---|
-| **LLM/`/compile` flakes (Beat B)** | Retry silently once; if it still fails, narrate the partially-compiled state and skip to the next beat. Pre-warm the model before the demo. | "the model is warming — here's the seeded feed while it loads." |
-| **x402 / Graph query hiccups (Beats A, D)** | Env-var swap to a backup API key (rehearsed). The feed keeps rendering from whatever the subgraph has indexed. | "falling back to our backup indexer key." |
-| **Sepolia RPC dies / congested** | Swap to backup RPC (Alchemy ↔ Infura) ≤15s while narrating the on-screen feed. | narrate; never dead-air. |
-| **Subgraph lag (Beat D retune)** | If the subgraph is behind, fall back to a direct `eth_getLogs` poll for the retune trigger; show the "indexing" `warn` chip. | "the subgraph's catching up — reading the logs directly." |
-| **Oracle staleness fires spuriously (Beat C)** | That IS the circuit breaker working — narrate honestly. | "that's the halt doing its job." |
-| **Tx reverts / nonce gap** | Use a private mempool (Alchemy/Infura `protect`); keep a 2nd funded wallet with pre-warmed nonces ready. | "replaying on the backup wallet." |
-| **Total demo loss** | Pre-recorded fallback video of the live Sepolia flow (recorded at G3), narrated live. Never debug on stage past 20 seconds. | — |
-
----
-
-## §8 — Build windows (P3's UI slice, from the Gantt)
+## §8 — Build windows (P3's UI slice)
 
 | Window | UI task |
 |---|---|
-| **h0–2** 🔴 | Sepolia setup gated on P1: confirm Aqua + router + factory deployed, faucet wallets funded (see [PROD-TESTNET.md](./PROD-TESTNET.md) §4–5). UI scaffolding can start in parallel. |
-| **h8–10** | UI scaffold: Next.js App Router, SSR, compose panes (left/right/bottom) + the global feed route `/`. |
-| **h10–12** | `parseProgram` + `safetyReport`: safety card pulls the 4 numbers; verdict green only if all pass + hash matches. `getFeed()` SSR from subgraph+ENS. |
-| **h12 = G1** 🟢 | Walking skeleton: feed renders live Sepolia data; compose → bytecode → safety card against the live compiler. |
-| **h14–16** | Consume Flavio's disassembler decoder for the bytecode pane (real tokens); Follow (ENS write) + Fork (load ENS description into composer) CTAs on the card. |
-| **h16–20** | SSE bridge → real `/compile` + `/api/stream`; deploy via `StrategyFactory` on Sepolia end-to-end. |
-| **h20–22** | `graphDelta` + `EnsDiscovery` pane (resolves subname live, hash side-by-side, mismatch→red); profile page `/[handle]` with follows/followed-by from ENS. |
-| **h22–24 = G2** 🟢 | Autonomous retune wired to Beat D; retune evidence log rendered in UI (query, entity ID, delta, decision, tx hash). |
-| **h28–30 → G3** 🟢 | Seed 3–5 real strategies on Sepolia (real descriptions, real capital, real swaps, real follows — see PROD-TESTNET §5); subgraph fully synced; full live dry-run recorded (= fallback video base). Freeze h30. |
-| **h34–35** | Demo run: full rehearsal against live Sepolia; print the failure tree. |
+| **h0–2** 🔴 | pnpm monorepo boot: root `package.json` + `pnpm-workspace.yaml` (`apps/*`, `packages/*`); `packages/schema` with `waveInitSchema` (§3); Next.js app in `apps/ui` (App Router, Tailwind v4, §7 tokens). Attribution footer. |
+| **h8–10** | The 9-step intake (`/new`): step components per §2, `localStorage` persistence across the three draft keys, progress + back/next. |
+| **h10–12** | `aggregateBrief()` (pure, server) + `runBuild()` / `getBuildStatus()` server actions → `AGENT_URL` RPC stub (agent returns canned `building → live` until compile lands). |
+| **h12 = G1** 🟢 | Walking skeleton: fill 9 steps → Complete Setup → dashboard card flips `building → live` against a stubbed agent. **Merge to `main`.** |
+| **h14–20** | Wire `runBuild()` to the real agent compile + ENS register + `ship()` (as Flavio/Flaviano land their halves). Card states reflect real on-chain truth. |
+| **h22–24 = G2** 🟢 | End-to-end: 9-step intake → real compile → real ENS register → real `ship()` on Sepolia → card flips live when subgraph indexes. **Merge to `main`.** |
 
-**P3's personal cut order:** decentralized-Graph-on-Sepolia decision (G1) first → `EnsDiscovery` polish second → **never** the retune, the safety card, or the live feed.
+**P3's personal cut order:** stub-agent path first (so the intake is demoable at G1 without the spine) → step 8 ENS polish → **never** step 4 (the prompt), the attribution footer, or the no-client-logic rule.
+
+---
+
+## §9 — Out of scope for THIS doc (tracked, not specified here)
+
+Surfaces the old `frontend.md` owned, now deferred to follow-up docs once the init flow is locked:
+
+- The **global ranked feed** on `/` (`getFeed()` = subgraph + ENS, ranked by `returnPct × recencyDecay × (1 + log2(1 + followers))`).
+- The **split-screen compose** (intent / bytecode / safety-card panes), the `EnsDiscovery` hash-verify pane, the reject-and-rewrite diff.
+- The `/[handle]` **profile** page (follows / followed-by from ENS).
+- The **demo beats** (A feed / B compose+ship / C ENS-discover+halt / D autonomous retune) and the **failure tree**.
+
+These remain P3-owned and on the build plan; they're just not in *this* file anymore. When the init flow merges, split these into `feed.md` / `compose.md` / `profile.md` / `demo.md` (one job each — caveman-style docs).
