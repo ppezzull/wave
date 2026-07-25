@@ -2,11 +2,19 @@
 
 _The narrative asset. Rehearse from this. The pitch sentence and the code's mechanism are the same thing — every line here is backed by something we demo._
 
-## The one-liner
+> **Read [PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md) first.** Wave is a **social network where reputation costs real money**, not a compiler with a feed attached. Open the pitch with that thesis; the compiler and the retune are the *machines that make the metric possible*, shown second.
 
-> **"1inch built a virtual machine for market-making strategies — but no compiler. We built the compiler."**
+## The opening frame (open with this, not the engineering)
 
-Variant with the AI hook: *"Tell it your strategy in a sentence; it ships a custom AMM in 30 seconds — simulated, safety-checked, and live on-chain."*
+> **"Every social network measures vanity — likes, follows, views; signals that cost nothing, so they're worth nothing, so the graph drowns in bots. Wave measures capital. On-chain, the only endorsement you can't fake is one that costs money — so on Wave, a like *is* liquidity, the feed *is* The Graph, and a profile *is* your ENS name."**
+
+Then, and only then, the mechanism that makes it possible:
+
+## The one-liner (the engine, after the thesis lands)
+
+> **"1inch built a virtual machine for market-making strategies — but no compiler. We built the compiler — and a social market around it where the only like that counts is capital."**
+
+Variant with the AI hook: *"Tell it your strategy in a sentence; it ships a custom AMM in 30 seconds — simulated, safety-checked, and live on-chain — and the strategies that earn money rise to the top of the feed, because likes are liquidity."*
 
 ## The three-act narrative (maps to the 4-min demo)
 
@@ -18,11 +26,11 @@ Variant with the AI hook: *"Tell it your strategy in a sentence; it ships a cust
 ### Act 2 — The magic (demo core, ~2min)
 Live, on **Sepolia testnet** (self-hosted contracts + app; everything else first-party networks), no mocked screens — with **one** disclosed exception: the mock oracle (`MockAggregatorV3`) that drives the judge-triggered halt, because you cannot move a real Chainlink feed on demand. If a beat fails, narrate the on-screen state and move on — there is no canned fallback. Three strong beats (full timeline in [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md)):
 
-- **Beat A — ship (0–60s).** Type intent → the compiler emits the SwapVM program, **split-screen: sentence beside the bytecode** ("this sentence IS this program"). The **green safety card** renders from the `quote()` battery — monotonicity ✓, symmetry ✓, oracle-guard triggers ✓. Then the **WOW moment**: type a malicious intent (oracle-guard placed *after* skew) → the compiler visibly **REJECTS** it with a side-by-side diff and emits the corrected, canonicalized program. *(Beat: "the compiler refuses to ship anything unsafe — and shows you why.")* `ship()` puts the corrected strategy **live on Sepolia** — a real on-chain token flow a judge can verify on Etherscan (satisfies 1inch).
+- **Beat A — the feed + ship (0–60s).** Open the app: the **global ranked feed** SSR-renders from live Sepolia — strategies ranked by `returnPct × recency × (1 + log₂ followers)`, every number from chain or ENS, **no database**. Then compose: type intent → the compiler emits the SwapVM program, **split-screen: sentence beside the bytecode** ("this sentence IS this program — and it's the only human text on the card"). The **green safety card** renders from the `quote()` battery. Then the **WOW moment**: type a malicious intent (oracle-guard placed *after* skew) → the compiler visibly **REJECTS** it with a side-by-side diff and emits the corrected, canonicalized program. *(Beat: "the compiler refuses to ship anything unsafe — and shows you why.")* `ship()` puts the corrected strategy **live on Sepolia** — a real on-chain token flow a judge can verify on Etherscan (satisfies 1inch).
 
-- **Beat B — ENS-discover + live revert (60–150s).** The strategy gets its ENS subname (`eth-usdc-guarded.strategist.eth`). **A second agent DISCOVERS it via ENS** — resolves the registry, reads the `v0.programhash` from the text record (say "draft standard" — ENSIP-25/26 are Drafts), **verifies it matches the on-chain program**, and swaps against it. *(Beat: "the taker found this strategy through ENS, not our database — and checked it wasn't tampered with." This is what makes ENS load-bearing.)* Then **the judge triggers a revert**: they pick a deviated market state → `MockAggregatorV3` pushes it → `_oracleGuard2D` **HALTS quoting on screen**. *(Beat: "the protection lives in the VM — nothing the AI did could have disabled it.")*
+- **Beat B — ENS-discover + live halt (60–150s).** The strategy gets its ENS subname (`eth-usdc-guarded.wave.eth`). **A second agent DISCOVERS it via ENS** — resolves the registry, reads the `v0.programhash` from the text record, **verifies it matches the on-chain program**, and swaps against it. *(Beat: "the taker found this strategy through ENS — there is no database — and checked it wasn't tampered with." This is what makes ENS load-bearing.)* Then **the judge triggers a halt**: they pick a deviated market state → `MockAggregatorV3` pushes it → `_oracleGuard2D` **HALTS quoting on screen**. *(Beat: "the protection lives in the VM — nothing the AI did could have disabled it.")*
 
-- **Beat C — autonomous retune (150–220s).** A real entity delta from our **first-party subgraph** (indexing `Swapped`) crosses threshold → the agent notices → `dock()` + recompile + `ship()` in seconds, **autonomously, no click**. *(Beat: "your LP position just adapted itself. No pool migration, no locked capital, custody never left the wallet.")* → compliance card (220–240s).
+- **Beat C — autonomous retune (150–220s).** A real entity delta from our **first-party subgraph** (indexing `Swapped` on Sepolia) crosses threshold → the agent notices → `dock()` + recompile + `ship()` in seconds, **autonomously, no click**. *(Beat: "your LP position just adapted itself. No pool migration, no locked capital, custody never left the wallet.")* → compliance card (220–240s).
 
 **Stage discipline:** every beat is **live on Sepolia** — no canned replay twins, no `DEMO_LIVE=0`. **The un-cuttable moments: the live `ship()`/`swap()` and the judge-triggered halt** — those are the rubric-killers. Backup: a second funded wallet + a backup Sepolia RPC URL (no anvil fork to re-cut). LLM stall → 1500ms watchdog retries the live stream (disclosed); there is no recording to fall back to — if it stays down, narrate the on-screen state. **Cut plan if timing slips:** drop Beat C to a narrated screenshot first; **never** cut the live on-chain action, the reject-and-rewrite WOW beat, or the ENS discovery panel (those clear 1inch, WOW, and ENS respectively).
 
