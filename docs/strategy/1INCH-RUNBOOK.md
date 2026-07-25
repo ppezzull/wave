@@ -154,7 +154,7 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
 - **`StrategyOpcodes`** — il set di istruzioni disponibili.
 - **`_instructions()`** — l'unica cosa che devi dire a `SwapVM`: quale tabella usare.
 
-⚠️ **`_instructions()` è `pure`, `_opcodes()` è `pure`, ma `_oracleGuard2D` sarà `view`.** In Solidity infilare una funzione `view` in un array di puntatori a funzione non-payable è **legale** (`view` è più restrittiva, quindi assegnabile). Se prendi un errore di tipo criptico sulla tabella, il colpevole è quasi sempre `pure`/`view`/non-payable — non l'architettura. Non riprogettare niente per questo.
+⚠️ **`_instructions()` è `pure`, `_opcodes()` è `pure`, e `_oracleGuard2D` è `internal` (NON `view` — vedi F3.3: `ctx.runLoop()` è non-view, quindi un guard `view` non compila).** Il table non-payable accetterebbe anche un puntatore `view` (`view` è più restrittiva → assegnabile), ma non c'entra: il guard è `internal` come tutte le istruzioni. Se prendi un errore di tipo criptico sulla tabella, il colpevole è quasi sempre `pure`/`view`/non-payable — non l'architettura. Non riprogettare niente per questo.
 
 ## F1.3 — L'evento congelato
 
@@ -296,7 +296,7 @@ Questo file è **la prova da 30 secondi per il giudice 1inch**: ci deve vedere `
 ## F3.3 — L'istruzione
 
 ```solidity
-function _oracleGuard2D(Context memory ctx, bytes calldata args) internal view {
+function _oracleGuard2D(Context memory ctx, bytes calldata args) internal {
     // 1. parse
     // 2. ctx.runLoop();                    ⬅️ esegue TUTTO il resto del programma
     // 3. staleness → revert SEMPRE (entrambe le mode)
@@ -309,7 +309,7 @@ function _oracleGuard2D(Context memory ctx, bytes calldata args) internal view {
 
 - **`runLoop()` sta al punto 2**, non al punto 5. Deve girare *prima* dei controlli, perché prima di lui `amountIn`/`amountOut` non sono ancora calcolati — non c'è niente da controllare. Il guard è l'ultimo a giudicare proprio perché è il primo a partire.
 - **La staleness è il primo controllo e reverta in entrambe le mode.** Un oracolo fermo non è "un prezzo un po' vecchio": è **nessuna informazione**. Clampare verso un prezzo di cui non sai l'età sarebbe peggio che fermarsi. Questo è **l'HALT** del Beat B.
-- **`internal view`.** Se lo dichiari non-view, il guard non funziona sotto `quote()` e l'intera batteria di sicurezza di Flavio salta.
+- **`internal`, NON `view`.** Verificato sul sorgente: `ctx.runLoop()` (`VM.sol:118`) è `internal` non-view (muta `ctx.vm.nextPC` e chiama function pointer non-view), e Solidity vieta a una funzione `view` di chiamarne una non-view → un guard dichiarato `view` **non compila**. Il template `MinRate._requireMinRate1D` è `internal` non per caso. Il guard funziona sotto `quote()` grazie all'enforcement **runtime** (`isStaticContext` blocca storage-write ed external non-view), NON alla keyword `view`. Dichiaralo `internal` come tutte le altre istruzioni.
 - **Il clamp arrotonda a favore del maker.** Invariante #5. Sempre.
 - **⚠️ Due rischi di implementazione (da review PR #13, da onorare quando scrivi `OracleGuard.sol`):**
   - **(a) Normalizzazione della direzione.** `implied = amountOut·1e18/amountIn` deve essere normalizzato per **decimali e direzione del pairing dei token**. Se la normalizzazione non combacia col pairing, il **segno della deviazione si inverte** — e tutto il ragionamento one-sided si gira sottosopra: il guard fermerebbe i fill giusti e lascerebbe passare quelli sbagliati. Testalo esplicitamente su entrambe le direzioni (token0→token1 e token1→token0) e con decimali asimmetrici.
@@ -330,7 +330,7 @@ Copertura minima: dentro banda passa · fuori banda **dal lato sfavorevole al ma
 
 ## F3.8 — Il test che quasi tutti dimenticano
 
-Chiama `quote()` su un programma che contiene il guard. Se esplode qui ma non in `swap()`, il colpevole è `view`: hai messo una scrittura di stato dentro un'istruzione che deve girare in contesto statico.
+Chiama `quote()` su un programma che contiene il guard. Se esplode qui ma non in `swap()`, il colpevole è una **scrittura di stato in contesto statico**: hai messo una scrittura di storage dentro un'istruzione che deve girare sotto `quote()` (dove `isStaticContext` la blocca a runtime). Non è una questione di keyword `view` — il guard è `internal` non-view; è che non puoi toccare lo storage in contesto statico.
 
 ## F3.9 / F3.10 — Le mutation 📸
 

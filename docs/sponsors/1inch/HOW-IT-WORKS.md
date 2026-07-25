@@ -99,7 +99,7 @@ L'ordine canonico è quindi leggibile come "dal più esterno al più interno":
 
 ### 3.1 L'istruzione guard — `src/instructions/OracleGuard.sol`
 
-Modellata su `MinRate.sol`. **`internal view`** — deve funzionare sotto `quote()`.
+Modellata su `MinRate.sol`. **`internal` (NON `view`)** — come tutte le istruzioni SwapVM. Verificato sul sorgente: `ctx.runLoop()` è non-view, quindi un guard `view` non compila. Funziona sotto `quote()` grazie all'enforcement runtime (`isStaticContext`), non alla keyword `view`.
 
 ```solidity
 // SPDX-License-Identifier: LicenseRef-Degensoft-SwapVM-1.1
@@ -114,7 +114,7 @@ contract OracleGuard {
     error OracleStale();
     error OracleDeviation();
 
-    function _oracleGuard2D(Context memory ctx, bytes calldata args) internal view {
+    function _oracleGuard2D(Context memory ctx, bytes calldata args) internal {
         // 1. parse (offset-sliced, errori tipizzati — copia lo stile di MinRateArgsBuilder)
         address oracle = address(bytes20(args[0:20]));
         // ...
@@ -189,7 +189,7 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
 
 1. **In modalità Aqua NON si scrive l'istruzione dei balance.** Il README upstream è esplicito: Aqua → *"Balance Instruction: None (Aqua manages)"* + `useAquaInsteadOfSignature: true`. Se metti `_dynamicBalancesXD` **e** shippi su Aqua, il comportamento è sbagliato e il debug è doloroso.
 2. **Mai scrivere un indice opcode numerico.** Lo slot 0 è sacrificato come lunghezza dell'array → indice effettivo = posizione − 1. Usa sempre `p.build(InventorySkew._inventorySkew2D, args)`: il ProgramBuilder Solidity risolve l'indice **dal function pointer**. È anche il motivo per cui `slots.json` a G1 è un *dump* generato, non un conteggio a mano.
-3. **`internal view` → `internal`** è una conversione legale di function pointer in Solidity (`view` è più restrittivo, quindi assegnabile). Se prendi un errore di tipo criptico sulla tabella, è quasi sempre `pure` vs `view` vs non-payable — non l'architettura.
+3. **Il guard è `internal`, NON `view`.** Verificato sul sorgente: `ctx.runLoop()` (`VM.sol:118`) è non-view, e Solidity vieta a una funzione `view` di chiamarne una non-view → un guard `view` **non compila**. La tentazione è dichiararlo `view` "per sicurezza", ma è l'errore. Il template `MinRate._requireMinRate1D` è `internal`. Il guard funziona sotto `quote()` per enforcement runtime (`isStaticContext`), non per la keyword. Se prendi un errore di tipo criptico sulla tabella opcode, è quasi sempre `pure`/`view`/non-payable — ma per il guard la risposta è `internal` non-view, come tutte le istruzioni.
 4. **Chainlink su Sepolia lagga.** Il feed è vero ma inaffidabile (heartbeat ~3600s, ma i feed testnet lag-gano oltre l'heartbeat, e `_oracleGuard2D` halta **sempre** sullo staleness — un feed stale durante la demo = HALT sull'happy path). Quindi il `MockAggregatorV3` che deployhi serve **sia l'happy path sia il breaker** (dichiarato sulla slide); Chainlink reale resta cablato e quotato sulla safety card come sorgente di produzione. Vedi [1INCH-RUNBOOK.md](../../strategy/1INCH-RUNBOOK.md) F0.4.
 
 ---
