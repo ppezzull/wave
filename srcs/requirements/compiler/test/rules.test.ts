@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SPEC_VERSION, StrategySpec } from "../src/ast.js";
-import { checkRules, RULES } from "../src/rules.js";
+import { checkRules, resolveRejections, RULES } from "../src/rules.js";
 
 const token0 = "0xF62849F9A0B5Bf2913b396098F7c7019b51A820a";
 const token1 = "0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9";
@@ -111,5 +111,41 @@ describe("stubbed rules", () => {
       curve,
     ]);
     expect(checkRules(s)).toEqual([]);
+  });
+});
+
+describe("resolveRejections (composed rewrite — the authoritative fix)", () => {
+  it("returns the spec unchanged when nothing is violated", () => {
+    const s = spec([guard, skew, curve]);
+    const r = resolveRejections(s);
+    expect(r.applied).toEqual([]);
+    expect(r.spec).toEqual(s);
+  });
+
+  it("composes fixes for a spec violating BOTH implemented rules", () => {
+    const s = spec([skew, guard, { type: "protocolFee", bps: 30, receiver: token0 }, curve]);
+    const r = resolveRejections(s);
+    expect(checkRules(r.spec)).toEqual([]); // the composed spec is clean
+    expect(r.applied).toContain("OracleGuardMustPrecedeSkew");
+    expect(r.applied).toContain("ProtocolFeeLeMakerFee");
+    expect(r.spec.blocks.map((b) => b.type)).toEqual([
+      "oracleGuard",
+      "inventorySkew",
+      "protocolFee",
+      "curve",
+    ]);
+    const protocolFee = r.spec.blocks.find((b) => b.type === "protocolFee");
+    expect(protocolFee).toMatchObject({ bps: 0 }); // clamped to the absent makerFee
+  });
+
+  it("throws when a violated rule has no rewrite instead of emitting a dirty spec", () => {
+    const noFix = [
+      {
+        name: "AlwaysViolated",
+        predicate: () => false,
+        message: () => "no fix available",
+      },
+    ];
+    expect(() => resolveRejections(spec([curve]), noFix)).toThrowError(/no auto-rewrite/);
   });
 });

@@ -132,3 +132,43 @@ function diffSpecs(before: StrategySpec, after: StrategySpec): { moves: Move[]; 
     diff: beforeLines.join("\n") === afterLines.join("\n") ? "" : unifiedDiff(beforeLines, afterLines),
   };
 }
+
+// ── composed resolution (review finding, PR #25) ─────────────────────────
+// Each Rejection's rewrite fixes ONLY its own rule from the original spec:
+// with two violations you get two different rewrites, neither necessarily
+// clean overall. The AUTHORITATIVE corrected spec — what the REJECTED card
+// offers and what may proceed to lowering — is this fixpoint: apply the
+// first rejection's rewrite, re-check, repeat until clean.
+
+export interface Resolution {
+  spec: StrategySpec;
+  /// Rule names whose rewrites were applied, in application order.
+  applied: string[];
+}
+
+export class UnresolvableSpecError extends Error {
+  constructor(rule: string, reason: "no-rewrite" | "no-fixpoint") {
+    super(
+      reason === "no-rewrite"
+        ? `rule ${rule} is violated and has no auto-rewrite — the spec must be fixed by hand`
+        : `rewrites did not converge (last violated rule: ${rule}) — a rewrite is reintroducing another rule's violation`,
+    );
+    this.name = "UnresolvableSpecError";
+  }
+}
+
+export function resolveRejections(spec: StrategySpec, rules: readonly Rule[] = RULES): Resolution {
+  const applied: string[] = [];
+  let current = spec;
+  // Each iteration must clear at least one rule for good; more than one
+  // pass per rule means a rewrite is undoing another's fix.
+  for (let i = 0; i <= rules.length; i++) {
+    const rejections = checkRules(current, rules);
+    if (rejections.length === 0) return { spec: current, applied };
+    const first = rejections[0]!;
+    if (first.rewrite === undefined) throw new UnresolvableSpecError(first.rule, "no-rewrite");
+    current = first.rewrite;
+    applied.push(first.rule);
+  }
+  throw new UnresolvableSpecError(checkRules(current, rules)[0]?.rule ?? "?", "no-fixpoint");
+}
