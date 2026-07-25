@@ -1,0 +1,18 @@
+{
+  "name": "wave-subgraph",
+  "version": "0.0.0",
+  "private": true,
+  "description": "wave graph-node spike subgraph (Sepolia) — proves the indexing path before the real Strategy/Swap/Follow schema lands",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "auth": "graph auth --studio $(cat .studio-auth)",
+    "deploy:studio": "graph deploy --node https://api.studio.thegraph.com/deploy/ wave --network sepolia",
+    "create-local": "graph create --node http://localhost:8020/ wave",
+    "deploy:local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 wave"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.73.0",
+    "@graphprotocol/graph-ts": "^0.36.0"
+  }
+}

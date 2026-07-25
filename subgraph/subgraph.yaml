@@ -1,0 +1,61 @@
+specVersion: 1.3.0
+# Production wave subgraph (v0.0.2). Replaces the spike. Two data sources:
+#   (a) EnsStrategyRouter (Flaviano's deploy, address TBD) -> StrategyDeployed, Swapped
+#   (b) Sepolia ENS Public Resolver (constant)             -> TextChanged (filtered in mapping)
+# NOTE: no indexerHints.prune — Strategy and Follower are MUTABLE aggregates; prune:auto only
+# works on fully immutable stores. Reorg safety = graph-node native block-level revert.
+schema:
+  file: ./schema.graphql
+dataSources:
+  # --- (a) StrategyRouter ---
+  - kind: ethereum/contract
+    name: EnsStrategyRouter
+    network: sepolia
+    source:
+      # PLACEHOLDER — Flaviano sets the real address + startBlock before `graph deploy`.
+      # (graph-cli rejects address 0x0…0 at deploy; build is fine with it.)
+      address: "0x0000000000000000000000000000000000000000" # REPLACE on deploy (WAVE_ROUTER_ADDRESS)
+      abi: EnsStrategyRouter
+      startBlock: 0 # REPLACE on deploy (WAVE_ROUTER_BLOCK)
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+        - Swap
+      abis:
+        - name: EnsStrategyRouter
+          file: ./abis/EnsStrategyRouter.abi.json
+      eventHandlers:
+        - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
+          handler: handleStrategyDeployed
+        - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
+          handler: handleSwapped
+      file: ./src/mapping.ts
+  # --- (b) ENS Public Resolver (constant on Sepolia) ---
+  - kind: ethereum/contract
+    name: ENSResolver
+    network: sepolia
+    source:
+      address: "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5" # Sepolia ENS Public Resolver (PROD-TESTNET §3)
+      abi: ENSResolver
+      startBlock: 11348879 # spike value; resolver predates the router by a mile
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Follow
+        - Follower
+        - NodeFollows
+        - Strategy
+      abis:
+        - name: ENSResolver
+          file: ./abis/ENSResolver.json
+      eventHandlers:
+        - event: TextChanged(indexed bytes32,indexed string,string,string)
+          handler: handleTextChanged
+        - event: VersionChanged(indexed bytes32,uint256)
+          handler: handleVersionChanged
+      file: ./src/mapping.ts
