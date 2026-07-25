@@ -9,6 +9,7 @@
 import { Agent } from "@mastra/core/agent";
 import { Memory } from "@mastra/memory";
 import { gemmaModel } from "./llm.js";
+import { llmConfig } from "../config/env.js";
 import { StrategySpec } from "../schema.js";
 
 const COMPOSE_INSTRUCTIONS = `You are wave's strategy composer. Given one natural-language market-making intent, emit a single JSON object matching the StrategySpec schema (specVersion 1, then pair, size, and an ordered blocks array).
@@ -35,16 +36,26 @@ export const composeAgent = new Agent({
 /** Memory scope — (resource=user, thread=session). Pass to compose/composeStream for recall. */
 export type ComposeScope = { resource: string; thread: string };
 
-const generateOptions = (scope?: ComposeScope) => ({
-  structuredOutput: {
-    schema: StrategySpec,
-    jsonPromptInjection: "auto" as const, // deepseek-coder-v2 is non-OpenAI → prompt-injection
-    errorStrategy: "strict" as const, // schema drift must throw, not silently coerce
-  },
-  // temperature/maxOutputTokens live under modelSettings (NOT top-level).
-  modelSettings: { temperature: 0, maxOutputTokens: 1000 },
-  ...(scope ? { memory: scope } : {}),
-});
+const generateOptions = (scope?: ComposeScope) => {
+  // Fresh per call — AbortSignal.timeout arms at creation and is single-use, so it
+  // must NOT be reused across compose() invocations (a fired signal stays aborted).
+  const { timeoutMs, maxRetries } = llmConfig();
+  return {
+    structuredOutput: {
+      schema: StrategySpec,
+      jsonPromptInjection: "auto" as const, // deepseek-coder-v2 is non-OpenAI → prompt-injection
+      errorStrategy: "strict" as const, // schema drift must throw, not silently coerce
+    },
+    // temperature/maxOutputTokens/maxRetries live under modelSettings (NOT top-level).
+    // maxRetries: transient 5xx/429/connection retries (AI SDK default is 2).
+    modelSettings: { temperature: 0, maxOutputTokens: 1000, maxRetries },
+    // TIER 2 #6 — hard deadline. AI SDK v5 dropped the `timeout` CallSetting, so
+    // the stall guard is an abortSignal. Bounds compose() at timeoutMs → demo-safe:
+    // a hung craftshost call can't hang the live demo past the deadline.
+    abortSignal: AbortSignal.timeout(timeoutMs),
+    ...(scope ? { memory: scope } : {}),
+  };
+};
 
 /**
  * Parse a natural-language intent into a bounded StrategySpec.
