@@ -146,27 +146,29 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 
 ## §3 — The 36-Hour Gantt (P1 / P2 / P3, gates G1=h12 / G2=h24 / G3=h30)
 
-> **Role map (P1=Flaviano · P2=Flavio · P3=Pietro).** Ownership split: P3 (Pietro) owns the full data→agent→product stack (`graphDelta` + autonomous retune + subgraph schema/mapping); P2 (Flavio) owns compiler + ENS-register/verify; P1 (Flaviano) owns the opcodes, Sepolia deploy, `graph deploy`, and the subgraph's on-chain landing.
+> **Role map (P1=Flaviano · P2=Flavio · P3=Pietro).** Ownership split (canonical = [`tasks/Flaviano.md`](../../tasks/Flaviano.md) / [`Flavio.md`](../../tasks/Flavio.md) / [`Plan.md`](../../tasks/Plan.md)): **P1 (Flaviano) owns the full deterministic spine — TS compiler (`ast.ts`, `canonical.ts`, `rules.ts`, `ir.ts`/`emit.ts`, disassembler, `programHash`, `slots.json`) + the two SwapVM opcodes + `EnsStrategyRouter` + Sepolia deploy + `graph deploy`.** **P2 (Flavio) owns identity + the agentic brain: ENS agent side (resolveVerify, register, hash-verify) + the agentic layer (Mastra + z.ai + custom MCP, `graphDelta` decision, `recompileAndShip`).** **P3 (Pietro) owns the full data→product stack (subgraph schema/mapping, `getFeed`, autonomous retune surface, UI, demo, prose).**
+>
+> ⚠️ **Cell placement updated for the reorg:** all compiler-spine cells (`ast.ts`, `canonical`, `rules`, `ir`/`emit`, `programHash`, `reject`, fuzz, `slots.json`) are now in **P1's column** — Flaviano owns the whole compiler→VM→deploy spine, so `slots.json` is a self-check, not a cross-person handshake. P2's column holds only genuine ENS + agentic work (cross-check against [`Flavio.md`](../../tasks/Flavio.md)). **The remaining staleness is P3's column** — `timeline.ts`/`controller.ts`/`liveSwap`/fixture references killed by #4 — which is a separate sweep (the demo-apparatus kill), not ownership.
 
-| Window | P1 — Flaviano (Solidity + Sepolia) | P2 — Flavio (Compiler + ENS agent) | P3 — Pietro (Subgraph + agent + UI + demo) |
+| Window | P1 — Flaviano (Compiler + Executer + Settler: TS compiler + opcodes + router + Sepolia) | P2 — Flavio (ENS + Agentic: Mastra + z.ai + MCP) | P3 — Pietro (Subgraph + UI + demo) |
 |---|---|---|---|
-| **h0–2** | #5: `EnsStrategyRouter` hook + `StrategyDeployed` + hash-match test 🔴 | #1: `ast.ts` + Zod freeze | #3: `timeline.ts` + `controller.ts` 🔴 |
-| **h2–4** | — | — | #5: graph-node setup |
-| **h8–10** | #2: MockOracle + builders + clean opcode build | #1: canonical + reorder diff | #4: scaffold UI, 3 panes on fixture |
-| **h10–12** | #2: stale-halt + clamp tests | #1: rules stubs + IR slot map | #4: parseProgram + safetyReport |
-| **h12 = G1** 🟢 | clean opcodes + guard tests green; **`slots.json` handshake** | reorder visibly fixes order | walking skeleton on fixture |
-| **h14–16** | #2: liveness + additivity | #1: emit byte-identical + disassembler (TS-direct; factory demoted) | #3: liveSwap + mockOracle |
-| **h16–18** | — | #1: `programHash()` + round-trip hash test; ENS register | #5: schema + mapping + `subgraph.yaml` (authored, handed to P1) |
-| **h18–20** | #5: `graph deploy` lands, real `Swapped` entity (owns Sepolia deploy infra) | #5: `resolveVerify` into swap path; deliver `recompileAndShip()` to P3 at h20 | #4: wire SSE to real /compile |
-| **h20–22** | #2: mutation harness M1/M2/M3; arm `_oracleGuard2D` + MockAggregator for Beat B | #5: ENS-resolution client for `EnsDiscovery` | #5: `graphDelta` poll + `EnsDiscovery` (shared threshold module) |
-| **h22–24** | #5: end-to-end autonomous retune support through his router | #1: reject rules + diff renderer | #5: **autonomous retune** (zero-click; `graphDelta` → `recompileAndShip`); retune evidence log |
-| **h24 = G2** 🟢 | autonomous retune fires through router | reject+rewrite+diff green; bytecode matches ENS hash | full live UI + ENS chip; retune log cites entity ID |
-| **h28–30** | #2: gas snapshot + quote==swap; swap-trace artifact | #1: edge cases + fuzz specs; slot snapshot test | full dry run + record fallbacks; `make demo-up` green ×2 |
+| **h0–2** | `EnsStrategyRouter` hook + `StrategyDeployed` 🔴; `ast.ts` + Zod freeze | Mastra agent skeleton (own container); ENS-owner key funded; Sepolia resolver ready | `timeline.ts` + `controller.ts` 🔴 *(pre-#4)* |
+| **h2–4** | — | — | graph-node setup |
+| **h8–10** | MockOracle + builders + clean opcode build; `canonical` + reorder diff | — | scaffold UI, 3 panes on fixture |
+| **h10–12** | stale-halt + clamp tests; `rules` stubs + IR slot map | — | parseProgram + safetyReport |
+| **h12 = G1** 🟢 | clean opcodes + guard tests green; **`slots.json` self-check (single-owner)** | — | walking skeleton on fixture |
+| **h14–16** | liveness + additivity; `emit` byte-identical + disassembler (TS-direct) | — | liveSwap + mockOracle *(pre-#4)* |
+| **h16–18** | `programHash()` + round-trip hash test | ENS register (writes records) | schema + mapping + `subgraph.yaml` (→ P1) |
+| **h18–20** | `graph deploy` lands, real `Swapped` entity (owns Sepolia deploy infra) | `resolveVerify` into swap path; deliver `recompileAndShip()` to P3 at h20 | wire SSE to real /compile |
+| **h20–22** | mutation harness M1/M2/M3; arm `_oracleGuard2D` + MockAggregator for Beat B | ENS-resolution client for `EnsDiscovery`; `graphDelta` poll + threshold module (`policy.decide`) | `EnsDiscovery` pane (UI) |
+| **h22–24** | autonomous retune support through router; `reject rules` + diff renderer | **autonomous retune** (zero-click; `graphDelta` → `recompileAndShip`) | retune evidence log (display/badge) |
+| **h24 = G2** 🟢 | autonomous retune fires; reject+rewrite+diff green; bytecode matches ENS hash | — | full live UI + ENS chip; retune log cites entity ID |
+| **h28–30** | gas snapshot + quote==swap; swap-trace artifact; edge cases + fuzz specs + slot snapshot | — | full dry run + record fallbacks; `make demo-up` green ×2 |
 | **h30 = G3** 🟢 | freeze | freeze | freeze |
 | **h34–35** | demo proof recording; Sepolia seed idempotency check | demo support; LLM cache pre-warm | demo run (live Sepolia, human-driven, no controller) |
 
 ### Critical path — "the Oracle-Guard Spine"
-`P2 (Flavio) ast/spec (h0–2) → P1 (Flaviano) opcode build (h8–10) → P2 ir/emit (h14–16) → P1 graph deploy (h18–20) → P3 (Pietro) autonomous retune (h22) → G2 (h24)`. If the clean `_oracleGuard2D` build diverges from spec, it cascades: Move #1's verdict has nothing to gate, Move #2 fuzz goes false-RED, the live revert has no halt. **The one chain to defend.** (P1 owns the *deploy*; P3 owns the *schema/mapping* authored at h16 and the *retune* at h22 — see the §3 table.)
+`P1 (Flaviano) ast/spec (h0–2) → P1 opcode build (h8–10) → P1 ir/emit (h14–16) → P1 graph deploy (h18–20) → P2 (Flavio) autonomous retune (h22) → G2 (h24)`. **The whole compiler→VM→deploy spine is one person (Flaviano) now** — which is the point of the reorg: the slot-drift class (emit ↔ opcode-table desync across two people) is eliminated, because the same person owns both ends and `slots.json` becomes a self-check. If the clean `_oracleGuard2D` build diverges from spec, it cascades: the compiler's verdict has nothing to gate, the invariant fuzz goes false-RED, the live halt has no trigger. **The one chain to defend.** (P1 owns the *deploy*; P3 owns the *schema/mapping* authored at h16 and the retune *surface*; P2 owns the retune *execution* via `graphDelta` → `recompileAndShip`, consumed by P3's surface.)
 
 ### Gate bars (aligns EVENT-RUNBOOK.md)
 - **G1 (h12):** clean opcodes + stale-halt/clamp tests green; compiler reorder visibly fixes order; UI walking skeleton on fixture.
