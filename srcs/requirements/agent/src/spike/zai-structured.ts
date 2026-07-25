@@ -1,18 +1,29 @@
-// SPIKE — z.ai structured output: does it produce reliable Zod objects?
-//   Test A: Vercel AI SDK generateObject  (the mechanism Mastra uses under the hood)
-//   Test B: Instructor + openai SDK        (the z.ai-safe fallback with retry)
-// Run: npm run spike   (loads .env via dotenv)
-// Verdict decides: Mastra-native parse (A OK) vs Instructor fallback (A fails).
-
+// SPIKE — does the self-hosted Gemma4-fast (Ollama) produce reliable structured
+// output with think:false forced on?
+//   Test A: Vercel AI SDK generateObject   (the mechanism Mastra uses under the hood)
+//   Test C: Mastra Agent + structuredOutput (the real composeAgent path)
+// Run: npm run spike   (loads .env via dotenv/config — needs LLM_* → Ollama/server)
+//
+// ⚠️ LIVE-RUN is server-side only (Ollama isn't on the dev Mac). This file
+// TYPECHECKS locally (tsc) so it's ready to run there.
+//
+// think:false is CRITICAL: Gemma4-fast ships thinking ON → ~60s of reasoning
+// before any JSON → demo timeout. We inject chat_template_kwargs:{think:false}
+// via transformRequestBody (runs in the provider before the wire). Mastra's
+// {id,url,apiKey} model config + providerOptions do NOT pass it through (mastra#4396).
 import "dotenv/config";
-import { z } from "zod";
+import { z } from "zod/v4";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateObject } from "ai";
 
-const ZAI_BASE_URL = process.env.ZAI_BASE_URL!;
-const ZAI_API_KEY = process.env.ZAI_API_KEY!;
-const ZAI_MODEL = process.env.ZAI_MODEL ?? "glm-4.6";
+// `!` satisfies TS; the runtime guard below exits with a clear message if either
+// is actually missing.
+const BASE_URL = process.env.LLM_BASE_URL!;
+const API_KEY = process.env.LLM_API_KEY ?? "dummy";
+const MODEL = process.env.LLM_MODEL!;
 
-if (!ZAI_API_KEY) {
-  console.error("ZAI_API_KEY missing from .env — populate it and re-run.");
+if (!BASE_URL || !MODEL) {
+  console.error("LLM_BASE_URL / LLM_MODEL missing from .env — populate them (Ollama/server) and re-run.");
   process.exit(1);
 }
 
@@ -34,66 +45,74 @@ const Proposal = z.object({
   makerFeeBps: z.number().int().min(0).max(1000),
 });
 
-const prompt =
+const PROMPT =
   `A market maker wants an ETH/USDC strategy: keep inventory balanced 50/50; ` +
   `halt (revert) if the ETH/USD Chainlink oracle deviates more than 1.5%; ` +
   `take a 5 bps maker fee. token0 = WETH ${WETH}, token1 = USDC ${USDC}. ` +
   `Fill the structured form exactly.`;
 
+// Provider with think:false baked into every request body.
+const provider = createOpenAICompatible({
+  name: "ollama",
+  baseURL: BASE_URL,
+  apiKey: API_KEY,
+  transformRequestBody: (args) => ({ ...args, chat_template_kwargs: { think: false } }),
+});
+
 function report(ok: boolean, label: string, obj?: unknown, err?: unknown) {
   console.log(`\n[${label}] ${ok ? "PASS ✅" : "FAIL ❌"}`);
   if (ok && obj) console.log(JSON.stringify(obj, null, 2));
-  if (!ok && err) console.log(String((err as Error)?.message ?? err).slice(0, 600));
+  if (!ok && err) console.log(String((err as Error)?.message ?? err).slice(0, 800));
 }
 
-// ── Test A: Vercel AI SDK generateObject (Mastra's underlying mechanism) ──
+// ── Test A: AI SDK generateObject (Mastra's underlying mechanism) ──
 async function testA(): Promise<boolean> {
   try {
-    const { generateObject } = await import("ai");
-    const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible");
-    const provider = createOpenAICompatible({ name: "zai", baseURL: ZAI_BASE_URL, apiKey: ZAI_API_KEY });
     const { object } = await generateObject({
-      model: provider.chatModel(ZAI_MODEL),
+      model: provider.chatModel(MODEL),
       schema: Proposal,
-      prompt,
+      prompt: PROMPT,
+      temperature: 0,
+      maxOutputTokens: 400,
     });
-    report(true, "A · AI SDK generateObject", object);
-    return true;
+    report(true, "A · AI SDK generateObject (think:false)", object);
+    return Proposal.safeParse(object).success;
   } catch (e) {
-    report(false, "A · AI SDK generateObject", undefined, e);
+    report(false, "A · AI SDK generateObject (think:false)", undefined, e);
     return false;
   }
 }
 
-// ── Test B: Instructor (z.ai-safe, retry with validation feedback) ──
-async function testB(): Promise<boolean> {
+// ── Test C: Mastra Agent + structuredOutput (the real composeAgent path) ──
+async function testC(): Promise<boolean> {
   try {
-    const Instructor = (await import("@instructor-ai/instructor")).default;
-    const OpenAI = (await import("openai")).default;
-    const client = Instructor({
-      client: new OpenAI({ baseURL: ZAI_BASE_URL, apiKey: ZAI_API_KEY }),
-      mode: "JSON",
+    const { Agent } = await import("@mastra/core/agent");
+    const agent = new Agent({
+      id: "spike",
+      name: "spike",
+      instructions: "Fill the structured form exactly. Emit ONLY the JSON object, no prose.",
+      model: provider.chatModel(MODEL),
     });
-    const res = await client.chat.completions.create({
-      model: ZAI_MODEL,
-      response_model: { schema: Proposal, name: "Proposal" },
-      messages: [{ role: "user", content: prompt }],
-      max_retries: 3,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any);
-    report(true, "B · Instructor", res);
-    return true;
+    const res = await agent.generate(PROMPT, {
+      structuredOutput: {
+        schema: Proposal,
+        jsonPromptInjection: "auto", // non-OpenAI model → prompt injection, no 2nd call
+        errorStrategy: "strict",
+      },
+      modelSettings: { temperature: 0, maxOutputTokens: 400 },
+    });
+    report(true, "C · Mastra Agent structuredOutput (think:false)", res.object);
+    return res.object != null && Proposal.safeParse(res.object).success;
   } catch (e) {
-    report(false, "B · Instructor", undefined, e);
+    report(false, "C · Mastra Agent structuredOutput (think:false)", undefined, e);
     return false;
   }
 }
 
 const a = await testA();
-const b = await testB();
+const c = await testC();
 
 console.log("\n=== VERDICT ===");
-console.log(`AI SDK generateObject: ${a ? "OK" : "FAIL"}  |  Instructor: ${b ? "OK" : "FAIL"}`);
-if (a) console.log("-> Mastra-native (AI SDK) structured output works with z.ai. Parse can be Mastra-native.");
-else console.log("-> AI SDK generateObject fails with z.ai (the flagged issue). Use Instructor for the parse step.");
-if (!b) console.log("-> WARNING: Instructor also failed — check key/baseURL/model.");
+console.log(`AI SDK generateObject: ${a ? "OK" : "FAIL"}  |  Mastra Agent: ${c ? "OK" : "FAIL"}`);
+if (a && c) console.log("-> Mastra-native structured output works with Gemma4-fast + think:false. composeAgent is live-ready.");
+else console.log("-> partial/fail — confirm think:false is honored, the model tag, and the baseURL. Fallback: Instructor.");
