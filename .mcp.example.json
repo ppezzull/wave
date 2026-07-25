@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "docs": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "<YOUR_PROJECT_ROOT>/docs",
+        "<YOUR_PROJECT_ROOT>/CLAUDE.md",
+        "<YOUR_PROJECT_ROOT>/README.md"
+      ]
+    }
+  }
+}

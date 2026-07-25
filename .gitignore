@@ -24,3 +24,6 @@ lib/
 *.log
 .idea/
 .vscode/
+
+# MCP config — machine-specific paths, use .mcp.example.json as template
+.mcp.json
