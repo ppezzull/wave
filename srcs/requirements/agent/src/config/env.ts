@@ -26,9 +26,14 @@ export const llmConfig = () => ({
   maxRetries: Number(process.env.LLM_MAX_RETRIES ?? 2),
 });
 
-/** LibSQL storage. `:memory:` for smoke; a real URL for durable HITL workflow runs. */
+/**
+ * LibSQL storage. Durable by default: `file:./data.db` survives restarts, so HITL
+ * workflow suspend/resume AND memory recall persist across process/container restarts.
+ * Set LIBSQL_URL=:memory: for ephemeral smokes. (A1 / TIER 1 — was `:memory:`, which
+ * lost all run + memory state on every restart.)
+ */
 export const storageConfig = () => ({
-  url: process.env.LIBSQL_URL ?? ":memory:",
+  url: process.env.LIBSQL_URL ?? "file:./data.db",
 });
 
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
