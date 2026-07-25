@@ -108,3 +108,27 @@ Every swap instruction must hold: round-trip (no A→B→A profit), pool-drain (
 | [COUNCIL-VERDICT.md](./docs/strategy/COUNCIL-VERDICT.md) | decision record |
 
 > `docs/review/SUMMARY.md` — verified review of the prep analysis: flags that the spike code-review's "CRITICAL C2" is a **demonstrable false positive** (do not add `vm.snapshot`), and that the "heal-side discount" demo beat is weakly supported by the empirics data. Read before acting on any `docs/review/review/SPIKES-REVIEW.md` finding.
+
+## MCP Servers — the `docs` server
+
+The `docs` MCP server (`@modelcontextprotocol/server-filesystem`, configured in `.mcp.json` — copy `.mcp.example.json` to start it) exposes read-only filesystem tools over `docs/`, `CLAUDE.md`, and `README.md`. It's wired in this session as the `mcp__docs__*` tools: `read_text_file`, `read_multiple_files`, `directory_tree`, `search_files`, `list_directory`, `get_file_info`.
+
+**Ground-truth-first rule.** `docs/` is the source of truth for every build decision — the playbook, the stack, the sponsor research, the spike review, the per-person task sheets. **Before you implement anything, ground yourself in the docs first.** Concretely:
+
+- When a task touches the build plan, the spec (opcode/compiler), the demo beats, or the task assignments, **read the relevant doc via the `docs` MCP before writing code** — don't implement from memory or from a stale summary. The strategy moved fast and the CLAUDE.md map above is intentionally lossy; the docs are authoritative.
+- When you're about to claim "the plan says X" or "this opcode should do Y," cite the doc (path + section) you read it from. If you can't, go read it first.
+- Prefer `mcp__docs__search_files` / `directory_tree` to locate the right doc, then `read_text_file` to read it — rather than guessing at file paths or relying on what's already in context.
+- If the docs and the code disagree, surface it (don't silently pick one). Classic-track compliance and the spike-review false positives live in `docs/`, so getting the docs right is getting the build right.
+
+The `docs` server only *advertises* `docs/`, `CLAUDE.md`, `README.md` as resources; the whole repo tree is technically reachable but treat the docs as the grounding surface.
+
+## PRs & issues — caveman style
+
+Keep contributions dead simple. One idea per PR. No big-bang merges, no drive-by rewrites.
+
+- **One thing per PR.** Title = what it does, plain words. `Add docs MCP server` good. `Refactor everything and also fix tests` bad.
+- **Branch + PR, not direct push to `main`.** Create a short-lived branch, push, open a PR. Merge from the PR.
+- **Title: simple, what a human would search for.** Body: 2–4 lines of *why* and *what changed*, a short bullet list. Skip ceremony.
+- **Pull before push** on `main` (`git pull --rebase`) — it's shared. Better: don't touch `main` directly, use a PR.
+- **Issues:** if it's worth tracking, write it as one sentence + one sentence of context. Title-first. No templates, no walls of YAML.
+- Small, reviewable, mergeable > clever and giant. If a PR needs a table of contents, split it.
