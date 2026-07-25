@@ -34,6 +34,9 @@ deploy-swap-vm-aqua:
 deploy-swap-vm-limit:
 	@$(MAKE) FILE_DEPLOY_NAME=LimitSwapVMRouter validate-swap-vm-router deploy-swap-vm-router-impl save-deployments
 
+deploy-ens-strategy-router:
+	@$(MAKE) FILE_DEPLOY_NAME=EnsStrategyRouter validate-swap-vm-router deploy-swap-vm-router-impl save-deployments
+
 verify-swap-vm:
 	@$(MAKE) FILE_DEPLOY_NAME=SwapVMRouter validate-verify verify-swap-vm-router-impl
 
