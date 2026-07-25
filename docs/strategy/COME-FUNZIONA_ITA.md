@@ -59,13 +59,13 @@ Ogni istruzione trasforma i "registri" dello swap (`balanceIn`, `balanceOut`, `a
    buildProgram()        appendendo blocchi tipizzati e verificati. Mai bytecode raw.
         │
 ⑤  Simulation battery   PRIMA di deployare: grillia ~12 size × 2 direzioni × exactIn/Out
-        │                 via router.quote() su fork mainnet. PROVA che il programma è sano:
+        │                 via router.quote() su Sepolia. PROVA che il programma è sano:
         │                 prezzi monotoni, niente arbitraggio da split, oracle scatta quando
         │                 manipoli il feed, skew penalizza come deve. Risultato = "safety card"
         │                 verde (artifact da mostrare ai giudici).
         ▼
-⑥  aqua.ship()          la strategia va live su un fork mainnet. Avviene uno swap() reale,
-   su fork               i token si muovono. (Questo è il momento "live" della demo.)
+⑥  aqua.ship()          la strategia va live su Sepolia. Avviene uno swap() reale,
+   su Sepolia            i token si muovono. (Questo è il momento "live" della demo.)
         │
 ⑦  ENS subname          la strategia viene "pubblicata" con un nome leggibile:
    + text record          eth-usdc-guarded.strategist.eth
@@ -87,7 +87,7 @@ Ogni istruzione trasforma i "registri" dello swap (`balanceIn`, `balanceOut`, `a
 Testo esatto (bounty 1inch — traccia _"Build an Aqua App"_):
 
 > *"Create a custom Aqua app that implements a **sophisticated DeFi position**. If you use SwapVM, you may **modify SwapVM opcodes and define your own instructions**. The final positions must be demonstrated through tests scripts or UI. **Projects that utilize SwapVM will be scored higher.**"*
-> Requisiti: contratti ufficiali Aqua/SwapVM, **token transfer onchain nel demo finale** (fork locale OK), git history propria.
+> Requisiti: contratti ufficiali Aqua/SwapVM, **token transfer onchain nel demo finale** (su **Sepolia testnet** — superiamo il "fork OK" della regola con una chain pubblica e verificabile), git history propria.
 
 ⚠️ **Precisazione onesta (importante per la Q&A):** 1inch NON chiede esplicitamente "un compiler". Chiede "una posizione DeFi sophisticated che modifica/definisce istruzioni SwapVM". Il compiler è **il nostro angolo** per vincere quella traccia — giustificato dalla **tesi del whitepaper Aqua stesso** (che l'OVERVIEW chiama "pitch alignment discovered"): la competizione passa "da TVL a formula optimization", ma solo i pro sanno scrivere strategie → liquidità idle. Noi democratizziamo la scrittura.
 
@@ -98,7 +98,7 @@ Testo esatto (bounty 1inch — traccia _"Build an Aqua App"_):
 | "sophisticated DeFi position" | 2 opcode custom (`_inventorySkew2D` + `_oracleGuard2D`) + compiler |
 | "modify opcodes / define your own instructions" | proprio i 2 opcode sopra (esplicitamente *invitato*) |
 | "SwapVM scored higher" | SwapVM è il core, non un'aggiunta |
-| "onchain token transfers in demo" | `swap()` reale su fork mainnet |
+| "onchain token transfers in demo" | `swap()` reale su Sepolia testnet |
 | "proper git history" | commit continui dall'hour 0 (no single-commit) |
 
 **Se un giudice dice "ma il bounty non chiedeva un compiler":** *"Il whitepaper dice che la liquidità resta idle perché le strategie sono hard-to-write. La nostra sophisticated Aqua App È il compiler + 2 nuove istruzioni che risolvono quello."*
@@ -166,7 +166,7 @@ per ogni blocco:  program.build(<istruzione>, <args-packed>)
 
 **Deploy:** l'agente (Strato P2, via `@1inch/aqua-sdk`) chiama:
 ```ts
-aqua.ship(routerAddress, order, [WETH, USDC], amounts)   // strategia live sul fork
+aqua.ship(routerAddress, order, [WETH, USDC], amounts)   // strategia live su Sepolia
 ```
 
 **Taker:** un EOA qualunque chiama `router.swap(...)`. La SwapVM `runLoop` legge `[opcode][len][args]` e dispatcha nella jump-table interna (nessuna external call) → Aqua `pull()`/`push()` muovono i token → **transfer onchain** ✅ (requisito bounty).

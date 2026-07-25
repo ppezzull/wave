@@ -58,19 +58,17 @@ git clone https://github.com/1inch/aqua srcs/requirements/aqua
 
 Ti serve l'indirizzo del router Aqua e l'interfaccia `ship`/`dock`/`pull`/`push`. Il costruttore del tuo router prende `aqua` come primo argomento.
 
-## F0.4 — Il fork
+## F0.4 — La chain di demo: Sepolia (niente fork)
 
-```bash
-anvil --fork-url <RPC> --fork-block-number <N>
-```
+La demo gira su **Sepolia testnet**, non su un fork anvil. Aqua non è deployato da 1inch su Sepolia → lo self-deployhiamo via `1inch/swap-vm-template` (`yarn deploy sepolia`); vedi [PROD-TESTNET.md](./PROD-TESTNET.md) §1. L'`anvil --fork-url` resta solo come **tool di test locale** (per i test unitari/`forge test`), non come substrate della demo.
 
-**Perché un fork e non una chain vuota.** Ti serve un **feed Chainlink vivo** per `_oracleGuard2D`, e ti servono token veri (WETH/USDC) con decimali veri — perché la normalizzazione dei decimali è dove nascono i bug del guard.
+**Perché Sepolia e non un fork.** Ti serve un **feed Chainlink vivo** per `_oracleGuard2D`, e ti servono token veri (WETH/USDC) con decimali veri — perché la normalizzazione dei decimali è dove nascono i bug del guard. Su Sepolia entrambi ci sono, e ogni tx è verificabile su Etherscan (niente "trust our fork").
 
-⚠️ **La trappola del fork.** Al blocco del fork il feed Chainlink è **congelato**: `updatedAt` non avanza più. Quindi:
-- **Happy path** = fork fresco tagliato ~15 min dopo un aggiornamento del feed. Al taglio, **leggi `updatedAt`** e verifica di stare dentro `maxStaleness`.
-- **Dimostrare il breaker** = impossibile con un feed vero (non puoi muovere Chainlink a comando). Serve il `MockAggregatorV3` che controlli tu, **dichiarato sulla slide**.
+⚠️ **L'oracolo nella demo — il `MockAggregatorV3` serve entrambi i path.** Su Sepolia il feed Chainlink è *vero ma inaffidabile* (heartbeat ~3600s, ma i feed testnet lag-gano oltre l'heartbeat, e `_oracleGuard2D` halta **sempre** sullo staleness — un feed stale durante la demo = HALT sull'happy path, il beat core al contrario, irrecuperabile). Quindi il `MockAggregatorV3` che deployhi serve **sia l'happy path sia il breaker**, dichiarato sulla slide: *"testnet feeds sono inaffidabili, driviamo l'oracolo noi per la demo — la logica del guard è identica su entrambe le sorgenti."* Chainlink reale resta cablato e quotato sulla safety card come sorgente di produzione.
+- **Happy path** = `MockAggregatorV3` a prezzo normale → quote verde.
+- **Dimostrare il breaker** = spingi il `MockAggregatorV3` a prezzo deviato → `_oracleGuard2D` HALTA su schermo.
 
-Questi sono due oracoli diversi nella stessa demo. È voluto, non è un trucco, ma va detto ad alta voce.
+`maxStalenessSecs=7200` (2× heartbeat) è adeguato in regime normale, ma la demo non dipende da questo — dipende dal mock.
 
 ## F0.5 — Le quattro letture
 
@@ -203,7 +201,7 @@ SwapVM **non è MIT** — è una licenza custom Degensoft. Le regole della bount
 
 ## F2.1 — Deploy
 
-Script Forge che deploya `EnsStrategyRouter(aqua, weth, "Wave", "1")` sul fork e stampa l'indirizzo.
+Script Forge che deploya `EnsStrategyRouter(aqua, weth, "Wave", "1")` **su Sepolia** e stampa l'indirizzo (persistilo in `config/constants.json` + `deployments/sepolia/`).
 
 ## F2.2 — Il programma stock
 
@@ -421,11 +419,11 @@ Due funzioni per Pietro: `deviate(bps)` e `restore()`. È ciò che il giudice to
 
 Un trace unico che mostra, nello stesso flusso: `IAqua` pull/push + `_oracleGuard2D` + `_inventorySkew2D` + `Swapped`. **Un file, tutta la storia.** Quando il giudice 1inch chiede "fammi vedere che è vero", apri questo.
 
-## F6.7 — La prova del fork
+## F6.7 — La prova su Sepolia (niente fork)
 
-Due cose da provare **prima** della demo, non durante:
-1. **Taglio fresco a T-15min** e lettura di `updatedAt` di Chainlink al taglio — devi sapere quanto margine di staleness hai.
-2. **Switch dell'RPC sull'anvil di riserva in ≤15 secondi.** Il rischio delle 3 di notte è la morte dell'RPC durante il Beat B. Se ci metti più di 20s, si passa a `DEMO_LIVE=0` — **tranne** la `swap()` viva, che si ritenta una volta.
+Niente anvil fork, niente `DEMO_LIVE=0`, niente canned twin. La demo gira contro **Sepolia live**. Due cose da provare **prima** della demo, non durante:
+1. **Seed idempotente pre-demo** — 3–5 strategie reali già deployate su Sepolia con capitale reale, swap reali (≥3 fill ciascuna), e follow ENS reali. Rieseguire il seed su chain sporca aggiunge solo dati, non rompe la demo (vedi [PROD-TESTNET.md](./PROD-TESTNET.md) §5).
+2. **RPC + wallet di riserva finanziati.** Il rischio delle 3 di notte è la morte dell'RPC Sepolia o lag del subgraph durante un beat live. Mitigazione: secondo wallet finanziato + URL RPC di backup (Alchemy/Infura); per il Beat C (retune), fallback a un poll `eth_getLogs` diretto se il subgraph lagga di più di qualche blocco. **Non esiste fallback canned** — ogni fallimento si narra onestamente contro lo stato a schermo.
 
 ---
 
