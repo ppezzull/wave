@@ -1,0 +1,10 @@
+# Keep the image lean — these are either regenerated or gitignored locally.
+node_modules
+out
+cache
+coverage
+coverage.json
+broadcast
+snapshots/*.old
+lib
+.git
