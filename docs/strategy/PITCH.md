@@ -31,6 +31,27 @@ Live, on a mainnet fork, no mocked screens — with two disclosed exceptions: th
 ### Act 3 — The depth + the real user (~45s)
 - "We didn't just use the VM — **we extended it**: two new instructions, `_inventorySkew2D` and `_oracleGuard2D`, each proven against SwapVM's seven documented invariants. Could you bolt these on with an `_extruction` external call? Yes — and 1inch's own code warns takers MUST validate such external targets because they can silently break quote/swap consistency. We made these mechanics first-class, trust-free instructions instead. **That's what an instruction set is for.**" *(Show the opcode diff for 5 seconds — engineers in the room will get it. NEVER say "couldn't be expressed" — extruction CAN express them; the argument is trust surface, not possibility.)*
 
+## The bridge — why three sponsors, one product (source: the 1inch workshop)
+
+The causal chain, all from 1inch's own mouth:
+
+1. In a traditional AMM **the pool is also where you find the liquidity** — you know where to look, you read its reserves.
+2. Aqua **deletes the pool**. Liquidity stays in makers' wallets as virtual balances.
+3. Deleting the pool also deletes **the place takers find liquidity**. The router can only emit events.
+4. So the taker path becomes, necessarily: **indexer → find strategies → quote → swap**.
+5. Workshop Q&A 16:44, asked directly about an indexer: *"**we do not currently have an indexer that we offer as a product. You will have to use an existing product. For example The Graph.**"*
+
+> **The Graph is not an add-on to an Aqua app. It is the component Aqua removed and did not replace.**
+
+Which makes the thesis: 1inch gave strategy builders an engine **with no authoring tool** (→ our compiler) and **with no discovery layer** (→ our subgraph + ENS names + feed). **Wave is the missing half of the Aqua stack.** The agent isn't bolted on either — once the index exists, the retune loop is simply its first consumer.
+
+Two Q&A answers this buys (both stronger than "the retune dies", which remains true and stacks):
+
+- **1inch judge — "unplug The Graph, what breaks?"** → "Takers stop finding strategies. Positions stay live and tradable if you know the address, but nobody discovers them. That's the layer Aqua doesn't ship — you said so at your own workshop."
+- **Graph judge — "is The Graph load-bearing?"** → "It's the only discovery path for a protocol whose creator said on stage they don't provide one."
+
+Corollary for the feed: it is not "the social UI" — it is **the discovery layer Aqua lacks**. Reinforced at workshop 20:59, where the minimum they expect from a submission is *"an interface to see your position — what tokens are allocated, what it's doing."*
+
 ## Killer-facts arsenal (drop into Q&A as needed)
 
 - 94% idle (v2) / 85% (v3) / 84% (v4) — 1inch's own data: https://dune.com/1inch/idle
