@@ -31,6 +31,27 @@ Live, on a mainnet fork, no mocked screens — with two disclosed exceptions: th
 ### Act 3 — The depth + the real user (~45s)
 - "We didn't just use the VM — **we extended it**: two new instructions, `_inventorySkew2D` and `_oracleGuard2D`, each proven against SwapVM's seven documented invariants. Could you bolt these on with an `_extruction` external call? Yes — and 1inch's own code warns takers MUST validate such external targets because they can silently break quote/swap consistency. We made these mechanics first-class, trust-free instructions instead. **That's what an instruction set is for.**" *(Show the opcode diff for 5 seconds — engineers in the room will get it. NEVER say "couldn't be expressed" — extruction CAN express them; the argument is trust surface, not possibility.)*
 
+## The bridge — why three sponsors, one product (source: the 1inch workshop)
+
+The causal chain, all from 1inch's own mouth:
+
+1. In a traditional AMM **the pool is also where you find the liquidity** — you know where to look, you read its reserves.
+2. Aqua **deletes the pool**. Liquidity stays in makers' wallets as virtual balances.
+3. Deleting the pool also deletes **the place takers find liquidity**. The router can only emit events.
+4. So the taker path becomes, necessarily: **indexer → find strategies → quote → swap**.
+5. Workshop Q&A 16:44, asked directly about an indexer: *"**we do not currently have an indexer that we offer as a product. You will have to use an existing product. For example The Graph.**"*
+
+> **The Graph is not an add-on to an Aqua app. It is the component Aqua removed and did not replace.**
+
+Which makes the thesis: 1inch gave strategy builders an engine **with no authoring tool** (→ our compiler) and **with no discovery layer** (→ our subgraph + ENS names + feed). **Wave is the missing half of the Aqua stack.** The agent isn't bolted on either — once the index exists, the retune loop is simply its first consumer.
+
+Two Q&A answers this buys (both stronger than "the retune dies", which remains true and stacks):
+
+- **1inch judge — "unplug The Graph, what breaks?"** → "Takers stop finding strategies. Positions stay live and tradable if you know the address, but nobody discovers them. That's the layer Aqua doesn't ship — you said so at your own workshop."
+- **Graph judge — "is The Graph load-bearing?"** → "It's the only discovery path for a protocol whose creator said on stage they don't provide one."
+
+Corollary for the feed: it is not "the social UI" — it is **the discovery layer Aqua lacks**. Reinforced at workshop 20:59, where the minimum they expect from a submission is *"an interface to see your position — what tokens are allocated, what it's doing."*
+
 ## Killer-facts arsenal (drop into Q&A as needed)
 
 - 94% idle (v2) / 85% (v3) / 84% (v4) — 1inch's own data: https://dune.com/1inch/idle
@@ -38,6 +59,48 @@ Live, on a mainnet fork, no mocked screens — with two disclosed exceptions: th
 - Aqua thesis quote: strategy competition means "a breakthrough strategy can go from zero to significant liquidity in minutes" — for whoever can write one. We make that everyone.
 - `quote()` is 100%-accurate off-chain simulation by VM design — our safety gate is native, not bolted on.
 - Strategies are bytecode identified by hash: reusable, auditable, ENS-discoverable.
+
+## Clarifications — the three holes a sharp judge finds
+
+_These are the questions our own material implies but never answers. The answers exist in what we already have; they had simply never been written down. Rehearse these before the Q&A armor below — the armor assumes them._
+
+### 1. "Why would a market maker publish their strategy? Doesn't that kill the edge?"
+
+The premise is wrong, and correcting it is the answer.
+
+**On Aqua a strategy is already public.** It is bytecode on-chain, identified by hash, readable by anyone with an RPC. Wave publishes nothing that was not already public — **it makes public bytecode legible.** The choice a maker faces is not "private vs public"; it is "unreadable vs readable", and only the second one has a name attached to it that earns them reputation.
+
+Aqua's own thesis requires this. The whitepaper's claim is that *"a breakthrough strategy can go from zero to significant liquidity in minutes"* — which can only happen if the strategy is visible. Competition on formula, not on TVL, presupposes that formulas can be seen.
+
+**The honest concession** (offer it before they push — it makes the rest credible): alpha decay is real, but it lives in *parameters and inventory*, not in shape. The bytecode reveals that you run inventory-skewed pricing with an oracle band. It does not reveal why your target ratio is right for this pair at this hour. A maker who wants distance ships the same shape with different numbers — and Wave's fork button makes that a first-class action rather than a leak.
+
+### 2. "After the agent retunes, who authorised what is live? The maker's sentence no longer describes it."
+
+True, and we do not pretend otherwise. **The sentence describes the mandate, not the instance.**
+
+Authority lives in three places, none of which the agent can reach:
+1. **The bounded form** — the LLM emits only known block types with clamped numerics; it cannot invent an instruction or an address (`feed` resolves through a compiler-owned registry).
+2. **The deterministic compiler** — canonical ordering and the rejection rules apply identically to the first ship and to every retune. A retune that violated `OracleGuardMustPrecedeSkew` would be rejected exactly like a human's malicious intent.
+3. **The circuit breaker in the VM** — `_oracleGuard2D` halts on deviation or staleness no matter what the agent decided, because it is an instruction, not a policy.
+
+And the backstop that makes the whole thing bounded: **custody never left the maker's wallet.** Aqua holds a virtual balance; the maker can `dock()` at any moment. The worst case of a bad retune is a worse quote, not a drained position.
+
+### 3. "What does the ENS hash actually prove?"
+
+Be precise here, because the loose version is attackable. The retune *legitimately* changes the program, so the ENS record is rewritten by the same flow that reshipped it. Therefore:
+
+- **It does not prove** the program was never changed, nor that a human approved this version.
+- **It proves** that the program you are about to trade against is the one this name advertises **right now** — that no one substituted a different program behind a name you trust.
+
+That is a real and useful guarantee: it is the difference between "an ENS name resolves to an address" and "an ENS name commits to the code you will execute against." The negative path in the demo (tampered record → the taker agent aborts before settling) is what makes the claim demonstrable rather than asserted.
+
+### Stage discipline — the two things they should walk out with
+
+Six beats each serve a different prize, but a judge repeats **two** things to another judge. Choose them deliberately:
+
+> **"A sentence becomes a market maker."** (the WOW) · **"And the compiler refuses to ship it unsafe — and shows you why."** (the depth)
+
+Everything else — the live `swap()`, the ENS resolve, the subgraph delta, the retune — is *evidence for those two*. Show it all; narrate it as support, not as six equal headlines.
 
 ## Q&A armor (rehearsed answers)
 

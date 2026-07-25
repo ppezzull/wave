@@ -31,7 +31,7 @@ _This is the team's **build document**._
 
 | Config | Tracks | EV low–high | Notes |
 |---|---|---|---|
-| **A: 1inch + Graph + ENS (current)** | **4 winnable** (of 6 auto-entered) | **~$2.7k–$4.8k** | Core work double-counts toward finalist. **NB:** only Graph **AI Use Case** (1st $2k) qualifies; Graph AI Tooling + Composable are auto-entered but **not winnable** (see §4). Winnable set = 1inch + Graph AI Use Case + ENS Agents + ENS Creative. |
+| **A: 1inch + Graph + ENS (current)** | **4 winnable** (of 6 auto-entered) | **~$2.7k–$4.8k** | Core work double-counts toward finalist. **NB:** of the Graph tracks only **AI Use Case** (1st $2k) is a planned win; **AI Tooling** is auto-entered but not winnable, **Composable** is a conditional upside (see §4). Winnable set = 1inch + Graph AI Use Case + ENS Agents + ENS Creative. EV unchanged by the prize-figure correction — it was already built on the correct 1st-place values. |
 | B: swap ENS → World | 4 winnable | ~$2.1k–$4.2k | World taxes the two good tracks (diverts hours), thin fit + exclusion risk. |
 
 Config A wins on EV **and** is finalist-aligned. The only world where B wins: you're confident World AgentKit clears its exclusion list *and* builds cheaply (P(win) ≥ ~30%). Default: don't swap.
@@ -182,13 +182,19 @@ Deterministic 240-second stage controller driving the existing pipeline against 
 | Usability | Network-throttled: canned verdict card renders <2s | ✅ |
 | WOW | Judge types malicious intent → red REJECTED card + canonicalized bytecode | ✅ |
 | 1inch Aqua $5k | `IAqua` calls in trace + ship/dock/monitor logs | ✅ |
-| Graph AI Use Case $4k (1st $2k) | GraphQL returns new Swap entity; agent log cites entity ID | ✅ — our one clean Graph track |
-| Graph AI Tooling $7k | requires *reusable tooling* (MCP/SKILL/plugin), not an app | ❌ not winnable (auto-entered only) |
-| Graph Composable $4k | needs 2+ Graph products OR a standardized (Messari) schema; our bespoke subgraph does neither | ⚠️ conditional — not planned |
+| Graph AI Use Case $3k (1st $2k / 2nd $1k) | GraphQL returns new Swap entity; agent log cites entity ID | ✅ — our one clean Graph track |
+| Graph AI Tooling $5k ($2.5k/$1.5k/$1k) | requires *reusable tooling* (MCP/SKILL/plugin), not an app | ❌ not winnable (auto-entered only) |
+| Graph Composable $3k (1st $2k / 2nd $1k) | qualifies by *authoring* a Standardized Subgraph for a category that lacks one — Aqua is one | ⚠️ conditional upside — schema discipline only, no extra hours |
 | ENS Agents $1.5k | Settle reverts on hash mismatch, passes on match | ✅ |
 | ENS Creative $1.5k | `ens.resolve` returns structured intent/hash/oracle-band fields | ✅ |
 
-**\* Graph winnability:** of The Graph's 3 tracks ($7k AI Tooling / $4k AI Use Case / $4k Composable — summing to the stated $15k), **only AI Use Case qualifies** (agent reasons over live data). **AI Tooling is off the table** — its qualification requires *reusable tooling/infrastructure (MCP/SKILL/plugin), not a single end-user app*; we auto-*enter* it by picking the partner but cannot *win* it. **Composable** would need building on a standardized (Messari DEX AMM) schema or composing 2+ Graph products — our bespoke first-party subgraph (chosen to kill the Messari-sync risk) does neither, so it is **not a planned win**. Realistic Graph value: **one track, 1st ~$2k**, plus the load-bearing "AI × live data" finalist story. Separately, the AI Use Case autonomous-retune beat still depends on local `graph-node` syncing the fork by h22 — fallback is an `eth_getLogs` delta poll (labeled "subgraph syncing"), which keeps the AI Use Case bar. **Do not project Tooling or Composable dollars.**
+**\* Graph winnability** _(figures corrected against the official bounty page — see [../sponsors/the-graph/OVERVIEW.md](../sponsors/the-graph/OVERVIEW.md); the page's own summary paragraph contradicts its per-track listings and must not be used)_: our three tracks are **$5k AI Tooling / $3k AI Use Case / $3k Composable = $11k**. The "$15k" the page advertises only reaches that total by including **AI Use Case (Continuity) $4k**, which we cannot enter (Classic/from-scratch).
+
+**Only AI Use Case is a planned win** (agent reasons over live data). **AI Tooling is off the table** — its qualification requires *reusable tooling/infrastructure (MCP/SKILL/plugin), not a single end-user app*; we auto-*enter* it by picking the partner but cannot *win* it, and per §6 we are not extracting a SKILL to chase it.
+
+**Composable is a conditional upside, not the earlier flat "no".** The earlier reading ("requires a Messari schema") was wrong: the text reads "build meaningfully on a standardized schema (**e.g.** Messari…)" and separately "**Authoring/extending a Standardized Subgraph… is in scope**", with the listed example "*a new Standardized Subgraph for a protocol category that lacks one*". Aqua is exactly such a category — 1inch ships no indexer. Cost to qualify is **schema discipline, not hours**: author the subgraph as a generic *Aqua strategy* schema any Aqua app could reuse rather than one coupled to our structs. Weak spot is **Breadth (20%)** — one protocol. Treat as upside; do not reallocate hours and do not project the dollars.
+
+Realistic Graph value: **one track, 1st $2k** (2nd $1k), plus the load-bearing "AI × live data" finalist story. Separately, the AI Use Case autonomous-retune beat still depends on local `graph-node` syncing the fork by h22 — fallback is an `eth_getLogs` delta poll (labeled "subgraph syncing"), which keeps the AI Use Case bar.
 
 ---
 
