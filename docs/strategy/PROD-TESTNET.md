@@ -116,7 +116,7 @@ Manage via [sepolia.app.ens.domains](https://sepolia.app.ens.domains). Gas is pa
 |---|---|---|
 | **Aqua + SwapVM + StrategyFactory** | **Yes — on Sepolia itself** | 1inch doesn't deploy Aqua on Sepolia (§1). We deploy via the template's scripted flow. This is "deploying to a public chain," not "running a server." |
 | **The Graph indexing** | **Only if decentralized network can't index Sepolia EVM** (§2). Fallback = one `graph-node` Docker container. | Decentralized network is preferred (sponsor prize, zero ops). Verify at G1. |
-| **The Next.js app** | **Yes — one process** (Vercel or a single VM). | SSR + the in-process agent libraries. This is unavoidable and fine. |
+| **The Next.js app** | **Yes — one process** (a single self-hosted VM). | SSR only. The agent is a **separate container** (`AGENT_URL=http://agent:3002`) — LLM + wallet keys never live in the UI process. See [AGENT.md](./AGENT.md). |
 | **ENS** | No | Live on Sepolia, first-party. |
 | **Wallet/auth** | No | Privy hosted. |
 | **RPC** | No (use Alchemy/Infura Sepolia RPC) | Unless rate-limited at demo time — have a backup RPC URL. |

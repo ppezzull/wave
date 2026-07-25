@@ -37,8 +37,9 @@ All demo runs target **live Sepolia** — the chain does the real work; the UI i
 - Pure-TS deterministic pipeline: **Zod** (validated DSL — the only place the LLM has freedom) → AST → IR → bytecode. Emits via the Solidity `ProgramBuilder`.
 - The **reject-and-rewrite pass**: 6 typed safety rules (`OracleGuardMustPrecedeSkew`, `ProtocolFeeLeMakerFee`, `SaltMustBeTerminal`, `OracleStalenessRequiresGuard`, `FeeAfterCurve`, `NoDuplicateDeadline`) + canonical ordering + diff renderer.
 
-### L6 — Agent / off-chain (P2) · TypeScript
-- **Foundry Agents SDK** + **z.ai** LLM — parses NL intent into the bounded Zod form (writes no code); `graphDelta` drives the autonomous retune.
+### L6 — Agent / off-chain (P2) · TypeScript · **own container**
+- **Mastra** (Apache-2.0, self-hosted) runtime + **z.ai** LLM (AI SDK OpenAI-compatible provider) + a **custom MCP server** (`MCPServer` + `@modelcontextprotocol/sdk`). The `composeAgent` parses NL intent into the bounded Zod form (writes no code); `monitorAgent` + `graphDelta` drive the autonomous retune. HITL gates only stop/remove + escalations. Full spec: [AGENT.md](./AGENT.md).
+- The agent runs in **its own container** (`srcs/docker-compose.yml`), reachable from Next.js over internal HTTP/SSE (`AGENT_URL=http://agent:3002`) — LLM + wallet keys never live in the UI process.
 - **viem** for RPC + wallet + ENS actions (universal resolver, text records, subnames).
 - **@1inch/aqua-sdk** for `ship`/`dock`/`monitor`, `calculateStrategyHash`, event decoding.
 - `resolveVerify.ts` reads ENS records and verifies the on-chain program hash matches before settling.
