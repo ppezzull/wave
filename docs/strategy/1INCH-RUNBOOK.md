@@ -311,6 +311,9 @@ function _oracleGuard2D(Context memory ctx, bytes calldata args) internal view {
 - **La staleness è il primo controllo e reverta in entrambe le mode.** Un oracolo fermo non è "un prezzo un po' vecchio": è **nessuna informazione**. Clampare verso un prezzo di cui non sai l'età sarebbe peggio che fermarsi. Questo è **l'HALT** del Beat B.
 - **`internal view`.** Se lo dichiari non-view, il guard non funziona sotto `quote()` e l'intera batteria di sicurezza di Flavio salta.
 - **Il clamp arrotonda a favore del maker.** Invariante #5. Sempre.
+- **⚠️ Due rischi di implementazione (da review PR #13, da onorare quando scrivi `OracleGuard.sol`):**
+  - **(a) Normalizzazione della direzione.** `implied = amountOut·1e18/amountIn` deve essere normalizzato per **decimali e direzione del pairing dei token**. Se la normalizzazione non combacia col pairing, il **segno della deviazione si inverte** — e tutto il ragionamento one-sided si gira sottosopra: il guard fermerebbe i fill giusti e lascerebbe passare quelli sbagliati. Testalo esplicitamente su entrambe le direzioni (token0→token1 e token1→token0) e con decimali asimmetrici.
+  - **(b) Monotonicità del clamp al kink *dopo* lo skew.** La vera superficie di `InventorySkewLiveness` non è "il clamp è monotono al kink in generale", ma *"il clamp è monotono al kink quando lo skew ha già spostato il prezzo oltre il bordo della banda."* Verificalo in quel regime specifico — è lì che la composizione guard-esterno/skew-interno si rompe se l'hai sbagliata.
 
 ## F3.5 / F3.6 — I test
 
