@@ -1,0 +1,26 @@
+# dependencies & build artifacts
+node_modules/
+out/
+cache/
+artifacts/
+coverage/
+coverage.json
+build/
+.next/
+dist/
+generated/
+
+# foundry run artifacts
+broadcast/
+lib/
+
+# env (keep the example)
+.env
+.env.*
+!.env.example
+
+# os / editor
+.DS_Store
+*.log
+.idea/
+.vscode/

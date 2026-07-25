@@ -1,0 +1,116 @@
+# ETHGlobal Lisboa 2026 — Strategy Compiler
+# Inception-style orchestration. Each component lives under ./requirements/<svc>/
+# with its own Dockerfile + conf/ + tools/. All wired to a shared network.
+#
+# NOTE: this is a placeholder scaffold (build kickoff = Fri Jul 24). The
+# build contexts, ports, and env are first-pass guesses — fill them during
+# the build per docs/strategy/10-10-PLAYBOOK.md.
+#
+# Quick start (once Dockerfiles are filled in):
+#   cd srcs && docker compose up --build
+
+services:
+  # ────────────────────────────────────────────────────────────────
+  # swap-vm — Solidity/Foundry project (1inch SwapVM fork + custom opcodes)
+  # Dev container for compiling/testing/deploying contracts. The contracts
+  # are NOT a long-running service; this is a build+test harness + a
+  # forge-script deployer. The anvil fork the demo targets can run here too.
+  # ────────────────────────────────────────────────────────────────
+  swap-vm:
+    build:
+      context: ./requirements/swap-vm
+      dockerfile: Dockerfile
+    container_name: swap-vm
+    volumes:
+      - ./requirements/swap-vm:/workspace        # live source mount
+      - swapvm_out:/workspace/out                 # persist build cache
+    networks:
+      - strategy-compiler
+    restart: "no"                                 # run-once build/test/deploy
+    # env_file: [ .env ]                          # OPS_* deploy vars when deploying
+
+  # ────────────────────────────────────────────────────────────────
+  # compiler — deterministic TS compiler (NL → AST → IR → SwapVM bytecode)
+  # Exposes POST /compile + /simulate over HTTP/SSE for the UI.
+  # ────────────────────────────────────────────────────────────────
+  compiler:
+    build:
+      context: ./requirements/compiler
+      dockerfile: Dockerfile
+    container_name: compiler
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./requirements/compiler:/app
+    networks:
+      - strategy-compiler
+    depends_on:
+      - swap-vm
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+
+  # ────────────────────────────────────────────────────────────────
+  # ui — Next.js (App Router, SSR) split-screen + safety card
+  # Server components hold the LLM call + API keys; client renders panes.
+  # ────────────────────────────────────────────────────────────────
+  ui:
+    build:
+      context: ./requirements/ui
+      dockerfile: Dockerfile
+    container_name: ui
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./requirements/ui:/app
+    networks:
+      - strategy-compiler
+    depends_on:
+      - compiler
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - COMPILER_URL=http://compiler:3001
+
+  # ────────────────────────────────────────────────────────────────
+  # graph-node — indexes SwapVM Swapped events (first-party subgraph)
+  # Replaces the Messari dependency; the retune trigger consumes its deltas.
+  # Placeholder: real graph-node needs ipfs + postgres; wire during build.
+  # ────────────────────────────────────────────────────────────────
+  subgraph:
+    build:
+      context: ./requirements/subgraph
+      dockerfile: Dockerfile
+    container_name: subgraph
+    volumes:
+      - ./requirements/subgraph:/subgraph
+    networks:
+      - strategy-compiler
+    restart: unless-stopped
+    # depends_on: [ ipfs, postgres ]   # add graph-node infra during build
+
+  # ────────────────────────────────────────────────────────────────
+  # agent — viem + @1inch/aqua-sdk runner (ship/dock/monitor, ENS resolve)
+  # Polls the subgraph for deltas and fires dock()+recompile+ship().
+  # ────────────────────────────────────────────────────────────────
+  agent:
+    build:
+      context: ./requirements/agent
+      dockerfile: Dockerfile
+    container_name: agent
+    volumes:
+      - ./requirements/agent:/app
+    networks:
+      - strategy-compiler
+    depends_on:
+      - subgraph
+      - swap-vm
+    restart: unless-stopped
+    # env_file: [ .env ]               # FORK_RPC, wallet keys, ENS name
+
+networks:
+  strategy-compiler:
+    driver: bridge
+
+volumes:
+  swapvm_out:
