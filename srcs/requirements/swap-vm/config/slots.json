@@ -1,0 +1,15 @@
+{
+  "slots": {
+    "_aquaProtocolFeeAmountInXD": 28,
+    "_deadline": 13,
+    "_decayXD": 19,
+    "_flatFeeAmountInXD": 21,
+    "_inventorySkew2D": 34,
+    "_oracleGuard2D": 33,
+    "_salt": 20,
+    "_xycConcentrateGrowLiquidity2D": 18,
+    "_xycSwapXD": 17
+  },
+  "specVersion": 1,
+  "tableLength": 35
+}
