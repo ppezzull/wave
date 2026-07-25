@@ -35,6 +35,7 @@ data/action/ENS half is **blocked on teammate freezes**.
 | 9 MCP read tools (`mcp__wave__*`) | ✅ | `src/mcp/{reads,server}.ts` |
 | Clients (subgraph/aqua/router/ens) | 🔒 stubs (throw) | `src/clients/` |
 | Deploy: mastra server + Dockerfile + `/health` | ✅ TIER 0 | `index.ts`, `Dockerfile` |
+| LLM timeout/retry (`abortSignal`+`maxRetries`) | ✅ TIER 2 #6 | `compose.agent.ts`, `env.ts`, `timeout.smoke.ts` |
 
 ## The LLM (critical context)
 **Model: `deepseek-coder-v2:16b-lite-instruct-q4_K_M`** — the ONLY server model that is
@@ -62,6 +63,8 @@ ZAI_API_KEY=sk-lf-…        # Langfuse secret
 ZAI_PUBLIC_KEY=pk-lf-…     # Langfuse public
 ZAI_MODEL=deepseek-coder-v2:16b-lite-instruct-q4_K_M
 LIBSQL_URL=:memory:        # use file:./data.db + volume for durable HITL (TIER 1)
+LLM_TIMEOUT_MS=90000       # TIER 2 #6 — abort deadline (craftshost stalls 60-120s)
+LLM_MAX_RETRIES=2          # transient 5xx/429/connection retries
 PORT=3002
 ```
 
@@ -91,8 +94,9 @@ npm run spike              # deepseek structured-output check (live, needs .env)
 npm run dev                # mastra dev — Studio (localhost:4111) + API
 npm run build              # mastra build → .mastra/output/
 node .mastra/output/index.mjs   # start the built server
-npx tsx src/compose.smoke.ts    # compose() NL→StrategySpec (live)
-npx tsx src/hitl.smoke.ts       # HITL workflow propose→suspend→resume (live)
+npx tsx src/compose.smoke.ts    # compose() NL→StrategySpec (live) ⚠️ broken standalone — see gotcha
+npx tsx src/hitl.smoke.ts       # HITL workflow propose→suspend→resume (live, via instance)
+npx tsx src/timeout.smoke.ts    # 2s forced deadline → aborts fast (TIER 2 #6, live, via instance)
 ```
 
 ## Deployment hardening — status (from a production review)
@@ -102,8 +106,14 @@ npx tsx src/hitl.smoke.ts       # HITL workflow propose→suspend→resume (live
   - #4 wire `env_file: [.env]` on the `agent` compose service (currently commented out) + confirm `.env*` in `.dockerignore` (done).
   - #5 remove the dev `./requirements/agent:/app` bind-mount in the prod compose profile.
 - **TIER 2 (hardening):**
-  - **#6 LLM timeout — NEXT, demo-critical.** `compose()` has NO timeout; craftshost stalls 60-120s
-    (seen) → a hung call blocks forever → crashes the live demo. Add `AbortController`+deadline+`maxRetries`.
+  - **#6 LLM timeout — DONE ✅.** `compose()`/`composeStream()` now carry
+    `abortSignal: AbortSignal.timeout(LLM_TIMEOUT_MS=90000)` + `modelSettings.maxRetries=LLM_MAX_RETRIES=2`.
+    AI SDK v5 dropped the `timeout` CallSetting → deadline is an abortSignal; created **fresh per call**
+    (single-use — never reuse across invocations). Verified by `timeout.smoke.ts` (2s forced deadline →
+    aborts at ~2.1s instead of hanging 40-120s). NOTE: on abort Mastra's structuredOutput resolves with
+    no `object` (compose throws "model returned no structured object"), not an AbortError — bounded but
+    opaque; a clearer "timed out after Xs" message is a future nit (would need an AbortController in
+    compose() to detect `signal.aborted`).
   - #7 Memory explicit storage (`mastra.getStorage()`) — probably already via instance storage; low priority.
   - #8 Auth/CORS on `/api/*` — isolated compose network → defer for demo; MUST when write tools (retune/ship) land.
   - #9 MCP stateful (don't set `serverless:true`) — long-running container. Easy.
@@ -126,14 +136,20 @@ Flavio owns the **decision layer** (`policy.decide()`); `graphDelta.ts` skeleton
 - **`.env` cwd gotcha:** `dotenv/config` loads from `process.cwd()`, NOT the module dir. There's a
   root `.env` (stale) AND `agent/.env`. Run agent commands **from `srcs/requirements/agent/`**
   (or `npm --prefix … run <script>`, which sets cwd=prefix) so the right `.env` loads.
+- **smokes MUST route through the `mastra` instance** (`import { mastra } from "./mastra/index.js"`),
+  like `hitl.smoke.ts`/`timeout.smoke.ts`. `composeAgent`'s memory only gets storage injected when the
+  agent is REGISTERED on the instance (`core` chunk: `if (this.#mastra && !resolvedMemory.hasOwnStorage)
+  resolvedMemory.setStorage(mastra.getStorage())`). Importing `compose` alone bypasses registration →
+  throws "Memory requires a storage provider" before the LLM call. **`compose.smoke.ts` still imports
+  compose directly → broken standalone under core@1.52.1** (fix: import mastra for the side-effect).
 - **mastra CLI = the `mastra` npm package** (devDep), NOT `@mastra/cli`.
 - `compose.agent.ts` casts `res.object as StrategySpec` (Mastra infers the INPUT type; `maxStalenessSecs.default(7200)` makes input-optional vs output-required; runtime always has it).
 - `modelSettings` (temperature/maxOutputTokens) on `agent.generate`/`.stream`, NOT top-level; `jsonPromptInjection:"auto" as const` + `errorStrategy:"strict" as const` (literals — `as const` avoids TS widening).
 
 ## Immediate next steps
-1. **TIER 2 #6 — LLM timeout** on `compose`/`composeStream` (`AbortController` + deadline + `maxRetries`). Demo-critical.
-2. **TIER 1** — compose wiring: `env_file`, file-storage + volume, prod mount off.
-3. **`graphDelta.ts` + `evidence/log.ts`** skeleton (stub data → `policy.decide()` → trigger → log) — advances the G2 retune path; swap source when Pietro lands.
+1. **TIER 1** — compose wiring: `env_file: [.env]`, file-storage (`file:./data.db` + named volume), prod mount off. (TIER 2 #6 LLM timeout is DONE.)
+2. **`graphDelta.ts` + `evidence/log.ts`** skeleton (stub data → `policy.decide()` → trigger → log) — advances the G2 retune path; swap source when Pietro lands.
+3. Fix `compose.smoke.ts` to route through the `mastra` instance (see gotcha below) — currently broken standalone under core@1.52.1.
 4. Then blocked on Flaviano's router ABI / `programHash()` / `dock()`-`ship()` + Pietro's subgraph.
 
 ## Key files

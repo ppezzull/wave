@@ -18,6 +18,12 @@ export const llmConfig = () => ({
   // craftshost/Langfuse only: the X-Langfuse-Public-Key header value. Undefined
   // for the direct Ollama endpoint (no public key needed there).
   publicKey: process.env.ZAI_PUBLIC_KEY,
+  // TIER 2 #6 — call resilience. AI SDK v5 dropped the `timeout` CallSetting, so
+  // the deadline is enforced via abortSignal (AbortSignal.timeout) in compose.agent.ts.
+  // 90s: craftshost normal latency is 40-60s, stalls 60-120s → headroom over normal,
+  // cuts the stall. maxRetries handles transient 5xx/429/connection (quick failures).
+  timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 90_000),
+  maxRetries: Number(process.env.LLM_MAX_RETRIES ?? 2),
 });
 
 /** LibSQL storage. `:memory:` for smoke; a real URL for durable HITL workflow runs. */
