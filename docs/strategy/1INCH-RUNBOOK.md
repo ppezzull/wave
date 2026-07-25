@@ -79,16 +79,13 @@ In quest'ordine preciso:
 3. **`test/invariants/CoreInvariants.t.sol`.** ⚠️ **Non riscriverai gli invariant test: li erediti.** `assertAllInvariantsWithConfig(...)` ti copre simmetria, monotonicità, additività e quote==swap gratis. I tuoi test coprono solo ciò che è *tuo* (stale-halt, clamp, liveness).
 4. **`test/utils/ProgramBuilder.sol`.** Come si compone un programma senza scrivere indici a mano.
 
-## F0.6 🔎 — Chiudere la contraddizione sull'oracle-guard
+## F0.6 ✅ — La banda dell'oracle-guard: DECISA — un lato solo
 
-**Il problema.** I vostri doc descrivono `_oracleGuard2D` in due modi che non sono la stessa istruzione:
+**Risolto (banda a un lato).** `_oracleGuard2D` halt-a **solo quando il prezzo implied è sfavorevole al maker** rispetto all'oracolo oltre `maxDeviationBps`. Un prezzo favorevole al maker non fa mai scattare il guard.
 
-| Fonte | Lettura |
-|---|---|
-| `10-10-PLAYBOOK.md` (spec) | **due lati**: `\|implied − oracle\| / oracle > maxDeviationBps` |
-| `PITCH.md` e `SWAPVM-INTERNALS.md` | **un lato**: rifiuta i fill *sfavorevoli al maker* |
+I doc si contraddicevano (la formula `|implied − oracle|` a `10-10-PLAYBOOK.md` §1.5 era a due lati; la prosa di PITCH/SWAPVM-INTERNALS a un lato). Ora la formula è allineata alla prosa: un lato. Vedi [`10-10-PLAYBOOK.md`](./10-10-PLAYBOOK.md) §1.5 per la semantica canonical.
 
-**Perché conta davvero.** Il guard è **esterno** allo skew, quindi vede `amountOut` **dopo** la penalità di skew — e quella penalità muove il prezzo implicito nella direzione **favorevole al maker**. Con la lettura a due lati, una penalità grande può spingere il prezzo fuori banda e far scattare il guard **dal lato che aiuta il maker**: revert spurii.
+**Perché un lato:** il guard è **esterno** allo skew, quindi vede `amountOut` **dopo** la penalità di skew — che muove il prezzo implicito nella direzione **favorevole al maker**. A due lati, una penalità grande farebbe scattare il guard dal lato che aiuta il maker → halt spurii. Un lato solo fa sì che i due opcode si compongano senza conflitto. Il comportamento a due lati resta come bit riservato in `flags` (non implementato ora).
 
 Non lo scopriresti adesso. Lo scopriresti a F4.8, quando i test di liveness diventano rossi per un motivo che sembra assurdo.
 
@@ -304,7 +301,7 @@ function _oracleGuard2D(Context memory ctx, bytes calldata args) internal view {
     // 2. ctx.runLoop();                    ⬅️ esegue TUTTO il resto del programma
     // 3. staleness → revert SEMPRE (entrambe le mode)
     // 4. implied = amountOut * 1e18 / amountIn, normalizzato per decimali e direzione
-    // 5. fuori banda → mode 0: revert | mode 1: clamp al bordo
+    // 5. fuori banda SOLO dal lato SFAVOREVOLE AL MAKER (un lato — vedi F0.6) → mode 0: revert | mode 1: clamp al bordo
 }
 ```
 
@@ -326,7 +323,7 @@ vm.expectRevert();                                    // ❌ passa anche se reve
 
 Un `expectRevert()` nudo è un test che si autoconvince: passerebbe anche se il tuo guard revertasse per un overflow. Il selettore esatto è ciò che rende il test una prova.
 
-Copertura minima: dentro banda passa · fuori banda mode 0 reverta · fuori banda mode 1 clampa al bordo · stale reverta in **entrambe** le mode · **monotonicità al kink** (mode 1: al punto dove il clamp entra in azione il prezzo non deve saltare — l'invariante #4 vale anche lì).
+Copertura minima: dentro banda passa · fuori banda **dal lato sfavorevole al maker** mode 0 reverta · fuori banda mode 1 clampa al bordo · **fuori banda dal lato favorevole al maker → passa sempre (un lato, vedi F0.6)** · stale reverta in **entrambe** le mode · **monotonicità al kink** (mode 1: al punto dove il clamp entra in azione il prezzo non deve saltare — l'invariante #4 vale anche lì).
 
 ## F3.8 — Il test che quasi tutti dimenticano
 

@@ -194,18 +194,15 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
 
 ---
 
-## §5 — Una decisione dovuta PRIMA di h8
+## §5 — La banda del guard: DECISO — un lato solo
 
-I doc descrivono `_oracleGuard2D` in due modi che **non sono la stessa istruzione**:
+**Risolto (banda a un lato).** L'opcode halt-a **solo quando il prezzo implied è sfavorevole al maker** rispetto all'oracolo oltre `maxDeviationBps`. Un prezzo favorevole al maker non fa mai scattare il guard.
 
-| Fonte | Lettura |
-|---|---|
-| `10-10-PLAYBOOK.md:79` | **due lati**: `if \|implied − oracle\| / oracle > maxDeviationBps` |
-| `PITCH.md:46`, `SWAPVM-INTERNALS.md:37` | **un lato**: "rifiuta i fill *sfavorevoli al maker*" |
+I doc in precedenza si contraddicevano — la formula a `10-10-PLAYBOOK.md` §1.5 usava `|implied − oracle|` (valore assoluto = due lati), mentre la prosa (`PITCH.md`, `SWAPVM-INTERNALS.md`) diceva "rifiuta i fill sfavorevoli al maker" (un lato). La formula è ora allineata alla prosa: un lato.
 
-Conta **proprio a causa dell'annidamento di §2**: il guard è outermost, quindi vede `amountOut` **dopo** la penalità di skew — e quella penalità muove il prezzo implicito nella direzione **favorevole al maker**. Con la lettura a due lati, una penalità grande può spingere il prezzo fuori banda e far scattare il guard **dal lato che aiuta il maker** → revert spurii, che emergono a h14 dentro `InventorySkewLiveness.t.sol`.
+**Perché un lato, e perché conta:** il guard è outermost, quindi vede `amountOut` **dopo** la penalità di `_inventorySkew2D` — e quella penalità muove il prezzo implicito nella direzione **favorevole al maker**. Con la banda a due lati, una penalità grande spingerebbe il prezzo fuori banda e farebbe scattare il guard **dal lato che aiuta il maker** → halt spurii, che emergerebbero dentro `InventorySkewLiveness.t.sol` con sintomi non ovvi. Un lato solo evita il conflitto: i due opcode si compongono senza che uno spenga l'altro.
 
-**Decidi ora (5 minuti) invece che a h14 (ore):** la banda rifiuta la deviazione favorevole al maker, o solo quella sfavorevole? Se un lato solo → mettilo nel layout degli args e costa zero. Se due lati → serve una risposta esplicita sulla composizione con lo skew prima di scrivere i test.
+**Il comportamento a due lati resta disponibile** come bit riservato nel byte `flags` degli args (non implementato ora), così il layout byte è forward-compatible senza raddoppiare la superficie di test. La semantica canonical è in [`10-10-PLAYBOOK.md`](../../strategy/10-10-PLAYBOOK.md) §1.5.
 
 ---
 
