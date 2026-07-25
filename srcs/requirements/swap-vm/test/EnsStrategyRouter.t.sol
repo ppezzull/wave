@@ -49,7 +49,9 @@ contract EnsStrategyRouterTest is Test {
         assertEq(logs.length, 1, "expected exactly one log");
         assertEq(logs[0].topics[1], _STRATEGY_ID, "strategyId must be topic 1");
         assertEq(logs[0].topics[2], _ENS_NODE, "ensNode must be topic 2");
-        assertEq(abi.decode(logs[0].data, (bytes32)), keccak256(_PROGRAM), "programHash must be keccak of the shown bytes");
+        assertEq(
+            abi.decode(logs[0].data, (bytes32)), keccak256(_PROGRAM), "programHash must be keccak of the shown bytes"
+        );
         assertTrue(keccak256(_PROGRAM) != bytes32(0), "sanity: real hash, not the retired placeholder");
     }
 
