@@ -70,6 +70,11 @@
         "internalType": "bytes32"
       },
       {
+        "name": "program",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
         "name": "ensNode",
         "type": "bytes32",
         "internalType": "bytes32"
@@ -664,6 +669,55 @@
   },
   {
     "type": "error",
+    "name": "InventorySkewExpectedBeforeSwapAmountsComputed",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewImproveLegReserved",
+    "inputs": [
+      {
+        "name": "maxImproveBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewPenaltyCapNotBelowOneHundredPercent",
+    "inputs": [
+      {
+        "name": "maxSkewBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewTargetRatioAboveOne",
+    "inputs": [
+      {
+        "name": "targetRatioE18",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "JumpMissingNextPCArg",
     "inputs": []
   },
@@ -686,6 +740,107 @@
     "type": "error",
     "name": "MakerTraitsZeroAmountInNotAllowed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardExpectedBeforeSwapAmountsComputed",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidFlags",
+    "inputs": [
+      {
+        "name": "flags",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidMode",
+    "inputs": [
+      {
+        "name": "mode",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidOraclePrice",
+    "inputs": [
+      {
+        "name": "answer",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardPriceDeviationExceeded",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oracleNum",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oracleDen",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxDeviationBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardStaleOraclePrice",
+    "inputs": [
+      {
+        "name": "currentTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "updatedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxStaleness",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
   },
   {
     "type": "error",
