@@ -46,8 +46,11 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
 
     /// @notice Announce a shipped strategy — called right after `aqua.ship()`
     /// @dev Post-ship hook consumed by the subgraph mapping (`strategyId`/`ensNode`
-    ///      filters) and the ENS agent's hash-verify
-    function announceStrategy(bytes32 strategyId, bytes32 ensNode) external {
+    ///      filters) and the ENS agent's hash-verify.
+    ///      `onlyOwner` because the feed derives reputation from these events: an
+    ///      open emitter would let anyone inject strategies that never shipped.
+    ///      The owner is wave's announcer key, set at construction via `Rescuable`.
+    function announceStrategy(bytes32 strategyId, bytes32 ensNode) external onlyOwner {
         emit StrategyDeployed(strategyId, bytes32(0), ensNode);
     }
 
