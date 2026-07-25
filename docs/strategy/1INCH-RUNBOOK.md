@@ -421,11 +421,11 @@ Due funzioni per Pietro: `deviate(bps)` e `restore()`. È ciò che il giudice to
 
 Un trace unico che mostra, nello stesso flusso: `IAqua` pull/push + `_oracleGuard2D` + `_inventorySkew2D` + `Swapped`. **Un file, tutta la storia.** Quando il giudice 1inch chiede "fammi vedere che è vero", apri questo.
 
-## F6.7 — La prova del fork
+## F6.7 — La prova sul testnet (Sepolia, niente fork)
 
-Due cose da provare **prima** della demo, non durante:
-1. **Taglio fresco a T-15min** e lettura di `updatedAt` di Chainlink al taglio — devi sapere quanto margine di staleness hai.
-2. **Switch dell'RPC sull'anvil di riserva in ≤15 secondi.** Il rischio delle 3 di notte è la morte dell'RPC durante il Beat B. Se ci metti più di 20s, si passa a `DEMO_LIVE=0` — **tranne** la `swap()` viva, che si ritenta una volta.
+Niente anvil fork, niente `DEMO_LIVE=0`, niente canned twin. La demo gira contro **Sepolia live**. Due cose da provare **prima** della demo, non durante:
+1. **Seed idempotente pre-demo** — 3–5 strategie reali già deployate con capitale reale, swap reali (≥3 fill ciascuna per superare la soglia di ranking), e follow ENS reali. Vedi [PROD-TESTNET.md](./PROD-TESTNET.md) §5. Rieseguire il seed su chain sporca aggiunge solo dati, non rompe la demo.
+2. **RPC + wallet di riserva finanziati.** Il rischio delle 3 di notte è la morte dell'RPC Sepolia o lag del subgraph durante un beat live. Mitigazione: secondo wallet finanziato + URL RPC di backup (Alchemy/Infura); per il Beat C (retune), fallback a un poll `eth_getLogs` diretto se il subgraph lagga di più di qualche blocco. **Non esiste fallback canned** — ogni fallimento si narra onestamente contro lo stato a schermo.
 
 ---
 

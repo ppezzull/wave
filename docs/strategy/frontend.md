@@ -10,35 +10,34 @@ _The UI spec — pages, routes, panes, data flow, colors, the demo beats, the fa
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js (App Router, SSR)** | SSR keeps the LLM call, API keys, and `/compile` invocation server-side. First paint can render a canned card before the live compile returns (the latency fallback). |
+| Framework | **Next.js (App Router, SSR)** | SSR keeps the LLM call, API keys, and `/compile` invocation server-side. The feed SSR-renders from `getFeed()` (subgraph + ENS) on first paint. |
 | Rendering | **Server Components default**; client only for live event subscribers | No business logic on the client. |
-| Agent transport | **SSE (browser ↔ Next.js)** — the UI's ONLY data path | No separate service, no inter-service IPC. The UI consumes the server agent's event stream; it never queries GraphQL itself. |
-| Live-data fallback | `DEMO_LIVE=0` swaps any live call for its canned `replay.json` twin | Every beat has a replay twin except the one un-cannable call: the **live `swap()`**. |
-| Watchdog | **1500ms** — a stalled live stream silently swaps to `replay.json` | Disclosed as "cached," never dead-air. |
+| Agent transport | **SSE (browser ↔ Next.js)** for `/api/compile` + `/api/stream`; `getFeed()` is a plain async fn for SSR | No separate service, no inter-service IPC. The UI consumes the server agent's event stream for compose/retune; the feed reads from the agent's subgraph+ENS helpers at render. |
+| Network | **Sepolia** (live) — no anvil fork, no mock. See [PROD-TESTNET.md](./PROD-TESTNET.md). | Every demo moment is a real on-chain action a judge can verify on Etherscan. |
 | Attributions | **"Powered by SwapVM — © Degensoft Ltd 2025"** in the UI footer from hour 1 | 1inch license compliance (Classic track). |
 
-**Files (real repo paths):** `srcs/requirements/ui/src/` — Next.js App Router. Key modules: `demo/{timeline.ts, controller.ts}` (the deterministic 240s stage controller), plus the panes/cards below. Agent modules (`compiler`, `resolveVerify`, `graphDelta`) are imported in-process server-side, not duplicated in the UI.
+**Files (real repo paths):** `srcs/requirements/ui/src/` — Next.js App Router. Key modules: `app/page.tsx` (the feed, SSR via `getFeed()`), `app/[handle]/page.tsx` (profile), plus the compose panes/cards below. Agent modules (`compiler`, `resolveVerify`, `graphDelta`, `getFeed`) are imported in-process server-side, not duplicated in the UI.
 
-**Scope-cut floor:** three panes + green/red card from fixture JSON only. **Never cut:** the safety-card verdict, the `EnsDiscovery` pane, the live `swap()` beat, the judge-triggered halt.
+**Scope-cut floor:** three panes + green/red card rendering from live subgraph+ENS data. **Never cut:** the safety-card verdict, the `EnsDiscovery` pane, the live on-chain `ship()`/`swap()`, the global ranked feed.
 
 ---
 
 ## §2 — Pages & routes
 
-Minimal — this is a demo product, not a multi-page app. Two routes:
+Minimal — this is a real product, not a multi-page app. Three routes:
 
 | Route | Type | Purpose |
 |---|---|---|
-| `/` | **Server Component** | The product: the split-screen strategy authoring surface. Default landing. |
-| `/demo` | **Client Component (controller-driven)** | The 4-minute judged demo: the deterministic 240s stage controller runs the three beats against a fresh fork. Has a `?replay=1` (and `DEMO_LIVE=0` env) mode for canned playback. |
-| `/api/compile` | **Route handler (POST)** | Server-side: NL intent → Zod spec → compiler → emits bytecode + `Rejection`/verdict. Streamed back via SSE. |
-| `/api/stream` | **Route handler (GET, SSE)** | The UI's single event stream: agent emits compile verdict, bytecode tokens, safety-card numbers, ENS resolution, retune events. |
+| `/` | **Server Component** | The product: the **global ranked feed** of strategies (SSR via `getFeed()` = subgraph + ENS), with the split-screen compose surface. Default landing. |
+| `/[handle]` | **Server Component** | A strategist's profile: their strategies + their follow graph (`follows N / followed by M`, both resolved from ENS `wave.following` records). |
+| `/api/compile` | **Route handler (POST)** | Server-side: the description (which IS the compiler input — see "post is the prompt" below) → Zod spec → compiler → emits bytecode + `Rejection`/verdict. Streamed back via SSE. |
+| `/api/stream` | **Route handler (GET, SSE)** | The UI's single event stream for the compose/retune flow: agent emits compile verdict, bytecode tokens, safety-card numbers, ENS resolution, retune events. |
 
-No auth, no dashboard, no settings page — out of scope for the 36h. If a judge asks "where's the rest," the answer is *"this IS the product — strategy authoring for the Aqua era"* ([PITCH.md](./PITCH.md) one-liner).
+No `/demo`, no auth dashboard, no settings page — the demo runs against **the live `/` route on Sepolia**, not a separate controller-driven page. If a judge asks "where's the rest," the answer is *"this IS the product — strategy authoring for the Aqua era"* ([PITCH.md](./PITCH.md) one-liner).
 
 ---
 
-## §3 — The authoring surface (`/`) — the panes
+## §3 — The compose surface (on `/`) — the panes
 
 The split-screen that earns **Usability** (finalist criterion) and the WOW beat. Four panes + the ENS discovery pane = five total:
 
@@ -59,11 +58,12 @@ The split-screen that earns **Usability** (finalist criterion) and the WOW beat.
 
 ### Pane: LEFT — Intent
 - **NL intent input** (text field / chat-style box) → POSTs to `/api/compile`.
+- **The post is the prompt (load-bearing constraint):** the description the strategist types here is BOTH the human-readable strategy text AND the literal compiler input. It must round-trip **byte-for-byte** into `/api/compile` and is stored verbatim as the ENS `description` text record. No separate "label" + "intent" fields — one string, two roles. This is what makes the feed self-describing and the strategy reproducible from its ENS record alone.
 - **Canonical block list** rendered after compile: the ordered blocks `Deadline → Concentrate → Decay → OracleGuard → InventorySkew → MakerFee → ProtocolFee → Curve → Salt`.
 - **The WOW beat lives here:** typing a malicious intent (oracle-guard placed *after* skew) → the compiler visibly **REJECTS** it → a **red card** cites the violated rule (`OracleGuardMustPrecedeSkew`), shows an **AST move-arrow** (the canonical reorder), and emits the **corrected, canonicalized program** with a **side-by-side unified diff**. *"The compiler refuses to ship anything unsafe — and shows you why."*
 
 ### Pane: RIGHT — Bytecode
-- The emitted program, tokenized into **`[op:1 byte][len:1 byte][args:len bytes]`** triples — real tokens from Flavio's **disassembler decoder** (delivered h14–16), not fixtures. Consume the decoder output directly; one artifact serves both this pane and the "is it really a compiler?" Q&A.
+- The emitted program, tokenized into **`[op:1 byte][len:1 byte][args:len bytes]`** triples — real tokens from Flavio's **disassembler decoder** (delivered h14–16). Consume the decoder output directly; one artifact serves both this pane and the "is it really a compiler?" Q&A.
 
 ### Pane: BOTTOM — Safety card (green/red)
 - **Green only if ALL pass AND program hash matches the ENSIP-25 record.**
@@ -72,27 +72,61 @@ The split-screen that earns **Usability** (finalist criterion) and the WOW beat.
   2. **exactIn/exactOut symmetry** — max bps drift
   3. **oracle-guard trigger count**
   4. **skew penalty ≤ cap**
-- **Latency fallback:** first paint renders a **canned card** (SSR) before the live compile returns; 1500ms watchdog swaps a stalled live stream to `replay.json`.
 
 ### Pane: 5TH — `EnsDiscovery` (the ENS-prize evidence pane)
-- Resolves the strategy **subname** live (e.g. `eth-usdc-guarded.strategist.eth`).
+- Resolves the strategy **subname** live (e.g. `eth-usdc-guarded.wave.eth`).
 - Shows **`programHash`** (from the ENS `v0.programhash` text record) **vs the on-screen bytecode**, **side-by-side**.
-- **Mismatch → turns red** (the ENS hash-verify negative path, shown live). *"The taker found this strategy through ENS, not our database — and checked it wasn't tampered with."* This is what makes ENS load-bearing, not cosmetic.
+- **Mismatch → turns red** (the ENS hash-verify negative path, shown live). *"The taker found this strategy through ENS — there is no database — and checked it wasn't tampered with."* This is what makes ENS load-bearing, not cosmetic.
 
 ---
 
-## §4 — The demo flow (`/demo`) — 3 beats + live revert
+## §3.5 — The feed (on `/`) — global, ranked, no DB
 
-A **deterministic 240-second stage controller** (`demo/controller.ts`) drives the real pipeline against a **fresh fork cut at T-15min**. Every beat has a canned replay twin; the ONE un-cannable call is the **live `swap()`** (satisfies 1inch's on-chain-transfer bar).
+The `/` route is not just the compose surface; it's also a **global X-style feed of every live strategy**, SSR'd from `getFeed()` (subgraph + ENS). This is the social product.
 
-| Window | Beat | What the UI shows | Canned twin |
-|---|---|---|---|
-| **0–60s** | **A — ship** | Sentence → bytecode (split-screen) → green safety card → **live `ship()`** (the one live on-chain token flow). | all but `ship()` |
-| **60–150s** | **B — ENS-discover + judge-triggered revert** | `EnsDiscovery` resolves subname, verifies hash. Judge picks a deviated state → `MockAggregatorV3` pushes it → **`_oracleGuard2D` HALTS quoting on screen** (red). *"The protection lives in the VM — nothing the AI did could disable it."* | ENS resolution; NOT the halt |
-| **150–220s** | **C — autonomous retune** | A real subgraph entity delta crosses threshold → agent notices → `dock()` + recompile + `ship()` in seconds, **autonomously, no click**. *"Your LP position just adapted itself."* | full beat (drops to narrated screenshot if timing slips) |
-| **220–240s** | **compliance card** | "Powered by SwapVM — © Degensoft Ltd 2025" + recap. | — |
+**Ranking (the algorithm, all terms from chain or ENS — no DB):**
 
-**Stage discipline:** three beats, each with a canned replay twin (`DEMO_LIVE=0`). The two un-cannable moments are the **live `swap()`** and the **judge-triggered halt** — those are the rubric-killers. **Cut plan if timing slips:** drop Beat C to a narrated screenshot first; **never** cut the live `swap()`, the reject-and-rewrite WOW beat, or the ENS discovery panel (those clear 1inch, WOW, and ENS respectively).
+```
+rank = returnPct × recencyDecay × (1 + log2(1 + followers))
+```
+
+- **returnPct** — PnL ÷ committed capital, from the subgraph. *Return %, not raw PnL* — so a small strategy that 3x'd beats a huge one that barely moved. **This is the "like" signal:** the capital on the card IS the endorsement. There is no like button.
+- **recencyDecay** — `0.5^(hoursSinceLastSwap/24)`, half-life 24h. A strategy that hasn't traded in a week fades.
+- **followers** — count of ENS `wave.following/<strategy>` records across all resolver names. Resolved by the agent (ENS), not stored.
+
+**Listing:** a strategy is **ranked** only if ≥3 fills AND ≥1h age; otherwise it's listed **unranked** at the top of /new (visible, but not in the ranked feed). *Stage line: "ranked by how much it's gained, decayed by age, nudged by follows."*
+
+**The feed is GLOBAL — not follow-filtered.** Everyone sees the same ranked feed. Follows are a personal graph that lives on the profile page (`/[handle]`), not a filter on `/`.
+
+### The feed card
+
+Each card shows:
+
+- **returnPct** as the headline number (the "like signal") — big, `ok`-colored if positive, `danger` if negative.
+- **committed capital, volume, fills** — from the subgraph (the evidence behind the return %).
+- **description** — the literal compiler input (ENS `description` record), one click from re-loading into the composer.
+- **avatar + strategist handle** — from ENS.
+- **ENS hash-verify chip** — `ok` if `v0.programhash` matches the on-chain program, `danger` ("TAMPERED") if not. Load-bearing, same component as the §3 `EnsDiscovery` pane.
+- **recencyDecay** as a subtle age indicator (e.g. "last swap 3h ago").
+
+**Card CTAs (two — not three):**
+- **Follow** — a single ENS write: adds a `wave.following/<strategy>` text record on the *follower's* own ENS name. Server action (`followStrategy()`). Increments the `followers` term in everyone's rank. **There is no Like button and no Comment UI** — like *is* the capital on the card, comment maps to nothing on-chain and is cut (see [README.md](../../README.md) "No database" callout).
+- **Fork** — first-class: loads the strategy's ENS-published spec (the `description` record, byte-for-byte) into the composer as the starting intent, so a strategist can branch and re-compile. Promoting fork is intentional — it's the social verb that compounds the compiler.
+
+---
+
+## §4 — The demo flow (live on `/`, Sepolia) — beats, not a controller
+
+There is **no `/demo` route, no 240s controller, no canned twins, no `DEMO_LIVE=0`**. The demo is a human driving the live product on `/` against real Sepolia state — strategies seeded before the event (see [PROD-TESTNET.md](./PROD-TESTNET.md) §5), real capital, real swaps, real indexing. Every beat is a real on-chain action the judges can verify on Etherscan.
+
+| Beat | What the UI shows | Live on-chain truth |
+|---|---|---|
+| **A — the feed** | `/` SSR-renders the **global ranked feed** from `getFeed()`; the seeded strategies appear ranked by returnPct × recencyDecay × (1 + log2(1 + followers)). *"Ranked by how much it's gained, decayed by age, nudged by follows."* | subgraph `Swapped` events + ENS records on Sepolia |
+| **B — compose + ship** | Type a description (the compiler input) → split-screen bytecode → green safety card → **live `StrategyFactory` deploy + `aqua.ship()` on Sepolia**. The strategy appears in the feed once indexed. | real deploy tx, real `ship()` |
+| **C — ENS-discover + judge-triggered halt** | Click a card → ENS hash-verify chip proves `v0.programhash` matches. Judge picks a deviated oracle state → **`_oracleGuard2D` HALTS quoting on screen** (red). *"The protection lives in the VM — nothing the AI did could disable it."* | ENS resolution; real on-chain guard revert |
+| **D — autonomous retune** | A real subgraph entity delta crosses threshold → agent notices → `dock()` + recompile + `ship()` on Sepolia, **autonomously, no click**. *"Your LP position just adapted itself."* | real retune txs |
+
+**Stage discipline:** no canned twins to fall back to — every beat is live. **Cut plan if something breaks:** narrate the already-on-screen state and move on; never debug on stage past ~20s (see §7). The rubric-killer beats are B (live `ship()`), C (the halt), and D (autonomous retune) — but the feed itself (A) is now a beat too, since it's real ranking of real data.
 
 > **Safety narrative:** build the protection story on the **oracle clamp** (`_oracleGuard2D`, which fires routinely in live pools) rather than a heal-side discount — the heal-side reward is ~0 in the tested regime. See [PITCH.md](./PITCH.md).
 
@@ -101,17 +135,19 @@ A **deterministic 240-second stage controller** (`demo/controller.ts`) drives th
 ## §5 — Data flow (the one diagram that matters)
 
 ```
- Browser (/, /demo)  ──SSE──►  Next.js server  ──in-process──►  compiler (emit + reject)
-      ▲                            │                                resolveVerify (ENS)
-      │                            │                                graphDelta (subgraph)
-      │                            └─►  /api/compile (POST)          └─► anvil fork (live swap())
-      └──────── single event stream ◄── agent emits: verdict, bytecode tokens,
-                                        safety numbers, ENS res, retune events
+ Browser (/, /[handle])  ──SSE (compose)──►  Next.js server  ──in-process──►  compiler (emit + reject)
+      │                                            │                          resolveVerify (ENS)
+      │                                            │                          graphDelta (subgraph)
+      │                                            └─►  /api/compile (POST)   └─►  Sepolia (live ship/swap)
+      │
+      └── SSR feed (/) ◄── getFeed() = subgraph (Swapped, capital, volume, fills)
+                                 + ENS (description, avatar, wave.following, v0.programhash)
 ```
 
-- **No client → GraphQL path.** The UI consumes the agent's SSE stream only.
-- **No second service.** Agent = server libraries, not a separate process.
-- **Fallbacks:** `DEMO_LIVE=0` → canned `replay.json`; 1500ms watchdog → cached-but-real response (disclosed).
+- **Two read paths, no off-chain store.** The compose/retune flow is SSE from `/api/stream`; the feed is SSR via `getFeed()` (subgraph + ENS). Both resolve to **chain + ENS — no database**.
+- **No client → GraphQL path.** The browser never queries the subgraph directly; the agent does, server-side.
+- **No second service.** Agent = server libraries imported in-process, not a separate process.
+- **No mock fallback.** If the subgraph lags, the feed shows what's indexed (disclosed via a `warn` "indexing" chip); if a compose call fails, it fails visibly. There is no `replay.json` to silently swap in.
 
 ---
 
@@ -156,7 +192,7 @@ Stops map 1:1 onto the palette tokens above, so any later token retune keeps the
 - **Bytecode tokens** = monospaced (`ui-monospace`); opcode byte tinted by its accent (`opcode-skew`/`opcode-guard` for our two custom opcodes, `text-muted` for the rest), `[len]` in `text-muted`, args in `text-primary`.
 - **Reject-and-rewrite diff** = standard unified-diff coloring: removed lines `danger`-tinted bg (`rgba(255,107,107,.12)`), added lines `ok`-tinted bg (`rgba(127,227,176,.12)`); the AST move-arrow in `accent-brand`.
 - **`EnsDiscovery`** = two hash columns; on match both render `ok`, on mismatch both flip `danger` with a "TAMPERED" tag.
-- **Fallback badge** = small `warn`-colored chip ("cached" / "subgraph syncing") so canned paths are always disclosed — honesty is a judging criterion.
+- **Indexing/lag badge** = small `warn`-colored chip ("subgraph syncing" / "last block N ago") when the feed is reading behind chain head — honesty is a judging criterion. (No "cached" chip anymore: there is no canned path.)
 
 > Keep it to **one typeface stack**: `ui-sans-serif` for chrome/labels, `ui-monospace` for bytecode, hashes, and any numeric/protocol value. No more than two weights per family.
 
@@ -164,13 +200,17 @@ Stops map 1:1 onto the palette tokens above, so any later token retune keeps the
 
 ## §7 — Failure tree (rehearse, print for stage)
 
+No canned twins means no silent fallback — every failure is narrated honestly. The mitigation is always "narrate the on-screen state, move on," never "swap to a fake."
+
 | Failure | UI response | Line |
 |---|---|---|
-| **LLM/`/compile` flakes (Beat A)** | Watchdog swaps to cached-but-real card (pre-warmed, disclosed); P2 retries silently. | "cached response — the live model is warming." |
-| **x402 hiccups (Beat C)** | Env-var swap to Studio key (rehearsed). | "the agent normally pays per query — falling back to our key." |
-| **Fork RPC dies (Beat B)** | Backup anvil on laptop B; P1 swaps RPC ≤15s while P3 narrates the ENS records already on screen; if >20s, `DEMO_LIVE=0` → canned, *except* retry live `swap()` once. | narrate; never dead-air. |
-| **Oracle staleness fires spuriously** | That IS the circuit breaker working — narrate honestly, re-cut to the mock-oracle path. | "that's the halt doing its job." |
-| **Total demo loss** | Pre-recorded fallback video (recorded at G3), narrated live. Never debug on stage past 20 seconds. | — |
+| **LLM/`/compile` flakes (Beat B)** | Retry silently once; if it still fails, narrate the partially-compiled state and skip to the next beat. Pre-warm the model before the demo. | "the model is warming — here's the seeded feed while it loads." |
+| **x402 / Graph query hiccups (Beats A, D)** | Env-var swap to a backup API key (rehearsed). The feed keeps rendering from whatever the subgraph has indexed. | "falling back to our backup indexer key." |
+| **Sepolia RPC dies / congested** | Swap to backup RPC (Alchemy ↔ Infura) ≤15s while narrating the on-screen feed; pre-broadcast retune txs slightly early to absorb block latency. | narrate; never dead-air. |
+| **Subgraph lag (Beat D retune)** | If the subgraph is behind, fall back to a direct `eth_getLogs` poll for the retune trigger; show the "indexing" `warn` chip. | "the subgraph's catching up — reading the logs directly." |
+| **Oracle staleness fires spuriously (Beat C)** | That IS the circuit breaker working — narrate honestly. | "that's the halt doing its job." |
+| **Tx reverts / nonce gap** | Use a private mempool (Alchemy/Infura `protect`); keep a 2nd funded wallet with pre-warmed nonces ready. | "replaying on the backup wallet." |
+| **Total demo loss** | Pre-recorded fallback video of the live Sepolia flow (recorded at G3), narrated live. Never debug on stage past 20 seconds. | — |
 
 ---
 
@@ -178,15 +218,15 @@ Stops map 1:1 onto the palette tokens above, so any later token retune keeps the
 
 | Window | UI task |
 |---|---|
-| **h0–2** 🔴 | `demo/{timeline.ts, controller.ts}` — the deterministic 240s controller with `DEMO_LIVE=0` canned-twin switching. |
-| **h8–10** | UI scaffold: Next.js App Router, SSR, 3 panes on fixture (left/right/bottom). Fixtures conform to Flavio's frozen `specVersion: 1`. |
-| **h10–12** | `parseProgram` + `safetyReport`: card pulls the 4 numbers; verdict green only if all pass + hash matches; first paint canned (SSR); 1500ms watchdog. |
-| **h12 = G1** 🟢 | Walking skeleton on fixture. |
-| **h14–16** | Beat B/C plumbing: `liveSwap` + mock-oracle wiring; consume Flavio's disassembler decoder for the bytecode pane (real tokens). |
-| **h16–20** | SSE bridge → real `/compile` (the UI's only data path). Start `make demo-up` skeleton. |
-| **h20–22** | `graphDelta` + `EnsDiscovery` pane (resolves subname live, hash side-by-side, mismatch→red). |
-| **h22–24 = G2** 🟢 | Autonomous retune wired to Beat C; retune evidence log rendered in UI (query, entity ID, delta, decision, tx hash). |
-| **h28–30 → G3** 🟢 | `make demo-up` green ×2; full 240s dry-run recorded (= fallback video base); canned twins for every beat. Freeze h30. |
-| **h34–35** | Demo run: full rehearsal against fresh fork; print the failure tree. |
+| **h0–2** 🔴 | Sepolia setup gated on P1: confirm Aqua + router + factory deployed, faucet wallets funded (see [PROD-TESTNET.md](./PROD-TESTNET.md) §4–5). UI scaffolding can start in parallel. |
+| **h8–10** | UI scaffold: Next.js App Router, SSR, compose panes (left/right/bottom) + the global feed route `/`. |
+| **h10–12** | `parseProgram` + `safetyReport`: safety card pulls the 4 numbers; verdict green only if all pass + hash matches. `getFeed()` SSR from subgraph+ENS. |
+| **h12 = G1** 🟢 | Walking skeleton: feed renders live Sepolia data; compose → bytecode → safety card against the live compiler. |
+| **h14–16** | Consume Flavio's disassembler decoder for the bytecode pane (real tokens); Follow (ENS write) + Fork (load ENS description into composer) CTAs on the card. |
+| **h16–20** | SSE bridge → real `/compile` + `/api/stream`; deploy via `StrategyFactory` on Sepolia end-to-end. |
+| **h20–22** | `graphDelta` + `EnsDiscovery` pane (resolves subname live, hash side-by-side, mismatch→red); profile page `/[handle]` with follows/followed-by from ENS. |
+| **h22–24 = G2** 🟢 | Autonomous retune wired to Beat D; retune evidence log rendered in UI (query, entity ID, delta, decision, tx hash). |
+| **h28–30 → G3** 🟢 | Seed 3–5 real strategies on Sepolia (real descriptions, real capital, real swaps, real follows — see PROD-TESTNET §5); subgraph fully synced; full live dry-run recorded (= fallback video base). Freeze h30. |
+| **h34–35** | Demo run: full rehearsal against live Sepolia; print the failure tree. |
 
-**P3's personal cut order:** x402 first → `EnsDiscovery` polish second → **never** the retune or the safety card.
+**P3's personal cut order:** decentralized-Graph-on-Sepolia decision (G1) first → `EnsDiscovery` polish second → **never** the retune, the safety card, or the live feed.

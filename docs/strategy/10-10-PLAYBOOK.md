@@ -94,8 +94,8 @@ Canonical order enforced by the Move #1 compiler: `deadline → concentration �
 ### Simulation battery (gate before every ship; the report is a demo artifact)
 `router.quote()` on the fork: ~12 trade sizes × both directions × exactIn/exactOut ⇒ assert monotonic effective price, split-vs-single subadditivity, exactIn/exactOut symmetry within rounding, oracle-guard triggers on a mocked deviated feed, skew penalty ≤ cap.
 
-### Dual-oracle demo design (fork-staleness trap)
-Chainlink feeds freeze at the fork block; demonstrating the breaker requires *moving* the oracle, which a real fork feed can't do. So: **happy path = real Chainlink on a fresh fork cut just after a feed update** (T-15min, read `updatedAt` at cut); **breaker scenario = `MockAggregatorV3` we control**, disclosed on slide ("we simulate the market moving — you can't move Chainlink on demand").
+### Dual-oracle demo design (live Sepolia)
+On a live testnet there is **no fork-staleness trap** — Chainlink's Sepolia feeds keep updating for real, so the happy path reads a genuinely fresh `updatedAt`. The breaker scenario still needs an oracle we can move on demand (you can't time the market), so: **happy path = real Chainlink on Sepolia** (read `updatedAt` live); **breaker scenario = `MockAggregatorV3` we deploy and control**, disclosed on slide ("we simulate the market moving — you can't move Chainlink on demand").
 
 
 
@@ -118,18 +118,18 @@ Two property-test files proving the opcodes hold their safety contracts **and fa
 - **Demo proof:** split-screen `forge test` GREEN on real code vs RED on M1/M2 mutation — failure-on-bug *is* the proof.
 - **Scope-cut floor:** `OracleGuardStaleHalt` + `OracleGuardClamp` (band-containment) + M1/M2 toggles + one RED screenshot.
 
-### MOVE #3 — Demo Choreography: 3 Beats + Live Revert (P3, ~6h)
-Deterministic 240-second stage controller driving the existing pipeline against a **fresh fork cut at T-15min**. Every beat has a canned replay twin (`DEMO_LIVE=0` swaps any live call for its recording). **One un-cannable call:** the live `swap()` (satisfies 1inch's on-chain-transfer bar).
-- **Beat timeline (240s) + what each beat shows on screen → [frontend.md](./frontend.md) §4.** Briefly: Beat A ship (sentence→bytecode→safety card→live `ship()`) → Beat B ENS-discover + **judge-triggered revert** (`MockAggregatorV3` deviated → `_oracleGuard2D` HALT on screen) → Beat C retune (on-fork delta → `dock()`→recompile→`ship()`, **autonomous no-click**) → compliance card.
-- **3am risk:** fork RPC death at Beat B. Fallback: backup anvil on laptop B, P1 swaps RPC ≤15s; if >20s, `DEMO_LIVE=0` → canned, *except* retry live `swap()` once.
-- **Scope-cut floor:** Beats A + B-revert only; never cut the live `swap()` or the judge-triggered halt.
+### MOVE #3 — Demo Choreography: Live Beats on Sepolia (P3, ~6h)
+**No stage controller, no canned twins, no `DEMO_LIVE=0`, no anvil fork.** A human drives the live product on `/` against **real Sepolia** state — strategies seeded before the event with real capital, real swaps, real indexing. Every beat is a real on-chain action a judge can verify on Etherscan. Full plan: [PROD-TESTNET.md](./PROD-TESTNET.md).
+- **Beats → [frontend.md](./frontend.md) §4.** Briefly: Beat A the global ranked feed (real `returnPct × recency × followers` ranking of seeded strategies) → Beat B compose + ship (the description *is* the compiler input → bytecode → safety card → live `ship()` on Sepolia) → Beat C ENS-discover + **judge-triggered halt** (`MockAggregatorV3` deviated → `_oracleGuard2D` HALT on screen) → Beat D autonomous retune (real subgraph delta → `dock()`→recompile→`ship()`, **no-click**).
+- **3am risk:** Sepolia RPC death / subgraph sync lag at a live beat. Fallback: a second funded wallet + backup RPC URL (Alchemy/Infura); for the retune beat, fall back to a direct `eth_getLogs` poll if the subgraph lags >a few blocks. No canned fallback exists — every failure is narrated honestly against the on-screen state.
+- **Scope-cut floor:** the live feed + the live `ship()` + the judge-triggered halt; never cut those.
 
 ### MOVE #4 — Split-Screen UI + Safety Card (P3, ~5h)
 **Next.js (App Router, SSR)** app owning **no business logic on the client** — panes consumed from the server agent's SSE stream (the UI's only data path). **Full UI spec — pages, routes, panes, data flow, colors, failure tree, build windows — lives in [frontend.md](./frontend.md).** Summary:
 - Three panes + a 5th `EnsDiscovery` pane: left = NL intent + canonical block list; right = emitted bytecode tokenized `[op][len][args]`; bottom = green/red safety card; 5th = ENS subname→`programHash` side-by-side (mismatch→red, the ENS-prize evidence pane).
 - Safety card green only if all 4 `quote()` numbers pass **and** program hash matches the ENSIP-25 record.
-- **3am risk:** LLM/`/compile` stalls >2s. Fallback: 1500ms watchdog swaps the live stream to a canned `replay.json` (disclosed cached). Never dead-air.
-- **Scope-cut floor:** three panes + green/red card from fixture JSON only; never cut the verdict or the ENS-discovery pane.
+- **3am risk:** LLM/`/compile` stalls >2s. Fallback: 1500ms watchdog retries the live stream (disclosed); no canned `replay.json` to fall back to in the post-#4 world — if it stays down, narrate the on-screen state and move on. Never dead-air.
+- **Scope-cut floor:** three panes + green/red card from live subgraph+ENS data only; never cut the verdict or the ENS-discovery pane.
 
 ### MOVE #5 — ENS Load-Bearing + First-Party Subgraph (P2 agent-side + P1 contracts, 6h)
 **ENS** = identity layer: each strategy's subname carries ENSIP-25 + ENSIP-26 + a `v0.programhash` text record (= keccak256 of shipped bytecode). The taker agent resolves the subname, reads the hash, recomputes it from the live on-chain program, and **aborts on mismatch**. **Graph** = a first-party subgraph indexing your `Swapped` events (you own schema + liveness — kills the Messari-sync risk and the "mocked data" smell).
@@ -160,7 +160,7 @@ Deterministic 240-second stage controller driving the existing pipeline against 
 | **h24 = G2** 🟢 | autonomous retune fires through router | reject+rewrite+diff green; bytecode matches ENS hash | full live UI + ENS chip; retune log cites entity ID |
 | **h28–30** | #2: gas snapshot + quote==swap; swap-trace artifact | #1: edge cases + fuzz specs; slot snapshot test | full dry run + record fallbacks; `make demo-up` green ×2 |
 | **h30 = G3** 🟢 | freeze | freeze | freeze |
-| **h34–35** | demo proof recording; T-15 fresh-fork cut | demo support; LLM cache pre-warm | demo run (controller + narration) |
+| **h34–35** | demo proof recording; Sepolia seed idempotency check | demo support; LLM cache pre-warm | demo run (live Sepolia, human-driven, no controller) |
 
 ### Critical path — "the Oracle-Guard Spine"
 `P2 (Flavio) ast/spec (h0–2) → P1 (Flaviano) opcode build (h8–10) → P2 ir/emit (h14–16) → P1 graph deploy (h18–20) → P3 (Pietro) autonomous retune (h22) → G2 (h24)`. If the clean `_oracleGuard2D` build diverges from spec, it cascades: Move #1's verdict has nothing to gate, Move #2 fuzz goes false-RED, the live revert has no halt. **The one chain to defend.** (P1 owns the *deploy*; P3 owns the *schema/mapping* authored at h16 and the *retune* at h22 — see the §3 table.)
