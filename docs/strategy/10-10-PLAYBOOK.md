@@ -94,8 +94,10 @@ Canonical order enforced by the Move #1 compiler: `deadline → concentration �
 ### Simulation battery (gate before every ship; the report is a demo artifact)
 `router.quote()` on the fork: ~12 trade sizes × both directions × exactIn/exactOut ⇒ assert monotonic effective price, split-vs-single subadditivity, exactIn/exactOut symmetry within rounding, oracle-guard triggers on a mocked deviated feed, skew penalty ≤ cap.
 
-### Dual-oracle demo design (live Sepolia)
-On a live testnet there is **no fork-staleness trap** — Chainlink's Sepolia feeds keep updating for real, so the happy path reads a genuinely fresh `updatedAt`. The breaker scenario still needs an oracle we can move on demand (you can't time the market), so: **happy path = real Chainlink on Sepolia** (read `updatedAt` live); **breaker scenario = `MockAggregatorV3` we deploy and control**, disclosed on slide ("we simulate the market moving — you can't move Chainlink on demand").
+### Dual-oracle demo design (live Sepolia) — ⚠️ the happy-path-staleness trap
+**Measured:** Sepolia ETH/USD (`0x694AA1769357215DE4FAC081bf1f309aDC325306`) has a **~3600s (1h) heartbeat**, same as mainnet — so `maxStalenessSecs=7200` (2× heartbeat) is *adequate in steady state*, and the happy path will *usually* quote fine.
+**But** the old T-15min fork cut existed specifically to **guarantee** a fresh `updatedAt` at demo time. Live Sepolia gives no such guarantee — testnet Chainlink feeds are known to lag past their heartbeat, and `_oracleGuard2D`'s staleness branch **always reverts, in both modes**. If the feed is stale while the judge watches, the demo **HALTs on the happy path** — the core beat runs backwards, and no fallback saves it (it's the guard working correctly, not a failure).
+**Decision (the robust path):** the deployed **`MockAggregatorV3` serves BOTH the happy path and the deviation/halt scenario** (disclosed on the slide: *"testnet feeds are unreliable, so we drive the oracle ourselves for the demo — the guard logic is identical against either source"*). This removes all demo-time dependence on live-feed freshness. Real Chainlink is still wired and quoted on the safety card as the *production* source; the mock is the *demo* source. The breaker scenario is then just "push the mock to a deviated price" (same mock, same disclosure).
 
 
 

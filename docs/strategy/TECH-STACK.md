@@ -79,5 +79,5 @@ The **subgraph** (AssemblyScript + local `graph-node` syncing a fork). If it fai
 
 ## Demo infra
 
-- **Live Sepolia** — real chain, real seeded strategies, real indexing (see [PROD-TESTNET.md](./PROD-TESTNET.md)). Chainlink's Sepolia feeds update live, so the happy path reads a fresh `updatedAt` directly; happy-path `maxStalenessSecs=7200`. Backup Sepolia RPC URL (Alchemy/Infura) + a second funded wallet for RPC/tx failure, on a second laptop.
-- `MockAggregatorV3` (deployed on Sepolia, disclosed) drives the judge-triggered `_oracleGuard2D` halt.
+- **Live Sepolia** — real chain, real seeded strategies, real indexing (see [PROD-TESTNET.md](./PROD-TESTNET.md)). Sepolia ETH/USD heartbeat ≈ 3600s, so `maxStalenessSecs=7200` (2× heartbeat) is fine in steady state — **but testnet feeds lag, and the T-15min fork-cut freshness guarantee is gone.** So the demo's **`MockAggregatorV3` serves both the happy path and the halt scenario** (disclosed) — no demo-time dependence on live-feed freshness. Real Chainlink stays wired as the production source and is quoted on the safety card. Backup Sepolia RPC URL (Alchemy/Infura) + a second funded wallet on a second laptop.
+- `MockAggregatorV3` (deployed on Sepolia, disclosed) serves the happy path **and** drives the judge-triggered `_oracleGuard2D` halt (see [10-10-PLAYBOOK.md](./10-10-PLAYBOOK.md) "Dual-oracle demo design").

@@ -92,7 +92,7 @@ rank = returnPct × recencyDecay × (1 + log2(1 + followers))
 
 - **returnPct** — PnL ÷ committed capital, from the subgraph. *Return %, not raw PnL* — so a small strategy that 3x'd beats a huge one that barely moved. **This is the "like" signal:** the capital on the card IS the endorsement. There is no like button.
 - **recencyDecay** — `0.5^(hoursSinceLastSwap/24)`, half-life 24h. A strategy that hasn't traded in a week fades.
-- **followers** — count of ENS `wave.following/<strategy>` records across all resolver names. Resolved by the agent (ENS), not stored.
+- **followers** — count of distinct ENS names carrying a `wave.following/<strategy>` record. **Not resolvable by name enumeration** (ENS is forward-only; you can't list all names or reverse-lookup a record value). Instead the subgraph **indexes the ENS resolver's `TextChanged` events** and aggregates per target strategy — so this term comes from the subgraph like the other two, not from any off-chain store. (Side effect: the subgraph indexes two contracts — our router + the Sepolia ENS Public Resolver.)
 
 **Listing:** a strategy is **ranked** only if ≥3 fills AND ≥1h age; otherwise it's listed **unranked** at the top of /new (visible, but not in the ranked feed). *Stage line: "ranked by how much it's gained, decayed by age, nudged by follows."*
 
@@ -127,6 +127,8 @@ There is **no `/demo` route, no 240s controller, no canned twins, no `DEMO_LIVE=
 | **D — autonomous retune** | A real subgraph entity delta crosses threshold → agent notices → `dock()` + recompile + `ship()` on Sepolia, **autonomously, no click**. *"Your LP position just adapted itself."* | real retune txs |
 
 **Stage discipline:** no canned twins to fall back to — every beat is live. **Cut plan if something breaks:** narrate the already-on-screen state and move on; never debug on stage past ~20s (see §7). The rubric-killer beats are B (live `ship()`), C (the halt), and D (autonomous retune) — but the feed itself (A) is now a beat too, since it's real ranking of real data.
+
+> **⚠️ Beat D autonomy boundary (the 35% question):** *"Is it really autonomous, or time-triggered?"* is the deciding question on the Graph track's "effective use" weight, and our own docs name a time-triggered retune as the 9→10 miss. The boundary, stated so a sharp judge can't probe it: **the retune transaction may be *sent* early** (to absorb Sepolia's ~12s block latency — purely a timing optimization) **but it may NEVER be *built* before the threshold-crossing decision exists.** The decision (delta-cross detected from the subgraph entity) precedes the tx construction; only the broadcast may be nudged earlier than the narration. If challenged, the retune evidence log proves the ordering: query timestamp → decision → tx hash, with the decision timestamp strictly before tx construction.
 
 > **Safety narrative:** build the protection story on the **oracle clamp** (`_oracleGuard2D`, which fires routinely in live pools) rather than a heal-side discount — the heal-side reward is ~0 in the tested regime. See [PITCH.md](./PITCH.md).
 
@@ -206,7 +208,7 @@ No canned twins means no silent fallback — every failure is narrated honestly.
 |---|---|---|
 | **LLM/`/compile` flakes (Beat B)** | Retry silently once; if it still fails, narrate the partially-compiled state and skip to the next beat. Pre-warm the model before the demo. | "the model is warming — here's the seeded feed while it loads." |
 | **x402 / Graph query hiccups (Beats A, D)** | Env-var swap to a backup API key (rehearsed). The feed keeps rendering from whatever the subgraph has indexed. | "falling back to our backup indexer key." |
-| **Sepolia RPC dies / congested** | Swap to backup RPC (Alchemy ↔ Infura) ≤15s while narrating the on-screen feed; pre-broadcast retune txs slightly early to absorb block latency. | narrate; never dead-air. |
+| **Sepolia RPC dies / congested** | Swap to backup RPC (Alchemy ↔ Infura) ≤15s while narrating the on-screen feed. | narrate; never dead-air. |
 | **Subgraph lag (Beat D retune)** | If the subgraph is behind, fall back to a direct `eth_getLogs` poll for the retune trigger; show the "indexing" `warn` chip. | "the subgraph's catching up — reading the logs directly." |
 | **Oracle staleness fires spuriously (Beat C)** | That IS the circuit breaker working — narrate honestly. | "that's the halt doing its job." |
 | **Tx reverts / nonce gap** | Use a private mempool (Alchemy/Infura `protect`); keep a 2nd funded wallet with pre-warmed nonces ready. | "replaying on the backup wallet." |
