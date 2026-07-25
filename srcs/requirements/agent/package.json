@@ -7,9 +7,15 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "spike": "tsx src/spike/zai-structured.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@instructor-ai/instructor": "^1.7.0",
+    "ai": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "openai": "^4.77.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
