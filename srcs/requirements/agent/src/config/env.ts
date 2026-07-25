@@ -25,7 +25,5 @@ export const storageConfig = () => ({
   url: process.env.LIBSQL_URL ?? ":memory:",
 });
 
-/** HTTP port the agent exposes (Next.js UI calls AGENT_URL=http://agent:<port>). */
-export const serverConfig = () => ({
-  port: Number(process.env.PORT ?? 3002),
-});
+// PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
+// and defaulted to 3002 via ENV in the Dockerfile. (No serverConfig() helper — it was dead code.)

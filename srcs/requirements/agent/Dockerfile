@@ -11,7 +11,9 @@ RUN npm run build            # mastra build → .mastra/output/ (self-contained)
 
 FROM node:20-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
+# PORT must be set here (not just EXPOSE'd): the Mastra server defaults PORT to
+# 4111 if unset → healthcheck on 3002 would always fail → container "unhealthy".
+ENV NODE_ENV=production PORT=3002
 # Self-contained: the build output carries its own node_modules + package.json.
 COPY --from=build /app/.mastra/output ./
 USER node                    # run as non-root
