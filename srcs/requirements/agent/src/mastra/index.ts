@@ -10,12 +10,16 @@ import "dotenv/config";
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 import { composeAgent } from "./compose.agent.js";
+import { waveMcpServer } from "../mcp/server.js";
 import { storageConfig } from "../config/env.js";
 
 export const mastra = new Mastra({
   agents: { composeAgent },
   // LibSQLBaseConfig requires an `id` (the store identifier).
   storage: new LibSQLStore({ id: "wave-agent", url: storageConfig().url }),
+  // mcp__wave__* tool surface (reads only so far). Registered so Studio + the
+  // HTTP server expose it; agents reach the tools via the registry.
+  mcpServers: { wave: waveMcpServer },
 });
 
 export { composeAgent, compose } from "./compose.agent.js";
