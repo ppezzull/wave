@@ -22,6 +22,10 @@ export const mastra = new Mastra({
   // mcp__wave__* tool surface (reads only so far). Registered so Studio + the
   // HTTP server expose it; agents reach the tools via the registry.
   mcpServers: { wave: waveMcpServer },
+  // The HTTP server (Hono) — `mastra build` extracts this statically into
+  // .mastra/output/. Serves /health, /api/agents/*, /api/workflows/*, and
+  // auto-mounts the MCP HTTP/SSE routes. Direct (not a factory) per the build.
+  server: { port: Number(process.env.PORT ?? 3002) },
 });
 
 export { composeAgent, compose } from "./compose.agent.js";

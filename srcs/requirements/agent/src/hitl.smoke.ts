@@ -17,7 +17,7 @@ async function main() {
     console.log("  (suspended at:", start.suspended, "— parked for /review)");
     const res = await run.resume({ step: start.suspended[0], resumeData: { approved: true } });
     console.log("after resume(approve) → status:", res.status);
-    console.log("  result:", JSON.stringify(res.result));
+    if (res.status === "success") console.log("  result:", JSON.stringify(res.result));
     console.log("\n✅ HITL PASS — propose → suspend → approve");
   } else {
     console.log("  ⚠️ expected 'suspended', got", start.status);
