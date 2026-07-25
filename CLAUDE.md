@@ -9,14 +9,30 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 
 ## ⚠️ Classic Track compliance — the sharpest risk
 
-This repo mixes **forked 1inch upstream** (legal: public open-source library) with **team-authored "spike" code**. The spike contracts are *throwaway prep* that must be **rewritten from scratch during the event**, not copied:
+This repo vendors **1inch upstream** (legal: public open-source library). Everything we author on top must be **written from scratch during the event**, not copied from any prep spike. That posture is unchanged.
 
-- `srcs/requirements/swap-vm/src/instructions/SpikeSkew.sol`
-- `srcs/requirements/swap-vm/src/opcodes/StrategyOpcodes.sol`
-- `srcs/requirements/swap-vm/src/routers/StrategyRouter.sol`
-- `srcs/requirements/swap-vm/test/SpikeStrategy.t.sol`, `srcs/requirements/swap-vm/test/base/AquaStrategyBuilders.sol`
+**The spike list that used to live here has been removed — it was wrong in both directions.** It named five files as team-authored spikes present in the tree and requiring `git rm`:
 
-These live inside the main source tree (not an isolated `spikes/` dir), so a "delete spikes/" cleanup will miss them. They must be `git rm`'d and rewritten during the hackathon. Do not treat the spike design as final.
+| File | Reality |
+|---|---|
+| `src/instructions/SpikeSkew.sol` | absent — never reached this repo |
+| `src/opcodes/StrategyOpcodes.sol` | absent — never reached this repo |
+| `src/routers/StrategyRouter.sol` | absent — never reached this repo |
+| `test/SpikeStrategy.t.sol` | absent — never reached this repo |
+| `test/base/AquaStrategyBuilders.sol` | ⚠️ **upstream, and missing — must be ADDED, not deleted** |
+
+Verified three ways for the first four: `find` across the worktree, absence of any `swap-vm/` duplicate at repo root, and `git log --all` showing no history for those paths. They describe a different working copy.
+
+⚠️ **The fifth is the opposite problem and it blocks the whole build.** `test/base/AquaStrategyBuilders.sol` is **1inch upstream code that the vendoring commit (`99d2144`) dropped**, not a spike of ours. Proof: its only consumer, `test/base/AquaSwapVMTest.sol`, carries the `LicenseRef-Degensoft-SwapVM-1.1` header and `© 2025 Degensoft Ltd` copyright, and declares `contract AquaSwapVMTest is AquaStrategyBuilders`.
+
+```
+Error (6275): Source "test/base/AquaStrategyBuilders.sol" not found
+  --> test/base/AquaSwapVMTest.sol:19
+```
+
+`forge build` fails outright — not just that test. Six upstream Aqua test files depend on `AquaSwapVMTest` (`SwapVMAqua.t.sol`, `XYCSwapAqua.t.sol`, `FeeAqua.t.sol`, `ProtocolFeeAqua.t.sol`, `ControlsAqua.t.sol`, `TakerCallbackAquaNegative.t.sol`) — i.e. exactly the corpus that exercises the Aqua path the 1inch bounty is judged on. **Re-vendor the file from upstream; deleting it is backwards.**
+
+Also required before any build: `npm install` inside `srcs/requirements/swap-vm/` — the Foundry remappings resolve through `node_modules/`, and without it every import fails.
 
 ## Working directory
 
