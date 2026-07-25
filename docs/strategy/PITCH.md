@@ -2,11 +2,19 @@
 
 _The narrative asset. Rehearse from this. The pitch sentence and the code's mechanism are the same thing — every line here is backed by something we demo._
 
-## The one-liner
+> **Read [PROOF-OF-CAPITAL.md](./PROOF-OF-CAPITAL.md) first.** Wave is a **social network where reputation costs real money**, not a compiler with a feed attached. Open the pitch with that thesis; the compiler and the retune are the *machines that make the metric possible*, shown second.
 
-> **"1inch built a virtual machine for market-making strategies — but no compiler. We built the compiler."**
+## The opening frame (open with this, not the engineering)
 
-Variant with the AI hook: *"Tell it your strategy in a sentence; it ships a custom AMM in 30 seconds — simulated, safety-checked, and live on-chain."*
+> **"Every social network measures vanity — likes, follows, views; signals that cost nothing, so they're worth nothing, so the graph drowns in bots. Wave measures capital. On-chain, the only endorsement you can't fake is one that costs money — so on Wave, a like *is* liquidity, the feed *is* The Graph, and a profile *is* your ENS name."**
+
+Then, and only then, the mechanism that makes it possible:
+
+## The one-liner (the engine, after the thesis lands)
+
+> **"1inch built a virtual machine for market-making strategies — but no compiler. We built the compiler — and a social market around it where the only like that counts is capital."**
+
+Variant with the AI hook: *"Tell it your strategy in a sentence; it ships a custom AMM in 30 seconds — simulated, safety-checked, and live on-chain — and the strategies that earn money rise to the top of the feed, because likes are liquidity."*
 
 ## The three-act narrative (maps to the 4-min demo)
 
