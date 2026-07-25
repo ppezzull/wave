@@ -60,6 +60,48 @@ Corollary for the feed: it is not "the social UI" — it is **the discovery laye
 - `quote()` is 100%-accurate off-chain simulation by VM design — our safety gate is native, not bolted on.
 - Strategies are bytecode identified by hash: reusable, auditable, ENS-discoverable.
 
+## Clarifications — the three holes a sharp judge finds
+
+_These are the questions our own material implies but never answers. The answers exist in what we already have; they had simply never been written down. Rehearse these before the Q&A armor below — the armor assumes them._
+
+### 1. "Why would a market maker publish their strategy? Doesn't that kill the edge?"
+
+The premise is wrong, and correcting it is the answer.
+
+**On Aqua a strategy is already public.** It is bytecode on-chain, identified by hash, readable by anyone with an RPC. Wave publishes nothing that was not already public — **it makes public bytecode legible.** The choice a maker faces is not "private vs public"; it is "unreadable vs readable", and only the second one has a name attached to it that earns them reputation.
+
+Aqua's own thesis requires this. The whitepaper's claim is that *"a breakthrough strategy can go from zero to significant liquidity in minutes"* — which can only happen if the strategy is visible. Competition on formula, not on TVL, presupposes that formulas can be seen.
+
+**The honest concession** (offer it before they push — it makes the rest credible): alpha decay is real, but it lives in *parameters and inventory*, not in shape. The bytecode reveals that you run inventory-skewed pricing with an oracle band. It does not reveal why your target ratio is right for this pair at this hour. A maker who wants distance ships the same shape with different numbers — and Wave's fork button makes that a first-class action rather than a leak.
+
+### 2. "After the agent retunes, who authorised what is live? The maker's sentence no longer describes it."
+
+True, and we do not pretend otherwise. **The sentence describes the mandate, not the instance.**
+
+Authority lives in three places, none of which the agent can reach:
+1. **The bounded form** — the LLM emits only known block types with clamped numerics; it cannot invent an instruction or an address (`feed` resolves through a compiler-owned registry).
+2. **The deterministic compiler** — canonical ordering and the rejection rules apply identically to the first ship and to every retune. A retune that violated `OracleGuardMustPrecedeSkew` would be rejected exactly like a human's malicious intent.
+3. **The circuit breaker in the VM** — `_oracleGuard2D` halts on deviation or staleness no matter what the agent decided, because it is an instruction, not a policy.
+
+And the backstop that makes the whole thing bounded: **custody never left the maker's wallet.** Aqua holds a virtual balance; the maker can `dock()` at any moment. The worst case of a bad retune is a worse quote, not a drained position.
+
+### 3. "What does the ENS hash actually prove?"
+
+Be precise here, because the loose version is attackable. The retune *legitimately* changes the program, so the ENS record is rewritten by the same flow that reshipped it. Therefore:
+
+- **It does not prove** the program was never changed, nor that a human approved this version.
+- **It proves** that the program you are about to trade against is the one this name advertises **right now** — that no one substituted a different program behind a name you trust.
+
+That is a real and useful guarantee: it is the difference between "an ENS name resolves to an address" and "an ENS name commits to the code you will execute against." The negative path in the demo (tampered record → the taker agent aborts before settling) is what makes the claim demonstrable rather than asserted.
+
+### Stage discipline — the two things they should walk out with
+
+Six beats each serve a different prize, but a judge repeats **two** things to another judge. Choose them deliberately:
+
+> **"A sentence becomes a market maker."** (the WOW) · **"And the compiler refuses to ship it unsafe — and shows you why."** (the depth)
+
+Everything else — the live `swap()`, the ENS resolve, the subgraph delta, the retune — is *evidence for those two*. Show it all; narrate it as support, not as six equal headlines.
+
 ## Q&A armor (rehearsed answers)
 
 - **"What stops the LLM from deploying something that drains the LP?"** → "It can't write code. It fills a bounded, schema-validated form; a deterministic compiler assembles pre-verified blocks; every candidate passes a quote()-simulation battery; and the circuit breaker lives *in the VM* — `_oracleGuard2D` halts quoting on oracle deviation or staleness regardless of what any AI does."
