@@ -3,11 +3,13 @@
 // half is graphDelta → policy.decide). Per AGENT.md posture invariant: ALWAYS autonomous, NEVER
 // HITL-gated — retune is disjoint from the {stop, remove, changeOracleBand, askHuman} HITL set.
 //
-// BLOCKED TODAY: the router has no dock()/ship() (Flaviano's Gantt h22-24 deliverable; confirmed
-// absent from the ABI). The default dock/ship surface a clear BLOCKED error, so this arm DECIDES
-// + logs but cannot EXECUTE until dock()/ship() land. dock/ship/recompile are injectable, so the
-// happy path is unit-testable OFFLINE today (no Solidity, no network) and flips on the moment
-// Flaviano delivers + clients/router.ts is wired.
+// BLOCKED TODAY: clients/aqua.ts is a throw-stub, so dock()/ship() are not wired. dock/ship are
+// 1inch AQUA protocol functions (events Docked/Shipped on IAqua.sol:45-69), NOT router functions
+// and NOT a Flaviano deliverable — the only gap is wiring clients/aqua.ts + clients/router.ts
+// (Flavio's B3). The default dock/ship surface a clear BLOCKED error, so this arm DECIDES + logs
+// but cannot EXECUTE until the aqua client lands. dock/ship/recompile are injectable, so the happy
+// path is unit-testable OFFLINE today (no Solidity, no network) and flips on the moment the aqua
+// client is wired.
 //
 // The DECISION is ALWAYS logged (data-caused, citing entityId) whether EXECUTE succeeds or is
 // blocked — that record is the proof the retune was caused by a Swapped entity, not a timer.
@@ -26,17 +28,18 @@ export interface RecompileAndShipInput {
 
 /** Injectable execution surface — defaults surface the BLOCKED state; tests pass stubs. */
 export interface RetuneArmDeps {
-  /** Withdraw the strategy from Aqua. Default throws BLOCKED (no dock() on the router yet). */
+  /** Withdraw the strategy from Aqua (aqua.dock). Default throws BLOCKED (clients/aqua.ts not wired). */
   dock?: (strategyId: string) => Promise<Hash>;
   /** Recompile the (adjusted) spec → new bytecode. Default throws BLOCKED (compiler call TBD). */
   recompile?: (strategyId: string) => Promise<`0x${string}`>;
-  /** Re-ship the recompiled strategy to Aqua. Default throws BLOCKED (no ship() on the router yet). */
+  /** Re-ship the recompiled strategy to Aqua (aqua.ship). Default throws BLOCKED (clients/aqua.ts not wired). */
   ship?: (strategyId: string, program: `0x${string}`) => Promise<Hash>;
 }
 
 const BLOCKED = (fn: string) =>
-  `[recompileAndShip] BLOCKED — router has no ${fn}() yet (Flaviano's Gantt h22-24). ` +
-  `The retune DECIDED (data-caused) but cannot EXECUTE until dock()/ship() land on the router ABI.`;
+  `[recompileAndShip] BLOCKED — aqua.${fn}() not wired yet (clients/aqua.ts is a throw-stub). ` +
+  `dock/ship are 1inch AQUA fns (IAqua.sol), not router fns. The retune DECIDED (data-caused) ` +
+  `but cannot EXECUTE until the aqua client is wired (Flavio's B3).`;
 
 const defaultDock = async (): Promise<Hash> => {
   throw new Error(BLOCKED("dock"));

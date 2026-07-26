@@ -4,10 +4,11 @@
 // mode is a TIME-triggered retune with no entity — so the entityId in the evidence log
 // IS the proof the social metric is caused by on-chain capital, not a timer.
 //
-// SKELETON: the DeltaSource is a STUB (synthetic data) so the decision layer runs
-// end-to-end TODAY. Swap `stubDeltaSource` for the real Sepolia subgraph source when
-// Pietro's endpoint lands — the DeltaSource interface is unchanged. Spec:
-// docs/strategy/AGENT.md (monitorAgent + the closed loop) + Flavio.md (graphDelta).
+// The real DeltaSource (subgraphDeltaSource, below) is built + opt-in via bootDeltaSource() when
+// MONITOR_SOURCE=subgraph. The STUB stays the default until the subgraph is v0.0.3 + deployed +
+// WAVE_SUBGRAPH_URL repointed (it currently pins v0.0.1 → listStrategies returns []). The
+// DeltaSource interface is unchanged either way. Spec: docs/strategy/AGENT.md (monitorAgent +
+// the closed loop) + Flavio.md (graphDelta).
 import { decide } from "../policy/index.js";
 import type { PolicyAction, PolicyInput } from "../policy/index.js";
 import { logEvidence } from "../evidence/log.js";
@@ -130,8 +131,9 @@ export interface SubgraphDeltaSourceOpts {
  * log is what PROVES the retune is caused by on-chain capital, not a timer (AGENT.md Graph-track).
  * No swaps ⇒ the strategy id (no delta to cause a retune this tick anyway).
  *
- * Until Pietro re-deploys the subgraph with the StrategyRouter data source, listStrategies()
- * returns [] (entity not deployed) → this yields no deltas → noop. HONEST: never fabricates.
+ * Until v0.0.3 is deployed + WAVE_SUBGRAPH_URL repointed (it currently pins v0.0.1, the
+ * single-source spike → listStrategies() returns []), this yields no deltas → noop. v0.0.3 is
+ * the 3-source target (router + ENS resolver + Aqua for committedCapital). HONEST: never fabricates.
  */
 export const subgraphDeltaSource = (opts: SubgraphDeltaSourceOpts = {}): DeltaSource => {
   const source = opts.source ?? defaultSubgraph;

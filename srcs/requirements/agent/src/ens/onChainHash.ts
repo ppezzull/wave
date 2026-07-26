@@ -2,9 +2,13 @@
 // StrategyDeployed event. This is the on-chain source of truth that resolveVerifyLive compares
 // the ENS `v0.programhash` record against, closing the G1 hash-chain live (not just on a fixture):
 //   compiler keccak256(program)  ==  ENS v0.programhash record  ==  StrategyDeployed.programHash
-// The event is emitted by the router's `announceStrategy()`; on the deployed router programHash
-// is keccak256(program) (the branch/milestone3 emit — NOT main's bytes32(0)). If announce was
-// never called, this throws — that is the signal to announce the strategy first.
+// The event is emitted by the router's `announceStrategy()`. On `main` (#37/#40) programHash is
+// keccak256(program) — derived on-chain from the announced order's program. ⚠️ The DEPLOYED Sepolia
+// router (0xeb513fd1…) is still the #20 placeholder: announceStrategy(bytes32,bytes32) emits
+// programHash=bytes32(0) and carries NO (Order,ensNode) selector — it MUST be redeployed from main
+// before a real hash can be read (verified by bytecode selector scan 2026-07-26). Until then this
+// reads 0 (or throws if announce was never called) → resolveVerifyLive aborts, which is the
+// correct failure until a redeploy + an announce land.
 // Spec: docs/strategy/ENS-PATH.md §7 (resolveVerify step 3 — read programHash from the event).
 //
 // The publicClient is injectable so the fetcher + resolveVerifyLive are unit-testable OFFLINE

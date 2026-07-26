@@ -1,5 +1,5 @@
 // recompileAndShip tests — the retune EXECUTE arm, OFFLINE (injectable dock/recompile/ship).
-// The BLOCKED path (no dock/ship on the router yet) returns { blocked } WITHOUT throwing and
+// The BLOCKED path (clients/aqua.ts not wired) returns { blocked } WITHOUT throwing and
 // still logs the data-caused decision; the happy path wires stubs + asserts tx hashes hit the
 // evidence log. Spec: docs/strategy/AGENT.md (MCP writes — retune, autonomous).
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
