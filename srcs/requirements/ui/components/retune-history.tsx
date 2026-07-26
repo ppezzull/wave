@@ -1,6 +1,9 @@
 import { ExternalLink } from 'lucide-react'
 import type { Strategy } from '@/lib/mock-data'
 
+// Retune evidence timeline (frontend.md L112). Reads strategy.retunes —
+// live hydrateStrategy() leaves this [] until Flavio's graphDelta emits real
+// EvidenceEntry rows (or /api/stream forwards them). Empty state is the truth.
 export function RetuneHistory({ strategy }: { strategy: Strategy }) {
   const entries = strategy.retunes
 
@@ -41,7 +44,6 @@ export function RetuneHistory({ strategy }: { strategy: Strategy }) {
               role="listitem"
               aria-label={`Retune by ${entry.entity}: ${entry.delta} - ${entry.decision}`}
             >
-              {/* Timeline left column */}
               <div className="flex flex-col items-center shrink-0">
                 <div
                   className="w-2.5 h-2.5 rounded-full mt-1 shrink-0"
@@ -63,7 +65,6 @@ export function RetuneHistory({ strategy }: { strategy: Strategy }) {
                 )}
               </div>
 
-              {/* Content */}
               <div className="flex flex-col gap-1 pb-5 min-w-0">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                   <span className="font-mono text-[12px] text-wave-muted">
@@ -86,11 +87,11 @@ export function RetuneHistory({ strategy }: { strategy: Strategy }) {
                     {entry.tx}
                   </span>
                   <a
-                    href={`https://etherscan.io/tx/${entry.tx}`}
+                    href={`https://sepolia.etherscan.io/tx/${entry.tx}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-wave-muted hover:text-wave-text transition-colors"
-                    aria-label={`View transaction ${entry.tx} on Etherscan`}
+                    aria-label={`View transaction ${entry.tx} on Sepolia Etherscan`}
                   >
                     <ExternalLink size={11} aria-hidden="true" />
                   </a>
