@@ -2,21 +2,21 @@
 
 The Graph subgraph for **wave** — indexes the on-chain data the feed and the retune agent read. There is **no database**; `getFeed()` and `graphDelta` query this subgraph + ENS resolve, nothing else. See [`docs/spikes/GRAPH-NODE-SPIKE.md`](../docs/spikes/GRAPH-NODE-SPIKE.md) for the indexing-path decision (decentralized network vs self-hosted `graph-node` vs `eth_getLogs`).
 
-## Status — production subgraph authored (build-green); deploy gated on Flaviano's router
+## Status — production subgraph LIVE on Studio (v0.0.2)
 
 **Two layers:**
-- **v0.0.1 (deployed, live)** — the spike: single ENS-resolver `TextChanged` source, `textRecordChangeds` entity. Proved path A (decentralized network indexes Sepolia EVM with ~zero lag). Query: `https://api.studio.thegraph.com/query/1756983/wave/v0.0.1`.
-- **v0.0.2 (authored here, build-green, NOT yet deployed)** — the production subgraph: two data sources (`EnsStrategyRouter` + ENS resolver), entities `Strategy` / `Swap` / `Follow` / `Follower`. Replaces the spike source files in this dir; deploys as the next version of the same `wave` Studio subgraph once Flaviano deploys the router on Sepolia (the manifest's router `address`/`startBlock` are placeholders until then — `graph deploy` rejects `0x0…0`).
+- **v0.0.2 (deployed, live — production)** — two data sources (`EnsStrategyRouter` @ `0xeb513fd18c391fae1513ff12c1f97bf659d052c4` startBlock `11350046` + ENS resolver), entities `Strategy` / `Swap` / `Follow` / `Follower`. Queryable now; currently empty while syncing / before any swaps or announces are fired (expected). Query: `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2`.
+- **v0.0.1 (historical)** — the spike: single ENS-resolver `TextChanged` source, `textRecordChangeds` entity. Proved path A (decentralized network indexes Sepolia EVM with ~zero lag). Superseded by v0.0.2; kept on Studio for reference.
 
 | | |
 |---|---|
 | **Studio page** | https://thegraph.com/studio/subgraph/wave |
-| **Query endpoint (v0.0.1, live)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.1` |
-| **Query endpoint (v0.0.2, after deploy)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2` |
+| **Query endpoint (v0.0.2, live)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2` |
+| **Query endpoint (v0.0.1, historical)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.1` |
 
 **See also:** contract-layer gaps that block the demo (strategyId binding, committed capital, programHash) — see [`SUBGRAPH-CONTRACT-GAPS.md`](../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md).
 
-### Production entities (v0.0.2) — matches the agent client (`srcs/requirements/agent/src/clients/subgraph.ts`)
+### Production entities (v0.0.2, live) — matches the agent client (`srcs/requirements/agent/src/clients/subgraph.ts`)
 
 - **`Strategy`** (mutable): `id` (= orderHash), `programHash` (tolerates `bytes32(0)`), `ensNode`, `status`, ranking aggregates `cumulativeVolumeIn/Out`, **`committedCapital`**, `swapCount`, `lastSwapTimestamp`, `followerCount`.
   - **`cumulativeVolumeIn/Out` are `BigInt`, not `BigDecimal`** — GraphQL decimal128 caps at 34 significant figures and loses wei; the UI converts to `BigDecimal` at read time.
@@ -30,7 +30,7 @@ The Graph subgraph for **wave** — indexes the on-chain data the feed and the r
 
 **Ranking (`Pietro.md` 🔢):** `rank = returnPct × recencyDecay × (1 + log2(1 + followers))` — the UI computes this from `cumulativeVolume*`, `lastSwapTimestamp`, and `followerCount` exposed above. Every term is subgraph-sourced → still no database.
 
-> **To deploy v0.0.2:** Flaviano deploys `EnsStrategyRouter` on Sepolia → set `WAVE_ROUTER_ADDRESS` + `WAVE_ROUTER_BLOCK` in `subgraph.yaml` → `graph deploy wave --studio` (label `v0.0.2`) → bump the client's `SUBGRAPH_URL` default to `…/wave/v0.0.2`.
+> **v0.0.2 was deployed** by: setting the live `EnsStrategyRouter` address + startBlock `11350046` in `subgraph.yaml` → `graph deploy wave --studio` (label `v0.0.2`) → bumping the agent client's `SUBGRAPH_URL` default to `…/wave/v0.0.2`. **When #41 (Aqua data source) merges, re-deploy as `v0.0.3` and bump the client URL again.**
 
 ## Build (verified green)
 
