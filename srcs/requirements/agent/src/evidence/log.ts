@@ -15,7 +15,21 @@ export interface EvidenceEntry {
   entityId: string; // the data-caused proof anchor (Swapped entity / log id)
   query: string; // the GraphQL query (or eth_getLogs filter) that produced the delta
   delta: unknown; // the PolicyInput snapshot that fed decide()
-  action: { type: string; trigger?: string; reason: string }; // the PolicyAction verdict
+  /**
+   * The PolicyAction verdict, plus the optional settlement receipts an EXECUTED
+   * retune adds. Typed here rather than cast at the call site: the execute arm
+   * needs to record what it settled, and a cast would have let the shape drift
+   * silently (review #57/B3).
+   */
+  action: {
+    type: string;
+    trigger?: string;
+    reason: string;
+    retunedTo?: string; // the new strategyHash a retune shipped
+    dockTx?: string;
+    announceTx?: string;
+    shipTx?: string;
+  };
 }
 
 const evidencePath = (): string => process.env.EVIDENCE_PATH ?? "./evidence.jsonl";
