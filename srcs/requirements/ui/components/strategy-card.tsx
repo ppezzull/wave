@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, GitFork, TrendingUp, TrendingDown } from 'lucide-react'
 import { useCountUp } from '@/hooks/use-count-up'
-import { useDrawer } from './drawer-context'
+import { useSessionUser } from '@/hooks/use-session-user'
+import { followStrategy } from '@/app/actions/follow'
 import {
   type Strategy,
   returnPct,
@@ -27,10 +28,11 @@ export function StrategyCard({
   isPreview = false,
 }: StrategyCardProps) {
   const router = useRouter()
+  const { sessionUser } = useSessionUser()
   const [following, setFollowing] = useState(false)
-  const { openFork } = useDrawer()
+  const [followBusy, setFollowBusy] = useState(false)
+  const [followError, setFollowError] = useState<string | null>(null)
 
-  // Derived from raw subgraph values via helpers — nothing is stored as display text.
   const ret = returnPct(strategy)
   const retStr = returnPctStr(strategy)
 
@@ -47,11 +49,24 @@ export function StrategyCard({
   }
   const handleFollow = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!isPreview) setFollowing((f) => !f)
+    if (isPreview || followBusy) return
+    const followerName = sessionUser?.ensName
+    if (!followerName) {
+      setFollowError('Connect a wallet with an ENS name to follow')
+      return
+    }
+    setFollowBusy(true)
+    setFollowError(null)
+    void followStrategy(strategy.id, followerName).then((res) => {
+      setFollowBusy(false)
+      if (res.ok) setFollowing(true)
+      else setFollowError(res.reason ?? 'follow failed')
+    })
   }
+  // Fork is a first-class verb → /compose?fork=<id> prefill (Pietro.md L61).
   const handleFork = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!isPreview) openFork(strategy)
+    if (!isPreview) router.push(`/compose?fork=${encodeURIComponent(strategy.id)}`)
   }
 
   return (
@@ -80,16 +95,13 @@ export function StrategyCard({
       }
     >
       <div className="flex gap-3">
-        {/* Avatar */}
         <div
           className="w-11 h-11 rounded-full shrink-0"
           style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
           aria-hidden="true"
         />
 
-        {/* Body */}
         <div className="flex-1 min-w-0">
-          {/* Author line — ENS subdomain only, no display name */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
               {strategy.authorHandle}
@@ -102,7 +114,6 @@ export function StrategyCard({
             </span>
           </div>
 
-          {/* Description */}
           <p
             className={`font-sans text-[15px] text-wave-text mt-0.5 leading-normal ${
               !isDetailed ? 'line-clamp-4' : ''
@@ -111,7 +122,6 @@ export function StrategyCard({
             {strategy.description}
           </p>
 
-          {/* Return signal */}
           <div
             className="mt-3 inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5"
             style={{
@@ -132,7 +142,6 @@ export function StrategyCard({
             </span>
           </div>
 
-          {/* Evidence row */}
           <div className="flex items-center gap-5 mt-3">
             <div className="flex items-baseline gap-1.5">
               <span className="font-mono text-[13px] text-wave-text">
@@ -154,31 +163,38 @@ export function StrategyCard({
             </div>
           </div>
 
-          {/* Action bar */}
           {!isPreview && (
-            <div className="flex items-center gap-2 mt-3">
-              <button
-                onClick={handleFollow}
-                className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold transition-colors duration-150"
-                style={{
-                  border: following ? '1px solid #2F3336' : '1px solid #2A9D8F',
-                  color: following ? '#71767B' : '#2A9D8F',
-                  background: following ? 'transparent' : 'transparent',
-                }}
-                aria-label={following ? 'Unfollow this strategy' : 'Follow this strategy'}
-                aria-pressed={following}
-              >
-                {following && <Check size={14} aria-hidden="true" />}
-                {following ? 'Following' : 'Follow'}
-              </button>
-              <button
-                onClick={handleFork}
-                className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
-                aria-label="Fork this strategy"
-              >
-                <GitFork size={14} aria-hidden="true" />
-                Fork
-              </button>
+            <div className="flex flex-col gap-1 mt-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleFollow}
+                  disabled={followBusy}
+                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold transition-colors duration-150 disabled:opacity-50"
+                  style={{
+                    border: following ? '1px solid #2F3336' : '1px solid #2A9D8F',
+                    color: following ? '#71767B' : '#2A9D8F',
+                    background: 'transparent',
+                  }}
+                  aria-label={following ? 'Unfollow this strategy' : 'Follow this strategy'}
+                  aria-pressed={following}
+                >
+                  {following && <Check size={14} aria-hidden="true" />}
+                  {followBusy ? '…' : following ? 'Following' : 'Follow'}
+                </button>
+                <button
+                  onClick={handleFork}
+                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
+                  aria-label="Fork this strategy"
+                >
+                  <GitFork size={14} aria-hidden="true" />
+                  Fork
+                </button>
+              </div>
+              {followError && (
+                <p className="font-sans text-[12px]" style={{ color: '#E5484D' }}>
+                  {followError}
+                </p>
+              )}
             </div>
           )}
         </div>

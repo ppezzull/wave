@@ -1,9 +1,19 @@
 import { Check, AlertTriangle, Clock } from 'lucide-react'
-import { type Strategy, hashState, abbrevHash } from '@/lib/mock-data'
+import type { Strategy } from '@/lib/mock-data'
+import { hashState, abbrevHash } from '@/lib/strategy/format'
+
+// ENS hash-verify chip (frontend.md L101, Pietro.md L64).
+// Two columns: on-chain programHash vs ENS v0.programhash.
+// match → green ✓; mismatch → both danger + "TAMPERED" (trust anchor);
+// pending → yellow when programHash is bytes32(0).
+//
+// Live path: hydrateStrategy() fills both hashes (subgraph + ENS). While
+// WAVE_ENS_WIRED is false, ensProgramHash falls back to on-chain → always
+// match/pending, never fabricated TAMPERED. That's correct.
 
 const STATE_META = {
   match: { color: '#1F9D6B', label: 'Match', Icon: Check },
-  mismatch: { color: '#E5484D', label: 'Mismatch', Icon: AlertTriangle },
+  mismatch: { color: '#E5484D', label: 'TAMPERED', Icon: AlertTriangle },
   pending: { color: '#F5A623', label: 'Pending', Icon: Clock },
 } as const
 
@@ -61,9 +71,13 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
         </div>
 
         {state === 'mismatch' && (
-          <p className="font-sans text-[13px] text-wave-muted mt-4 leading-relaxed">
-            The deployed bytecode hash does not match the hash committed in the
-            ENS record. Treat this strategy as tampered.
+          <p
+            className="font-sans text-[13px] font-semibold mt-4 leading-relaxed"
+            style={{ color: '#E5484D' }}
+            role="alert"
+          >
+            TAMPERED — the deployed bytecode hash does not match the hash
+            committed in the ENS record. Treat this strategy as untrusted.
           </p>
         )}
         {state === 'pending' && (

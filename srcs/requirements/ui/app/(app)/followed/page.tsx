@@ -1,12 +1,9 @@
-import { strategies } from '@/lib/mock-data'
+import { getFollowerStrategies } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 
-// ids of strategies by users who follow the signed-in user: marina, 0xdefi.
-const FOLLOWER_IDS = [strategies[4].id, strategies[2].id]
-
-export default function FollowedPage() {
-  const byFollowers = strategies.filter((s) => FOLLOWER_IDS.includes(s.id))
+export default async function FollowedPage() {
+  const byFollowers = await getFollowerStrategies()
 
   return (
     <>
