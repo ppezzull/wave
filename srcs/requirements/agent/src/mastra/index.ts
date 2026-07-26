@@ -10,15 +10,17 @@ import "dotenv/config";
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 import { composeAgent, compose, composeStream } from "./compose.agent.js";
+import { monitorAgent, retuneAgent, ensAgent, gateAgent } from "./agents.js";
 import { strategyWorkflow } from "./workflows/strategy.workflow.js";
+import { monitorWorkflow } from "./workflows/monitor.workflow.js";
 import { waveMcpServer } from "../mcp/server.js";
 import { storageConfig } from "../config/env.js";
 
 export const mastra = new Mastra({
-  agents: { composeAgent },
+  agents: { composeAgent, monitorAgent, retuneAgent, ensAgent, gateAgent },
   // Durable storage — REQUIRED for workflow suspend/resume (HITL) across restarts.
   storage: new LibSQLStore({ id: "wave-agent", url: storageConfig().url }),
-  workflows: { strategyWorkflow },
+  workflows: { strategyWorkflow, monitorWorkflow },
   // mcp__wave__* tool surface (reads only so far). Registered so Studio + the
   // HTTP server expose it; agents reach the tools via the registry.
   mcpServers: { wave: waveMcpServer },

@@ -94,3 +94,14 @@ export const stubDeltaSource = (now = Math.floor(Date.now() / 1000)): DeltaSourc
     ];
   },
 });
+
+/**
+ * Delta-source swap seam. Defaults to the stub; production calls setDeltaSource(...) at
+ * boot with the real Sepolia subgraph client (Pietro's endpoint). monitorTick and the
+ * monitor workflow both read from here, so the stub→real swap is one line.
+ */
+let _source: DeltaSource | undefined;
+export const setDeltaSource = (s: DeltaSource): void => {
+  _source = s;
+};
+export const deltaSource = (): DeltaSource => _source ?? stubDeltaSource();
