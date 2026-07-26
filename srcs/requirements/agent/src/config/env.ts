@@ -26,7 +26,14 @@ export const llmConfig = () => ({
   maxRetries: Number(process.env.LLM_MAX_RETRIES ?? 2),
 });
 
-/** LibSQL storage. `:memory:` for smoke; a real URL for durable HITL workflow runs. */
+/**
+ * LibSQL storage. Default `:memory:` is the container-safe choice — it needs no
+ * writable volume and always boots. Durability (HITL suspend/resume + memory recall
+ * surviving restarts) comes from setting `LIBSQL_URL=file:./data.db` in the DEPLOY
+ * env, once the TIER 1 named volume + `env_file` are wired (compose). Opting in there
+ * is a one-liner; defaulting to a file path here breaks the container build today
+ * (no mounted volume → unbootable / state lost each restart anyway).
+ */
 export const storageConfig = () => ({
   url: process.env.LIBSQL_URL ?? ":memory:",
 });

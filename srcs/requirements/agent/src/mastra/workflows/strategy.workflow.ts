@@ -15,12 +15,28 @@ import { compose } from "../compose.agent.js";
 // in compose()'s structuredOutput — this just routes the approved object).
 const Spec = z.unknown();
 
-// Step 1 — NL → StrategySpec proposal (the AI draft).
+// Workflow input = the NL intent + an OPTIONAL memory scope (resource=user, thread=session).
+// When resource+thread are BOTH present, compose() recalls recent turns (short-term
+// memory). Omit both for a stateless one-shot propose. (A1 — kills the "memory is dead
+// code" finding: previously compose() was called with no scope, so recall never engaged.)
+const WorkflowInput = z.object({
+  nl: z.string(),
+  resource: z.string().optional(),
+  thread: z.string().optional(),
+});
+
+// Step 1 — NL → StrategySpec proposal (the AI draft), with optional memory recall.
 const composeStep = createStep({
   id: "compose",
-  inputSchema: z.object({ nl: z.string() }),
+  inputSchema: WorkflowInput,
   outputSchema: z.object({ spec: Spec }),
-  execute: async ({ inputData }) => ({ spec: await compose(inputData.nl) }),
+  execute: async ({ inputData }) => {
+    const scope =
+      inputData.resource && inputData.thread
+        ? { resource: inputData.resource, thread: inputData.thread }
+        : undefined;
+    return { spec: await compose(inputData.nl, scope) };
+  },
 });
 
 // Step 2 — HITL approve. First run: suspend with the proposal for /review.
@@ -41,7 +57,7 @@ const approveStep = createStep({
 export const strategyWorkflow = createWorkflow({
   id: "strategy-hitl",
   description: "NL → StrategySpec proposal → human approval (HITL).",
-  inputSchema: z.object({ nl: z.string() }),
+  inputSchema: WorkflowInput,
   outputSchema: z.object({ approved: z.boolean(), spec: Spec }),
 })
   .then(composeStep)

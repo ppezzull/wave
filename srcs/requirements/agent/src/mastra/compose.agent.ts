@@ -2,8 +2,10 @@
 //
 // The LLM fills a FORM; it writes no code. Unknown block types and out-of-range
 // numbers are rejected by the Zod schema (src/schema.ts), never invented.
-// Memory is attached so the agent recalls recent strategies ("l'agente impara") —
-// scoped per (resource=user, thread=session) at call time.
+// Memory is attached so the agent RECALLS recent turns of the conversation — short-term
+// recall scoped per (resource=user, thread=session) at call time. This is NOT learning:
+// the agent doesn't adapt its behavior, instructions, or thresholds; it only re-reads
+// recent history when the caller passes a scope (compose/composeStream + the HITL workflow).
 //
 // Spec: docs/strategy/AGENT.md (composeAgent) + docs/strategy/10-10-PLAYBOOK.md §1.5.
 import { Agent } from "@mastra/core/agent";

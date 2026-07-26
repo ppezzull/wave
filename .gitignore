@@ -11,6 +11,11 @@ dist/
 generated/
 .mastra/
 
+# Mastra LibSQL durable storage (agent data.db)
+*.db
+*.db-wal
+*.db-shm
+
 # foundry run artifacts
 broadcast/
 lib/
