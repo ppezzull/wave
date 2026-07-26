@@ -12,11 +12,22 @@ import { GraphQLClient, ClientError } from "graphql-request";
 
 export type StrategyStatus = "active" | "stopped" | "removed";
 
+// Ranking + retune inputs (Pietro.md 🔢 + AGENT.md policy R1). All BigInt fields arrive as
+// decimal strings from the subgraph (Bytes/BigInt serialize to string in GraphQL JSON).
+// `committedCapital` is the returnPct denominator — sourced from Aqua's Pushed/Pulled (C2).
+// Optional because the deployed v0.0.1 spike returns none of these; coerceStrategy fills
+// zeroes so downstream math never sees `undefined`.
 export type Strategy = {
   id: string;
   programHash: string;
   ensNode: string;
   status: StrategyStatus;
+  cumulativeVolumeIn: string; // wei string
+  cumulativeVolumeOut: string; // wei string
+  committedCapital: string; // wei string (Aqua Pushed − Pulled)
+  swapCount: number;
+  lastSwapTimestamp: number; // unix secs
+  followerCount: number;
 };
 
 export type Swap = {
@@ -61,6 +72,43 @@ function coerceStatus(raw: string | null | undefined): StrategyStatus {
   return raw === "stopped" || raw === "removed" ? raw : "active";
 }
 
+// Raw GraphQL row — the ranking/aggregation fields are optional because the deployed v0.0.1
+// spike entity doesn't carry them (the v0.0.2 production subgraph does). Missing → zeroed so
+// policy.decide() and the rank math never see `undefined`.
+type StrategyRow = {
+  id: string;
+  programHash: string;
+  ensNode: string;
+  status?: string;
+  cumulativeVolumeIn?: string;
+  cumulativeVolumeOut?: string;
+  committedCapital?: string;
+  swapCount?: number;
+  lastSwapTimestamp?: string;
+  followerCount?: number;
+};
+
+function coerceStrategy(s: StrategyRow): Strategy {
+  return {
+    id: s.id,
+    programHash: s.programHash,
+    ensNode: s.ensNode,
+    status: coerceStatus(s.status),
+    cumulativeVolumeIn: s.cumulativeVolumeIn ?? "0",
+    cumulativeVolumeOut: s.cumulativeVolumeOut ?? "0",
+    committedCapital: s.committedCapital ?? "0",
+    swapCount: s.swapCount ?? 0,
+    lastSwapTimestamp: Number(s.lastSwapTimestamp ?? "0"),
+    followerCount: s.followerCount ?? 0,
+  };
+}
+
+// Field list shared by getStrategy/listStrategies. v0.0.2-only fields (committedCapital etc.)
+// are queried unconditionally; on the v0.0.1 spike the whole `strategies` entity is absent and
+// isEntityNotDeployed catches it before these field names matter.
+const STRATEGY_FIELDS =
+  "id programHash ensNode status cumulativeVolumeIn cumulativeVolumeOut committedCapital swapCount lastSwapTimestamp followerCount";
+
 // The subgraph stores Strategy.id as Bytes! (a bytes32), which serializes to
 // lowercase 0x-hex. A caller passing UPPERCASE hex (0xABC…) or a no-0x prefix
 // id (ABC…) gets null/empty back silently — NOT a ClientError — so the
@@ -77,16 +125,10 @@ export const subgraph = {
     const normalizedId = normalizeId(id);
     try {
       const data = await client.request<{
-        strategy?: { id: string; programHash: string; ensNode: string; status?: string };
-      }>(`query($id: ID!) { strategy(id: $id) { id programHash ensNode status } }`, { id: normalizedId });
+        strategy?: StrategyRow;
+      }>(`query($id: ID!) { strategy(id: $id) { ${STRATEGY_FIELDS} } }`, { id: normalizedId });
       if (!data.strategy) throw new Error(`strategy not found: ${id}`);
-      const s = data.strategy;
-      return {
-        id: s.id,
-        programHash: s.programHash,
-        ensNode: s.ensNode,
-        status: coerceStatus(s.status),
-      };
+      return coerceStrategy(data.strategy);
     } catch (error) {
       if (isEntityNotDeployed(error)) throw new Error(`strategy not found: ${id}`);
       throw error;
@@ -99,21 +141,16 @@ export const subgraph = {
     // error on a not-yet-deployed entity. Two query shapes, same result.
     const query = status
       ? `query($where: Strategy_filter, $first: Int) {
-           strategies(first: $first, where: $where) { id programHash ensNode status }
+           strategies(first: $first, where: $where) { ${STRATEGY_FIELDS} }
          }`
       : `query($first: Int) {
-           strategies(first: $first) { id programHash ensNode status }
+           strategies(first: $first) { ${STRATEGY_FIELDS} }
          }`;
     try {
       const data = await client.request<{
-        strategies?: Array<{ id: string; programHash: string; ensNode: string; status?: string }>;
+        strategies?: Array<StrategyRow>;
       }>(query, { ...(status ? { where: { status } } : {}), first: 1000 });
-      return (data.strategies ?? []).map((s) => ({
-        id: s.id,
-        programHash: s.programHash,
-        ensNode: s.ensNode,
-        status: coerceStatus(s.status),
-      }));
+      return (data.strategies ?? []).map(coerceStrategy);
     } catch (error) {
       if (isEntityNotDeployed(error)) return []; // entity not deployed yet → no strategies
       throw error;

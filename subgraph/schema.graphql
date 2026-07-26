@@ -32,16 +32,19 @@ type Strategy @entity {
 
   # Ranking aggregates (Pietro.md 🔢 — the UI computes rank from these raw values):
   #   rank = returnPct × recencyDecay × (1 + log2(1 + followers))
+  #   returnPct = (realized + unrealized PnL) ÷ committedCapital
   # Volumes are BigInt, NOT BigDecimal: graph-node's BigDecimal is decimal128 (capped at 34 sig
   # figs), so every .plus() normalizes and drops low-order wei once cumulative > ~10^34. BigInt
   # has no such cap. The UI converts to BigDecimal at read time only when it needs a ratio.
-  #
-  # ⚠️ D2 (contract-layer gap): `returnPct`'s DENOMINATOR is committed capital, which NO event
-  # emits (aqua.ship takes committed amounts but logs nothing). So the numerator (these volumes)
-  # is indexed but the denominator is undefined until a contract change — the formula cannot sort
-  # as-is. See docs/strategy/SUBGRAPH-CONTRACT-GAPS.md (C2). There is no `committedCapital` field.
-  cumulativeVolumeIn: BigInt! # sum of Swap.amountIn  (returnPct numerator proxy)
-  cumulativeVolumeOut: BigInt! # sum of Swap.amountOut (returnPct numerator proxy)
+  cumulativeVolumeIn: BigInt! # sum of Swap.amountIn   (returnPct numerator proxy)
+  cumulativeVolumeOut: BigInt! # sum of Swap.amountOut  (returnPct numerator proxy)
+  # committedCapital = returnPct's DENOMINATOR. Sourced from Aqua itself (the authoritative
+  # 1inch balance-management protocol), NOT a number we declare: Aqua emits Pushed(amount) on
+  # every ship/push and Pulled(amount) on every withdrawal, keyed by strategyHash == Strategy.id
+  # (verified equal: test/helpers/AquaSwapVMHelper.sol:357 asserts strategyHash == orderHash).
+  # Maintained as a running balance: handlePushed adds, handlePulled subtracts — so it stays
+  # correct as capital enters and leaves. This resolved the C2 gap (no contract change needed).
+  committedCapital: BigInt! # running maker-committed notional (Aqua Pushed − Pulled)
   # L1 (listing threshold — CONSUMER-LAYER rule, not a field): a strategy RANKS once it has
   # `swapCount >= 3` AND `now - lastSwapTimestamp >= 3600` (seconds); before that it is listed but
   # unranked. graph-node has no derived/computed boolean that stays in sync without a block handler,
