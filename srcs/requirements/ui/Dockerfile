@@ -28,6 +28,9 @@ COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 USER node
 EXPOSE 3000
+# 127.0.0.1 (not localhost): busybox resolves localhost → ::1 (IPv6) first, but
+# Next.js standalone binds HOSTNAME=0.0.0.0 (IPv4 only) → a localhost probe fails
+# with "Connection refused" even though the app serves fine. Pin IPv4.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 CMD ["node", "server.js"]
