@@ -27,6 +27,20 @@ export const classifyAction = (a: { type: ActionType }): "autonomous" | "hitl" |
   return "hitl"; // stop | remove | askHuman
 };
 
+/**
+ * Per-action severity for surfacing ONE verdict per tick when monitorTick returns many
+ * (one per strategy). HITL actions preempt a retune; within HITL, stop > remove > askHuman
+ * mirrors the policy precedence (S3/S1 > M1 > E*). Without this, `actions[0]` silently
+ * drops an urgent stop behind a benign retune on a multi-strategy tick.
+ */
+export const severityRank: Record<ActionType, number> = {
+  noop: 0,
+  retune: 1,
+  askHuman: 2,
+  remove: 3,
+  stop: 4,
+};
+
 // Step 1 — monitor: poll the delta source → decide → evidence.log → the verdict.
 const monitorStep = createStep({
   id: "monitor",
@@ -34,7 +48,18 @@ const monitorStep = createStep({
   outputSchema: z.object({ action: ActionZ }),
   execute: async () => {
     const actions = await monitorTick(deltaSource());
-    const action = actions[0] ?? { type: "noop", reason: "no delta" };
+    if (actions.length === 0) return { action: { type: "noop" as const, reason: "no delta" } };
+    // Surface the most severe verdict (HITL preempts retune); log the deferred ones so a
+    // multi-strategy tick never silently drops an urgent stop behind a benign retune.
+    const ordered = [...actions].sort((a, b) => severityRank[b.type] - severityRank[a.type]);
+    const action = ordered[0]!; // ordered is non-empty (early-return above)
+    const deferred = ordered.slice(1);
+    if (deferred.length > 0) {
+      console.warn(
+        `[monitor] ${deferred.length} action(s) deferred this tick: ` +
+          deferred.map((d) => `${d.type} — ${d.reason}`).join(" | "),
+      );
+    }
     return { action };
   },
 });
