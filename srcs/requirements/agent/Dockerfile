@@ -16,7 +16,10 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3002
 # Self-contained: the build output carries its own node_modules + package.json.
 COPY --from=build /app/.mastra/output ./
-USER node                    # run as non-root
+# Run as non-root. NOTE: the comment MUST be on its own line — Docker parses an
+# inline comment after USER as part of the username ("node  # run as non-root"),
+# which then fails to resolve at `docker run` (exit 128, container stuck in "created").
+USER node
 EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -qO- http://localhost:3002/health || exit 1

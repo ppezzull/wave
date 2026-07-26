@@ -11,6 +11,11 @@ RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# NEXT_PUBLIC_* vars are inlined into the client bundle at BUILD time (not
+# runtime), so they must be present during `next build`. Passed as a build arg
+# from the compose (${NEXT_PUBLIC_PRIVY_APP_ID}).
+ARG NEXT_PUBLIC_PRIVY_APP_ID
+ENV NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID
 # typescript.ignoreBuildErrors=true in next.config — build won't fail on TS errors.
 RUN pnpm run build
 
