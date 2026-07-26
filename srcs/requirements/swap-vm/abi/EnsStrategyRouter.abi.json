@@ -65,14 +65,26 @@
     "name": "announceStrategy",
     "inputs": [
       {
-        "name": "strategyId",
-        "type": "bytes32",
-        "internalType": "bytes32"
-      },
-      {
-        "name": "program",
-        "type": "bytes",
-        "internalType": "bytes"
+        "name": "order",
+        "type": "tuple",
+        "internalType": "struct ISwapVM.Order",
+        "components": [
+          {
+            "name": "maker",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "traits",
+            "type": "uint256",
+            "internalType": "MakerTraits"
+          },
+          {
+            "name": "data",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
       },
       {
         "name": "ensNode",
