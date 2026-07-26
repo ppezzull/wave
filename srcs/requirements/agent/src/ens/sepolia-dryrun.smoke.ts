@@ -8,7 +8,7 @@
 import "dotenv/config";
 import { ensConfig } from "./config.js";
 import { registerStrategy } from "./register.js";
-import { resolveVerify } from "./resolveVerify.js";
+import { resolveVerify, resolveVerifyLive } from "./resolveVerify.js";
 import { ens } from "../clients/ens.js";
 
 async function main() {
@@ -17,7 +17,7 @@ async function main() {
   const subname = `${label}.${cfg.parentName}`;
   // FIXTURE — production reads the real programHash from the compiler / StrategyDeployed.
   const programHash = `0x${"ab".repeat(32)}` as `0x${string}`;
-  const strategyId = `0x${"11".repeat(32)}`;
+  const strategyId = `0x${"11".repeat(32)}` as `0x${string}`;
   const description = "Market-make ETH/USDC 50/50; halt if ETH/USD oracle deviates >1.5%.";
 
   console.log(`ENS dry-run (Sepolia) — parent ${cfg.parentName}, subname ${subname}`);
@@ -43,6 +43,21 @@ async function main() {
   } catch (e) {
     console.log("❌ resolveVerify ABORTED:", (e as Error).message);
     process.exitCode = 1;
+  }
+
+  console.log(
+    "\n2b) resolveVerifyLive (reads the on-chain StrategyDeployed.programHash itself)…",
+  );
+  try {
+    const vl = await resolveVerifyLive(subname, strategyId);
+    console.log("✅ resolveVerifyLive MATCH:", JSON.stringify(vl));
+  } catch (e) {
+    // Expected when announceStrategy() has not been called on-chain for this strategyId:
+    // the live source has nothing to read. Honest signal, not a hard failure.
+    console.log("ℹ️  resolveVerifyLive:", (e as Error).message);
+    console.log(
+      "    (call router.announceStrategy(strategyId, program, ensNode) on-chain to populate the live source)",
+    );
   }
 
   console.log("\n3) discover (the EnsDiscovery chip payload Pietro renders)…");
