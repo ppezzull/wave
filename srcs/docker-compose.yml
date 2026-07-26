@@ -1,116 +1,79 @@
-# ETHGlobal Lisboa 2026 — Strategy Compiler
-# Inception-style orchestration. Each component lives under ./requirements/<svc>/
-# with its own Dockerfile + conf/ + tools/. All wired to a shared network.
+# wave — Dokploy deployment compose (ui + agent only).
 #
-# NOTE: this is a placeholder scaffold (build kickoff = Fri Jul 24). The
-# build contexts, ports, and env are first-pass guesses — fill them during
-# the build per docs/strategy/10-10-PLAYBOOK.md.
+# Trimmed from the hackathon scaffold: swap-vm (Foundry, run-once build/deploy
+# harness, restart: "no"), compiler, and subgraph (needs ipfs+postgres infra
+# that is still placeholder) are NOT web-facing and are excluded here — they
+# remain in git history for local dev. This file deploys the two public sites:
+#   - ui     → wave.craftale.it    (Next.js, container port 3000 → host 3005)
+#   - agent  → mastra.craftale.it  (Mastra HTTP server, container port 3002 → host 4001)
 #
-# Quick start (once Dockerfiles are filled in):
-#   cd srcs && docker compose up --build
-
+# DELIVERY PATH (mirrors the CraftLead Frontend compose on this host):
+# craftale.it is fronted by Cloudflare and delivered via a cloudflared TUNNEL
+# → the service's published HOST port (VPS :80 is Apache, not Traefik, so
+# Dokploy Traefik is NOT the path for *.craftale.it). The required tunnel
+# ingress rules (added on the VPS cloudflared config, same as craftlead):
+#   wave.craftale.it   → http://localhost:3005
+#   mastra.craftale.it → http://localhost:4001
+#
+# HOST PORT CHOICE: mastra publishes 4001, NOT 4000 — host 4000 is already
+# litellm-proxy (ai.assistai.it). wave uses 3005 (free; matches request).
+#
+# Secrets: every ${VAR} is injected by Dokploy's compose environment
+# (encrypted at rest in Dokploy) — none are committed. The original
+# `env_file: ../.env` is dropped because `.env` is gitignored and therefore
+# absent in Dokploy's clone.
 services:
-  # ────────────────────────────────────────────────────────────────
-  # swap-vm — Solidity/Foundry project (1inch SwapVM fork + custom opcodes)
-  # Dev container for compiling/testing/deploying contracts. The contracts
-  # are NOT a long-running service; this is a build+test harness + a
-  # forge-script deployer. The anvil fork the demo targets can run here too.
-  # ────────────────────────────────────────────────────────────────
-  swap-vm:
-    build:
-      context: ./requirements/swap-vm
-      dockerfile: Dockerfile
-    container_name: swap-vm
-    volumes:
-      - ./requirements/swap-vm:/workspace        # live source mount
-      - swapvm_out:/workspace/out                 # persist build cache
-    networks:
-      - strategy-compiler
-    restart: "no"                                 # run-once build/test/deploy
-    env_file: [ ../.env ]                          # global root .env (OPS_* deploy vars)
-
-  # ────────────────────────────────────────────────────────────────
-  # compiler — deterministic TS compiler (NL → AST → IR → SwapVM bytecode)
-  # Exposes POST /compile + /simulate over HTTP/SSE for the UI.
-  # ────────────────────────────────────────────────────────────────
-  compiler:
-    build:
-      context: ./requirements/compiler
-      dockerfile: Dockerfile
-    container_name: compiler
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./requirements/compiler:/app
-    networks:
-      - strategy-compiler
-    depends_on:
-      - swap-vm
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=development
-
-  # ────────────────────────────────────────────────────────────────
-  # ui — Next.js (App Router, SSR) split-screen + safety card
-  # Server components hold the LLM call + API keys; client renders panes.
-  # ────────────────────────────────────────────────────────────────
   ui:
     build:
       context: ./requirements/ui
       dockerfile: Dockerfile
-    container_name: ui
+    restart: unless-stopped
     ports:
-      - "3000:3000"
-    volumes:
-      - ./requirements/ui:/app
+      - "3005:3000"
     networks:
-      - strategy-compiler
-    depends_on:
-      - compiler
-    restart: unless-stopped
+      - dokploy-network
     environment:
-      - NODE_ENV=development
-      - COMPILER_URL=http://compiler:3001
+      - NODE_ENV=production
+      # Server-side: the Next.js server reaches the agent over the shared network.
+      - AGENT_URL=http://agent:3002
+      - COMPILER_URL=${COMPILER_URL:-}
 
-  # ────────────────────────────────────────────────────────────────
-  # graph-node — indexes SwapVM Swapped events (first-party subgraph)
-  # Replaces the Messari dependency; the retune trigger consumes its deltas.
-  # Placeholder: real graph-node needs ipfs + postgres; wire during build.
-  # ────────────────────────────────────────────────────────────────
-  subgraph:
-    build:
-      context: ./requirements/subgraph
-      dockerfile: Dockerfile
-    container_name: subgraph
-    volumes:
-      - ./requirements/subgraph:/subgraph
-    networks:
-      - strategy-compiler
-    restart: unless-stopped
-    # depends_on: [ ipfs, postgres ]   # add graph-node infra during build
-
-  # ────────────────────────────────────────────────────────────────
-  # agent — viem + @1inch/aqua-sdk runner (ship/dock/monitor, ENS resolve)
-  # Polls the subgraph for deltas and fires dock()+recompile+ship().
-  # ────────────────────────────────────────────────────────────────
   agent:
     build:
       context: ./requirements/agent
       dockerfile: Dockerfile
-    container_name: agent
-    volumes:
-      - ./requirements/agent:/app
-    networks:
-      - strategy-compiler
-    depends_on:
-      - subgraph
-      - swap-vm
     restart: unless-stopped
-    env_file: [ ../.env ]              # global root .env (RPC, wallet keys, ENS)
+    ports:
+      - "4001:3002"
+    networks:
+      - dokploy-network
+    environment:
+      # LLM (craftshost OpenAI-compat gateway, Langfuse-traced)
+      - ZAI_BASE_URL=${ZAI_BASE_URL}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+      - ZAI_PUBLIC_KEY=${ZAI_PUBLIC_KEY}
+      - ZAI_MODEL=${ZAI_MODEL}
+      - LLM_TIMEOUT_MS=${LLM_TIMEOUT_MS:-90000}
+      - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
+      # Storage + HTTP port (Dockerfile also sets PORT=3002; repeated for clarity)
+      - LIBSQL_URL=${LIBSQL_URL:-:memory:}
+      - PORT=3002
+      # Sepolia settlement
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
+      - SEPOLIA_PRIVATE_KEY=${SEPOLIA_PRIVATE_KEY}
+      - MAKER_PRIVATE_KEY=${MAKER_PRIVATE_KEY}
+      - TAKER_PRIVATE_KEY=${TAKER_PRIVATE_KEY}
+      - PS_NETWORK=${PS_NETWORK:-sepolia}
+      - OPS_CHAIN_ID=${OPS_CHAIN_ID:-11155111}
+      - OPS_SWAP_VM_ROUTER_NAME=${OPS_SWAP_VM_ROUTER_NAME:-Wave}
+      - OPS_SWAP_VM_ROUTER_VERSION=${OPS_SWAP_VM_ROUTER_VERSION:-1}
+      - OPS_AQUA_ADDRESS=${OPS_AQUA_ADDRESS}
+      - AQUA_ADDRESS=${AQUA_ADDRESS}
+      - ROUTER_ADDRESS=${ROUTER_ADDRESS}
+      - ENS_STRATEGY_ROUTER=${ROUTER_ADDRESS}
+      - WAVE_SUBGRAPH_URL=${WAVE_SUBGRAPH_URL}
+      - AGENT_ENDPOINT_MCP=http://agent:3002
 
 networks:
-  strategy-compiler:
-    driver: bridge
-
-volumes:
-  swapvm_out:
+  dokploy-network:
+    external: true
