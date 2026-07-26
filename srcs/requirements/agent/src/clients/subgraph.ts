@@ -1,7 +1,7 @@
 // The Graph subgraph client (strategy + swap data). WIRED to the live Studio
 // endpoint (docs/spikes/GRAPH-NODE-SPIKE.md — path A confirmed; subgraph `wave`).
 //
-// v0.0.3 is the target subgraph: THREE data sources (EnsStrategyRouter + ENS
+// v0.0.4 is the live subgraph: THREE data sources (EnsStrategyRouter + ENS
 // resolver + Aqua). ⚠️ MUST BE DEPLOYED TO STUDIO — see the note at SUBGRAPH_URL.
 // v0.0.2 (two data sources) is the previous production deploy (EnsStrategyRouter
 // + ENS resolver) → Strategy/Swap/Follow/Follower entities exist and are
@@ -43,12 +43,13 @@ export type Swap = {
 
 // Studio endpoint (path A).
 //
-// ⚠️ PINNED TO v0.0.3, WHICH MUST BE DEPLOYED BEFORE THE AGENT RUNS.
+// Pinned to v0.0.4 — LIVE and verified (1 strategy indexed, real programHash,
+// committedCapital populated). v0.0.3 indexed the router that the #49 redeploy killed.
 // STRATEGY_FIELDS queries `committedCapital` unconditionally (added with the Aqua
 // data source, PR #41). v0.0.2 does NOT have that field, and isEntityNotDeployed()
 // only swallows a missing ENTITY — a missing FIELD reads "Type `Strategy` has no
 // field …" and PROPAGATES. So pointing at v0.0.2 would throw on every read.
-// Deploy v0.0.3 from subgraph/ (`pnpm deploy:studio`), then this just works.
+// The `…/wave/version/latest` alias also resolves here if you prefer not to pin.
 //
 // (historical: v0.0.2 was two data
 // sources: EnsStrategyRouter + ENS resolver → Strategy/Swap/Follow/Follower
@@ -56,7 +57,7 @@ export type Swap = {
 // per-env for self-hosted graph-node (path B) or to pin an older version.
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.3";
+  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.4";
 
 const client = new GraphQLClient(SUBGRAPH_URL);
 
