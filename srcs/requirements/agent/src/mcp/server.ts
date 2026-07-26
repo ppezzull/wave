@@ -9,6 +9,7 @@
 // Spec: docs/strategy/AGENT.md §"The MCP tool surface".
 import { MCPServer } from "@mastra/mcp";
 import * as reads from "./reads.js";
+import * as writes from "./writes.js";
 
 export const waveMcpServer = new MCPServer({
   id: "wave",
@@ -24,5 +25,8 @@ export const waveMcpServer = new MCPServer({
     quote: reads.quote,
     resolveENS: reads.resolveENS,
     getTextRecord: reads.getTextRecord,
+    // Writes — autonomous ENS (ensAgent), never HITL-gated. Per AGENT.md authz matrix.
+    setText: writes.setText,
+    registerSubname: writes.registerSubname,
   },
 });
