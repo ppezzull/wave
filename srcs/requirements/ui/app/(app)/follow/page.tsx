@@ -1,14 +1,10 @@
 import Link from 'next/link'
-import { strategies } from '@/lib/mock-data'
+import { getFollowedStrategies } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 
-// ids of the strategies the signed-in user (alice) follows:
-// alice's momentum, quant's breakout, vitalik's range.
-const FOLLOWED_IDS = [strategies[0].id, strategies[3].id, strategies[1].id]
-
-export default function FollowPage() {
-  const followed = strategies.filter((s) => FOLLOWED_IDS.includes(s.id))
+export default async function FollowPage() {
+  const followed = await getFollowedStrategies()
 
   return (
     <>

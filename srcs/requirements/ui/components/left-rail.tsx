@@ -17,19 +17,23 @@ import {
 } from 'lucide-react'
 import { useDrawer } from './drawer-context'
 import { ThemeToggle } from './theme-toggle'
-import { currentUser } from '@/lib/mock-data'
+import { AccountChip } from './account-chip'
+import type { CurrentUser } from './app-wrapper'
 
 const LISBOA =
   'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
 
-const navItems = [
-  { label: 'Explore', href: '/explore', icon: Compass, id: 'explore' },
-  { label: 'Follow', href: '/follow', icon: UserPlus, id: 'follow' },
-  { label: 'Followed', href: '/followed', icon: Sparkles, id: 'followed' },
-  { label: 'Chat', href: '/chat', icon: MessageSquare, id: 'chat' },
-  { label: 'Profile', href: `/u/${currentUser.handle}`, icon: User, id: 'profile' },
-  { label: 'Settings', href: '/settings', icon: Settings, id: 'settings' },
-]
+function navItems(handle: string) {
+  return [
+    { label: 'Explore', href: '/explore', icon: Compass, id: 'explore' },
+    { label: 'Compose', href: '/compose', icon: Feather, id: 'compose' },
+    { label: 'Follow', href: '/follow', icon: UserPlus, id: 'follow' },
+    { label: 'Followed', href: '/followed', icon: Sparkles, id: 'followed' },
+    { label: 'Chat', href: '/chat', icon: MessageSquare, id: 'chat' },
+    { label: 'Profile', href: `/u/${handle}`, icon: User, id: 'profile' },
+    { label: 'Settings', href: '/settings', icon: Settings, id: 'settings' },
+  ]
+}
 
 function isNavActive(href: string, pathname: string): boolean {
   if (href === '/explore') return pathname === '/explore' || pathname.startsWith('/s/')
@@ -38,7 +42,7 @@ function isNavActive(href: string, pathname: string): boolean {
 }
 
 interface NavItemRowProps {
-  item: (typeof navItems)[0]
+  item: ReturnType<typeof navItems>[0]
   active: boolean
   collapsed?: boolean
   onClick?: () => void
@@ -76,14 +80,17 @@ function NavItemRow({ item, active, collapsed = false, onClick }: NavItemRowProp
 }
 
 function RailContent({
+  currentUser,
   collapsed = false,
   onNavClick,
 }: {
+  currentUser: CurrentUser
   collapsed?: boolean
   onNavClick?: () => void
 }) {
   const pathname = usePathname()
   const { openCreate } = useDrawer()
+  const items = navItems(currentUser.handle)
 
   return (
     <div className="flex flex-col h-full py-3">
@@ -115,7 +122,7 @@ function RailContent({
         className={`flex flex-col gap-1 ${collapsed ? 'px-2 items-center' : 'px-2'}`}
         aria-label="Main navigation"
       >
-        {navItems.map((item) => (
+        {items.map((item) => (
           <NavItemRow
             key={item.id}
             item={item}
@@ -156,47 +163,17 @@ function RailContent({
         <ThemeToggle collapsed={collapsed} />
       </div>
 
-      {/* Account chip */}
-      <div className={collapsed ? 'flex justify-center px-2' : 'px-3'}>
-        <Link
-          href={`/u/${currentUser.handle}`}
-          onClick={onNavClick}
-          className={`flex items-center rounded-full hover:bg-wave-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wave-teal ${
-            collapsed ? 'justify-center p-1.5' : 'gap-3 p-2.5'
-          }`}
-          aria-label={`Your profile, ${currentUser.name}`}
-        >
-          <div
-            className="w-10 h-10 rounded-full shrink-0 overflow-hidden"
-            style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-            aria-hidden="true"
-          >
-            {currentUser.avatarUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={currentUser.avatarUrl || '/placeholder.svg'}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-          {!collapsed && (
-            <div className="flex flex-col min-w-0 leading-tight">
-              <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
-                {currentUser.name}
-              </span>
-              <span className="font-mono text-[13px] text-wave-muted truncate">
-                {`${currentUser.walletAddress.slice(0, 6)}...${currentUser.walletAddress.slice(-4)}`}
-              </span>
-            </div>
-          )}
-        </Link>
-      </div>
+      {/* Account chip — Privy-connected wallet, or the server fallback */}
+      <AccountChip
+        currentUser={currentUser}
+        collapsed={collapsed}
+        onNavClick={onNavClick}
+      />
     </div>
   )
 }
 
-export function LeftRail() {
+export function LeftRail({ currentUser }: { currentUser: CurrentUser }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
@@ -206,7 +183,7 @@ export function LeftRail() {
         className="hidden xl:flex sticky top-0 h-screen w-[275px] shrink-0 flex-col bg-wave-bg"
         aria-label="Navigation sidebar"
       >
-        <RailContent collapsed={false} />
+        <RailContent currentUser={currentUser} collapsed={false} />
       </aside>
 
       {/* Tablet/laptop rail: icon-only */}
@@ -214,7 +191,7 @@ export function LeftRail() {
         className="hidden md:flex xl:hidden sticky top-0 h-screen w-[88px] shrink-0 flex-col bg-wave-bg"
         aria-label="Navigation sidebar"
       >
-        <RailContent collapsed={true} />
+        <RailContent currentUser={currentUser} collapsed={true} />
       </aside>
 
       {/* Mobile: top header bar with burger + logo */}
@@ -265,6 +242,7 @@ export function LeftRail() {
               <X size={18} aria-hidden="true" />
             </button>
             <RailContent
+              currentUser={currentUser}
               collapsed={false}
               onNavClick={() => setMobileOpen(false)}
             />

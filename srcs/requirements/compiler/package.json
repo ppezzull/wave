@@ -4,10 +4,21 @@
   "private": true,
   "type": "module",
   "description": "wave deterministic strategy compiler — Zod AST → canonical order → IR → SwapVM bytecode (P1/Flaviano). ast.ts frozen at specVersion 1.",
+  "exports": {
+    ".": "./src/emit.ts",
+    "./ast": "./src/ast.ts",
+    "./canonical": "./src/canonical.ts",
+    "./rules": "./src/rules.ts",
+    "./ir": "./src/ir.ts",
+    "./emit": "./src/emit.ts",
+    "./disassemble": "./src/disassemble.ts",
+    "./slots": "./src/slots.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "emit": "tsx src/cli-emit.ts"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
@@ -15,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

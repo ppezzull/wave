@@ -1,14 +1,18 @@
 import Link from 'next/link'
-import { strategies, strategyById } from '@/lib/mock-data'
+import { getStrategy, listStrategyIds } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 import { SafetyCardDetail } from '@/components/safety-card-detail'
 import { BytecodePane } from '@/components/bytecode-pane'
 import { HashVerify } from '@/components/hash-verify'
 import { RetuneHistory } from '@/components/retune-history'
+import { StreamNotifications } from '@/components/stream-notifications'
 
-export function generateStaticParams() {
-  return strategies.map((s) => ({ id: s.id }))
+export const dynamic = 'force-dynamic'
+export const dynamicParams = true
+
+export async function generateStaticParams() {
+  return (await listStrategyIds()).map((id) => ({ id }))
 }
 
 interface Props {
@@ -17,7 +21,7 @@ interface Props {
 
 export default async function StrategyDetailPage({ params }: Props) {
   const { id } = await params
-  const strategy = strategyById(id)
+  const strategy = await getStrategy(id)
 
   if (!strategy) {
     return (
@@ -46,18 +50,14 @@ export default async function StrategyDetailPage({ params }: Props) {
     <>
       <div className="flex-1 px-4 py-6">
         <div className="w-full flex flex-col gap-6">
-          {/* Expanded strategy card */}
+          <StreamNotifications />
           <StrategyCard strategy={strategy} isDetailed />
 
-          {/* Intent — the oracle band lives in the ENS agent-context record,
-              i.e. the strategy's intent is committed on-chain. */}
           <div
             className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[12px] px-4 py-3"
             style={{ background: '#16181C', border: '1px solid #2F3336' }}
           >
-            <span className="font-sans text-[12px] text-wave-muted">
-              Oracle band
-            </span>
+            <span className="font-sans text-[12px] text-wave-muted">Oracle band</span>
             <span className="font-sans text-[11px] text-wave-muted">
               (ENS intent record)
             </span>
@@ -66,20 +66,12 @@ export default async function StrategyDetailPage({ params }: Props) {
             </span>
           </div>
 
-          {/* Bytecode pane */}
           <BytecodePane strategy={strategy} />
-
-          {/* Safety card */}
           <SafetyCardDetail strategy={strategy} />
-
-          {/* Hash verification */}
           <HashVerify strategy={strategy} />
-
-          {/* Retune history */}
           <RetuneHistory strategy={strategy} />
         </div>
       </div>
-
       <Footer />
     </>
   )

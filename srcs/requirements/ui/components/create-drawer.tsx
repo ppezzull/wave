@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Send, CheckCircle2, Minus, GripHorizontal, MessageSquare } from 'lucide-react'
 import { useDrawer } from './drawer-context'
+import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
+import { StreamNotifications } from './stream-notifications'
 
 const LISBOA =
   'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
@@ -148,7 +150,54 @@ const MIN_W = 340
 const MIN_H = 420
 const PANEL_MARGIN = 24
 
-export function CreateDrawer() {
+// Live compose beat: render the StrategySpec as it streams in (the "watch the AI
+// fill the form" affordance). Fields that haven't arrived yet render as muted
+// placeholders — never invented. `partial` is incomplete by design until `spec`.
+function LiveSpecCard({ spec, done }: { spec: StrategySpec | null; done: boolean }) {
+  const pair = spec?.pair
+  const size = spec?.size
+  const blocks = spec?.blocks ?? []
+  const token0 = pair?.token0
+  const token1 = pair?.token1
+  // Truncate 0x addresses for readability; placeholder when absent.
+  const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—')
+  return (
+    <div
+      className="rounded-[14px] p-4 bg-wave-surface border border-wave-border"
+      role="status"
+      aria-label={done ? 'Strategy spec compiled' : 'Strategy spec compiling'}
+    >
+      <p className="font-sans text-[13px] font-bold text-wave-text mb-3">
+        {done ? 'Compiled spec' : 'Compiling spec…'}
+      </p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[12px]">
+        <div className="text-wave-muted">token0</div>
+        <div className="text-wave-text truncate">{short(token0)}</div>
+        <div className="text-wave-muted">token1</div>
+        <div className="text-wave-text truncate">{short(token1)}</div>
+        <div className="text-wave-muted">size0</div>
+        <div className="text-wave-text">{size?.amount0 ?? '—'}</div>
+        <div className="text-wave-muted">size1</div>
+        <div className="text-wave-text">{size?.amount1 ?? '—'}</div>
+        <div className="text-wave-muted">blocks</div>
+        <div className="text-wave-text">
+          {blocks.length ? blocks.map((b) => b.type).join(', ') : '—'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// One turn of the live compose conversation.
+interface LiveMessage {
+  id: string
+  role: 'agent' | 'user'
+  // text bubble OR a live spec card (progressive) OR the safety card + ship CTA.
+  content?: string
+  kind?: 'text' | 'spec' | 'ship'
+}
+
+export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const { state, close, minimize, restore } = useDrawer()
   const { open, minimized, forkSource, agentStrategy } = state
 
@@ -157,6 +206,10 @@ export function CreateDrawer() {
   const [isDesktop, setIsDesktop] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // Live compose stream (live mode only). Mock mode replays DEFAULT_MESSAGES.
+  const compose = useComposeStream()
+  const [liveMessages, setLiveMessages] = useState<LiveMessage[]>([])
 
   // Track viewport so the floating window's fixed size/position only applies on
   // desktop. On mobile the panel is a full-width docked sheet.
@@ -223,7 +276,11 @@ export function CreateDrawer() {
       ]
     : null
 
-  const messages: Message[] = forkSource
+  // Canned mock/demo messages. Empty in live mode (no fork/agent replay) so the
+  // live compose thread owns the panel; the live branch below renders it.
+  const messages: Message[] = !useMock && !forkSource && !agentStrategy
+    ? []
+    : forkSource
     ? [
         {
           id: 'a1',
@@ -350,7 +407,19 @@ export function CreateDrawer() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
+    // Byte-for-byte: do not trim — description IS the compiler input.
+    const intent = inputValue
     setInputValue('')
+    // Mock mode: the canned demo conversation is already on screen; sending is
+    // a no-op (the input is decorative in the mock). Live mode: drive the real
+    // compose stream — the agent parses the intent to a bounded StrategySpec.
+    if (useMock || intent.length === 0) return
+    setLiveMessages([
+      { id: `u-${Date.now()}`, role: 'user', kind: 'text', content: intent },
+      { id: `a-compile-${Date.now()}`, role: 'agent', kind: 'text', content: 'Compiling…' },
+      { id: `a-spec-${Date.now()}`, role: 'agent', kind: 'spec' },
+    ])
+    void compose.compose(intent)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -448,6 +517,10 @@ export function CreateDrawer() {
         </button>
       </div>
 
+      <div className="px-3 pt-3 shrink-0">
+        <StreamNotifications enabled={!useMock} />
+      </div>
+
       {/* Message thread */}
       <div
         ref={threadRef}
@@ -516,9 +589,92 @@ export function CreateDrawer() {
           )
         })}
 
-        {/* Human-in-the-loop approval scenario (not shown when replaying an
-            already-shipped pool agent conversation) */}
-        {!agentStrategy && (
+        {/* Live compose stream (live mode only). Mock mode uses the canned
+            messages above + the HITL approval demo below. */}
+        {!useMock && !forkSource && !agentStrategy && liveMessages.length === 0 && (
+          <div className="flex flex-col max-w-[85%] self-start">
+            <div
+              className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed bg-wave-surface"
+              style={{ borderRadius: '12px 12px 12px 4px' }}
+            >
+              Describe your trading strategy in plain English. I&apos;ll compile
+              it to a bounded spec, check it for safety, and ship it on-chain.
+            </div>
+          </div>
+        )}
+        {!useMock && liveMessages.map((msg) => {
+          if (msg.kind === 'spec') {
+            return (
+              <div key={msg.id} className="max-w-[85%]">
+                <LiveSpecCard spec={compose.partial ?? compose.spec} done={!!compose.spec} />
+                {compose.isStreaming && (
+                  <p className="font-sans text-[11px] text-wave-muted mt-1 pl-1">
+                    filling the form…
+                  </p>
+                )}
+              </div>
+            )
+          }
+          const isAgent = msg.role === 'agent'
+          return (
+            <div
+              key={msg.id}
+              className={`flex flex-col max-w-[85%] ${isAgent ? 'self-start' : 'self-end'}`}
+            >
+              <div
+                className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed"
+                style={{
+                  background: isAgent ? undefined : 'rgba(42,157,143,0.18)',
+                  borderRadius: isAgent ? '12px 12px 12px 4px' : '12px 12px 4px 12px',
+                }}
+              >
+                {msg.content}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Live: once the spec lands, show the safety card + ship CTA (the
+            compiled spec IS the form the agent filled; ship is the demo beat). */}
+        {!useMock && compose.spec && (
+          <>
+            <div className="max-w-[85%]">
+              <InlineSafetyCard />
+            </div>
+            {compose.error ? (
+              <p className="font-sans text-[13px]" style={{ color: '#E5484D' }}>
+                {compose.error}
+              </p>
+            ) : (
+              <div className="w-full">
+                {shipped ? (
+                  <PostShipMessage />
+                ) : (
+                  <button
+                    onClick={handleShip}
+                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
+                    style={{ background: LISBOA, minHeight: '52px' }}
+                    aria-label="Confirm and ship strategy on-chain"
+                  >
+                    Ship on-chain
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Live: surface a compose error with no spec (e.g. agent unreachable). */}
+        {!useMock && !compose.spec && compose.error && (
+          <p className="font-sans text-[13px] self-start" style={{ color: '#E5484D' }}>
+            {compose.error}
+          </p>
+        )}
+
+        {/* Human-in-the-loop approval scenario (mock demo only — not shown when
+            replaying an already-shipped pool agent conversation, or in live mode
+            where the compose stream owns the thread). */}
+        {useMock && !agentStrategy && (
         <div className="flex flex-col max-w-[85%] self-start">
           <div
             className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed bg-wave-surface"
