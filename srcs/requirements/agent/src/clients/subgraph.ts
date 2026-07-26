@@ -1,11 +1,12 @@
 // The Graph subgraph client (strategy + swap data). WIRED to the live Studio
 // endpoint (docs/spikes/GRAPH-NODE-SPIKE.md — path A confirmed; subgraph `wave`).
 //
-// The deployed subgraph is currently the SPIKE (single ENS-resolver data source),
-// so the production `strategies`/`swaps` entities don't exist on it yet — they
-// land when the StrategyRouter data source is added (PR #20 + re-deploy, see
-// docs/tasks/Pietro.md L62). Until then these methods return empty/not-found
-// rather than throwing or faking, so policy.decide() sees real "no data yet".
+// v0.0.2 (LIVE) is the production subgraph: two data sources (EnsStrategyRouter
+// + ENS resolver) → Strategy/Swap/Follow/Follower entities exist and are
+// queryable. With no swaps/announces fired yet these return real empty arrays —
+// the true "no data yet" state — so policy.decide() and the feed see real
+// emptiness, not a swallowed error. (v0.0.1 was the single-source ENS spike and
+// is historical.)
 //
 // NEVER return fabricated data. The empty/not-found paths are the truth.
 import { GraphQLClient, ClientError } from "graphql-request";
@@ -38,17 +39,22 @@ export type Swap = {
   timestamp: number; // unix secs
 };
 
-// Live Studio endpoint (path A). Override per-env for self-hosted graph-node (path B).
+// Live Studio endpoint (path A). v0.0.2 is the LIVE production subgraph (two data
+// sources: EnsStrategyRouter + ENS resolver → Strategy/Swap/Follow/Follower
+// entities). v0.0.1 was the single-source ENS spike (historical only). Override
+// per-env for self-hosted graph-node (path B) or to pin an older version.
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.1";
+  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.2";
 
 const client = new GraphQLClient(SUBGRAPH_URL);
 
-// The deployed subgraph is currently the SPIKE — querying a production entity
-// (`strategies`/`swaps`) that doesn't exist on it yet returns a GraphQL error.
-// We swallow ONLY those "entity not deployed yet" errors and return empty /
-// not-found, so policy.decide() sees real "no data yet" instead of a crash.
+// v0.0.2 is live and the production entities exist, so this guard rarely fires
+// against the default URL. It stays as a safety net for the cases where it
+// still matters: an env pinning an older version (e.g. the v0.0.1 spike), or
+// Studio briefly lagging mid-deploy. When it does fire we swallow ONLY those
+// "entity not deployed yet" errors and return empty / not-found, so
+// policy.decide() sees real "no data yet" instead of a crash.
 //
 // IMPORTANT — narrow detection. A production subgraph with a real bug (handler
 // crash, renamed field, malformed query) ALSO returns errors[], and those MUST
