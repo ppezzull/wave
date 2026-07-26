@@ -65,7 +65,7 @@ The join key already matches with no bridge: `Aqua.strategyHash == SwapVM.orderH
 
 ## Related subgraph-side DOCUMENTATION-ONLY notes (already shipped in the subgraph, listed here for traceability)
 
-- **D1:** `strategyId == orderHash` is the C1 coordination assumption (see above), now documented loudly at the top of `subgraph/src/mapping.ts` and `schema.graphql`.
+- **D1:** `strategyId == orderHash` is the C1 coordination assumption (see above), now documented loudly at the top of `srcs/requirements/subgraph/src/mapping.ts` and `schema.graphql`.
 - **D2 (resolved):** committed capital WAS thought unemitted → `returnPct` denominator undefined. **Resolved:** Aqua emits it (`Pushed`/`Pulled`), now indexed into `Strategy.committedCapital`. See C2 above.
-- **D3:** `programHash` is `bytes32(0)` for every strategy until the compiler lands → the UI hash-verify chip must gate on `programHash != 0`. Noted in `subgraph/README.md`.
-- **L1 (listing threshold):** a strategy ranks once it has `swapCount >= 3 AND (now - lastSwapTimestamp) >= 3600` seconds; before that it is listed but unranked. This is a CONSUMER-LAYER rule (applied in the UI `getFeed()` and the agent's feed query), NOT a subgraph field — graph-node has no computed/derived boolean that stays in sync without a block handler. The schema exposes raw `swapCount` and `lastSwapTimestamp`; both consumers implement the identical formula documented in `subgraph/README.md`.
+- **D3:** `programHash` is `bytes32(0)` for every strategy until the compiler lands → the UI hash-verify chip must gate on `programHash != 0`. Noted in `srcs/requirements/subgraph/README.md`.
+- **L1 (listing threshold):** a strategy ranks once it has `swapCount >= 3 AND (now - lastSwapTimestamp) >= 3600` seconds; before that it is listed but unranked. This is a CONSUMER-LAYER rule (applied in the UI `getFeed()` and the agent's feed query), NOT a subgraph field — graph-node has no computed/derived boolean that stays in sync without a block handler. The schema exposes raw `swapCount` and `lastSwapTimestamp`; both consumers implement the identical formula documented in `srcs/requirements/subgraph/README.md`.
