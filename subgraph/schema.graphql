@@ -1,0 +1,108 @@
+# Production wave subgraph (re-deploys the spike as v0.0.2). Two data sources:
+#   (a) EnsStrategyRouter  -> StrategyDeployed, Swapped
+#   (b) Sepolia ENS Public Resolver -> TextChanged (filtered to wave.following/<id>)
+# Reorg safety comes from graph-node's NATIVE block-level revert (entity versions for a
+# reverted block are undone, then the block is re-indexed) — NOT from any id-overwrite trick.
+# Mutable entities (Strategy, Follower) are re-applied by the re-index, so their aggregates
+# (followerCount, cumulativeVolume*, lastSwapTimestamp) stay correct across reorgs.
+# SPDX-License-Identifier: UNLICENSED
+#
+# ⚠️ CONTRACT-LAYER ASSUMPTION (D1 — loud, NOT enforced on-chain): the three handlers key the
+# SAME Strategy row only if
+#     Strategy.id == StrategyDeployed.strategyId == Swapped.orderHash == SwapVM.hash(order).
+# `announceStrategy(bytes32 strategyId, bytes32 ensNode)` takes a FREE-FORM strategyId and `Swapped`
+# emits `orderHash = SwapVM.hash(order)`; nothing on-chain binds them. Only `handleStrategyDeployed`
+# creates Strategy rows (F2), so a mismatch shows up as swaps/follows DROPPED, not phantom rows —
+# but the demo still breaks if the announcer passes the wrong id. Resolving this is a contract-layer
+# task (Flaviano): see docs/strategy/SUBGRAPH-CONTRACT-GAPS.md (C1).
+
+enum StrategyStatus {
+  active
+  stopped
+  removed
+}
+
+type Strategy @entity {
+  # id == StrategyDeployed.strategyId == Swapped.orderHash == SwapVM.hash(order).
+  id: Bytes!
+  programHash: Bytes! # bytes32(0) tolerated until the compiler lands (D3: UI hash-verify chip
+                       # must gate on programHash != 0; see SUBGRAPH-CONTRACT-GAPS.md C3)
+  ensNode: Bytes!
+  status: StrategyStatus! # "active" on deploy; "stopped"/"removed" if the router emits them
+
+  # Ranking aggregates (Pietro.md 🔢 — the UI computes rank from these raw values):
+  #   rank = returnPct × recencyDecay × (1 + log2(1 + followers))
+  # Volumes are BigInt, NOT BigDecimal: graph-node's BigDecimal is decimal128 (capped at 34 sig
+  # figs), so every .plus() normalizes and drops low-order wei once cumulative > ~10^34. BigInt
+  # has no such cap. The UI converts to BigDecimal at read time only when it needs a ratio.
+  #
+  # ⚠️ D2 (contract-layer gap): `returnPct`'s DENOMINATOR is committed capital, which NO event
+  # emits (aqua.ship takes committed amounts but logs nothing). So the numerator (these volumes)
+  # is indexed but the denominator is undefined until a contract change — the formula cannot sort
+  # as-is. See docs/strategy/SUBGRAPH-CONTRACT-GAPS.md (C2). There is no `committedCapital` field.
+  cumulativeVolumeIn: BigInt! # sum of Swap.amountIn  (returnPct numerator proxy)
+  cumulativeVolumeOut: BigInt! # sum of Swap.amountOut (returnPct numerator proxy)
+  # L1 (listing threshold — CONSUMER-LAYER rule, not a field): a strategy RANKS once it has
+  # `swapCount >= 3` AND `now - lastSwapTimestamp >= 3600` (seconds); before that it is listed but
+  # unranked. graph-node has no derived/computed boolean that stays in sync without a block handler,
+  # so this is applied identically by the UI getFeed() and the agent feed query. See README.
+  swapCount: Int!
+  lastSwapTimestamp: BigInt! # recencyDecay = 0.5^(hoursSinceLastSwap/24); 0 if never swapped
+  followerCount: Int! # 1 + log2(1+followers) term; COUNT DISTINCT Follower.node per id
+
+  swaps: [Swap!]! @derivedFrom(field: "strategy") # graph-node pluralizes -> query field "swaps"
+}
+
+type Swap @entity(immutable: true) {
+  # 36-byte composite id (txHash[32] || uint32 logIndex) — a unique key only, NOT a bytes32
+  # hash. Reorg safety is graph-node's block-level revert, not this id. Never join on it; the
+  # strategy join is on `strategy` (bytes32) below.
+  id: Bytes!
+  strategy: Strategy! # == Swapped.orderHash; consumer filters swaps(where:{strategy:$id})
+  maker: Bytes!
+  taker: Bytes!
+  tokenIn: Bytes!
+  tokenOut: Bytes!
+  amountIn: BigInt!
+  amountOut: BigInt!
+  timestamp: BigInt! # == blockTimestamp; consumer orderBy:timestamp
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Raw TextChanged event log, ONLY for keys with prefix "wave.following/<strategyId>".
+# One row per follow-state-change event (the audit log). followerCount is NOT derived from
+# counting these — it is maintained on the mutable Follower index (O(1) per event).
+type Follow @entity(immutable: true) {
+  id: Bytes! # 36-byte composite (txHash || logIndex) — unique per event
+  node: Bytes! # ENS namehash of the follower's name (event.params.node)
+  strategy: Strategy! # resolved from the key suffix <strategyId>
+  strategyKey: String! # full key "wave.following/<id>" (Pietro.md L62 names this field)
+  isFollowing: Boolean! # value!="" -> true; value=="" -> false (clear = unfollow)
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Mutable per-(node,strategy) edge so followerCount is O(1) per event, not a COUNT DISTINCT
+# scan. id == node || strategyId (uniqueness: one live follow edge per node+strategy).
+# Under reorg, graph-node reverts the block atomically — the Follower create/delete and the
+# Strategy.followerCount inc/dec replay together, so the count is exact, never double-counted.
+type Follower @entity {
+  id: Bytes!
+  node: Bytes!
+  strategy: Strategy!
+  since: BigInt!
+}
+
+# Reverse index: which strategies a node currently follows. Maintained in
+# handleTextChanged (add on follow, remove on unfollow) so that handleVersionChanged —
+# fired by ENS Resolver.clearRecords / VersionChanged (a BULK clear that emits NO
+# TextChanged per key) — can enumerate every strategy a node follows and remove each
+# Follower edge + decrement each Strategy.followerCount. Without this, a bulk-clear
+# silently unfollows every strategy while followerCount drifts permanently high.
+# graph-ts can't query-by-field (no Follower.load(node=…)), so we keep this list by hand.
+type NodeFollows @entity {
+  id: Bytes! # == node (ENS namehash); one row per node that follows anything
+  strategies: [Bytes!]! # followed strategy ids (32-byte each); empty when node follows nothing
+}
