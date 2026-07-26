@@ -1,17 +1,28 @@
-# ui — Next.js (App Router, SSR) split-screen + safety card
-# PLACEHOLDER (build kickoff Fri Jul 24). Owns Move #4: docs/strategy/10-10-PLAYBOOK.md.
-# Server components hold the LLM call + API keys (see TECH-STACK.md).
-FROM node:20-alpine
-
+# wave ui — Next.js 16 (App Router, SSR). pnpm + standalone output.
+#
+# Replaces the placeholder Dockerfile (which only `echo`'d and exited).
+# Runtime: `node server.js` on port 3000 (Next.js standalone entrypoint,
+# reads HOSTNAME/PORT env — see next.config.mjs `output: 'standalone'`).
+FROM node:20-alpine AS build
 WORKDIR /app
+ENV CI=1
+# package.json declares packageManager: pnpm@10.34.5 — pin it via corepack.
+RUN corepack enable && corepack prepare pnpm@10.34.5 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+# typescript.ignoreBuildErrors=true in next.config — build won't fail on TS errors.
+RUN pnpm run build
 
-# Real Next.js app lands here during the build (P3, h8–10):
-# RUN npx create-next-app@latest . --ts --app --no-src-dir
-# COPY package*.json ./
-# RUN npm ci
-
-# Placeholder so the image builds today:
-RUN echo '{"name":"strategy-compiler-ui","private":true}' > package.json
-
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+# Standalone server + the two dirs it doesn't bundle (static assets, public).
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+USER node
 EXPOSE 3000
-CMD ["echo", "ui placeholder — scaffold Next.js (App Router, SSR) during the build (Move #4)"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:3000/ || exit 1
+CMD ["node", "server.js"]
