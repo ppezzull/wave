@@ -32,6 +32,14 @@ export interface RetuneArmDeps {
   dock?: (strategyId: string) => Promise<Hash>;
   /** Recompile the (adjusted) spec → new bytecode. Default throws BLOCKED (compiler call TBD). */
   recompile?: (strategyId: string) => Promise<`0x${string}`>;
+  /**
+   * Announce the recompiled order on the router BEFORE ship. Default is a no-op (kept optional so
+   * existing stubbed tests stay green), but a wired retune MUST supply it: the subgraph's
+   * handlePushed drops a Pushed whose Strategy.load() is null, so shipping before announcing
+   * strands the retuned strategy at committedCapital = 0 — unrankable, R1 dead, unrecoverable.
+   * Review #57/N1: this slot existed nowhere, so the tested path was a ship-before-announce trap.
+   */
+  announce?: (program: `0x${string}`) => Promise<Hash>;
   /** Re-ship the recompiled strategy to Aqua (aqua.ship). Default throws BLOCKED (clients/aqua.ts not wired). */
   ship?: (strategyId: string, program: `0x${string}`) => Promise<Hash>;
 }
@@ -82,6 +90,9 @@ export async function recompileAndShip(
   try {
     dockTxHash = await dock(input.strategyId);
     programHash = input.program ?? (await recompile(input.strategyId));
+    // Announce the NEW order before ship — see RetuneArmDeps.announce. Optional on the type so
+    // existing stubbed tests pass, but a real retune supplies it or the new strategy goes live blind.
+    if (deps.announce) await deps.announce(programHash);
     shipTxHash = await ship(input.strategyId, programHash);
   } catch (e) {
     blocked = (e as Error).message;

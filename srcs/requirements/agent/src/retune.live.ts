@@ -13,8 +13,9 @@ process.env.MONITOR_SOURCE = "subgraph";
 
 import { keccak256 } from "viem";
 import { aquaWriteClient, type MakerOrder } from "./clients/aquaWrite.js";
+import { decide } from "./policy/index.js";
 import { logEvidence } from "./evidence/log.js";
-import { bootDeltaSource, deltaSource, monitorTick } from "./monitor/graphDelta.js";
+import { bootDeltaSource, deltaSource } from "./monitor/graphDelta.js";
 
 const need = (k: string): string => {
   const v = process.env[k];
@@ -24,20 +25,31 @@ const need = (k: string): string => {
 
 async function main() {
   // ── 1. decide, from LIVE Graph data ────────────────────────────────
+  //
+  // ONE poll, and decide() called directly on the delta we keep. monitorTick
+  // would poll AGAIN internally, so the delta we dock and the action we act on
+  // could come from different strategies between the two reads — and the
+  // evidence row would cite one next to the other (review #57/B1). It would
+  // also write a second, differently-shaped evidence row.
   await bootDeltaSource();
   const src = deltaSource();
   const deltas = await src.poll();
-  const delta = deltas[0];
-  if (!delta) throw new Error("[retune] no delta from the subgraph");
+  if (deltas.length === 0) throw new Error("[retune] no delta from the subgraph");
 
-  const actions = await monitorTick(src);
-  const action = actions[0];
-  console.log("decision:", JSON.stringify(action));
-  console.log("caused by entity:", delta.entityId);
-  if (action?.type !== "retune") {
-    console.log("not a retune — stopping (the loop is data-caused, not scheduled)");
+  // Pick THE retune, not the first delta: poll() returns one delta per strategy
+  // in no particular order, so a retune sitting behind a noop would be silently
+  // skipped (review #57/B2).
+  const idx = deltas.findIndex((d) => decide(d.policyInput).type === "retune");
+  if (idx === -1) {
+    const first = deltas[0]!;
+    console.log("decision:", JSON.stringify(decide(first.policyInput)));
+    console.log("no retune among", deltas.length, "strategies — stopping (data-caused, not scheduled)");
     return;
   }
+  const delta = deltas[idx]!;
+  const action = decide(delta.policyInput);
+  console.log("decision:", JSON.stringify(action));
+  console.log("caused by entity:", delta.entityId);
 
   // ── 2. execute, on-chain ───────────────────────────────────────────
   const aqua = aquaWriteClient({
@@ -75,7 +87,7 @@ async function main() {
     entityId: delta.entityId,
     query: delta.query,
     delta: delta.policyInput,
-    action: { ...action, retunedTo: newHash, dockTx, announceTx: annTx, shipTx } as never,
+    action: { ...action, retunedTo: newHash, dockTx, announceTx: annTx, shipTx },
   });
 
   console.log("\nRETUNE COMPLETE");
