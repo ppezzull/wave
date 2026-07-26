@@ -38,5 +38,52 @@ export const storageConfig = () => ({
   url: process.env.LIBSQL_URL ?? ":memory:",
 });
 
+/**
+ * Announcer key — the agent announces strategies from the router OWNER EOA.
+ *
+ * `EnsStrategyRouter.announceStrategy()` is `onlyOwner`: a key that does NOT
+ * derive to the owner reverts on stage (Beat B), not at compile. We validate at
+ * boot so we fail-fast with a clear message instead of a mysterious runtime revert.
+ *
+ * Key source: `ANNOUNCER_PRIVATE_KEY` (falls back to the existing `SEPOLIA_PRIVATE_KEY`
+ * / `MAKER_PRIVATE_KEY` so the shared faucet key works unchanged). NEVER logged,
+ * committed, or pasted — only the derived address is exposed.
+ */
+export const EXPECTED_ANNOUNCER_OWNER =
+  "0x2058C253029bB0Cf1E1aD43DfAEF63D658A8dddf" as const;
+
+export interface AnnouncerConfig {
+  address: `0x${string}`; // derived EOA (== EXPECTED_ANNOUNCER_OWNER after validation)
+  owner: `0x${string}`; // expected router owner
+}
+
+/** Read + validate the announcer key. Throws a clear error on missing/mismatch. */
+export async function announcerConfig(): Promise<AnnouncerConfig & { privateKey: `0x${string}` }> {
+  const raw =
+    process.env.ANNOUNCER_PRIVATE_KEY ??
+    process.env.SEPOLIA_PRIVATE_KEY ??
+    process.env.MAKER_PRIVATE_KEY;
+  if (!raw || raw.length === 0) {
+    throw new Error(
+      `[env] ANNOUNCER_PRIVATE_KEY missing — set it (or SEPOLIA_PRIVATE_KEY) in agent/.env. ` +
+        `It must derive to the router owner ${EXPECTED_ANNOUNCER_OWNER}.`,
+    );
+  }
+  const { privateKeyToAccount } = await import("viem/accounts");
+  let address: `0x${string}`;
+  try {
+    address = privateKeyToAccount(raw as `0x${string}`).address;
+  } catch {
+    throw new Error("[env] ANNOUNCER_PRIVATE_KEY is not a valid 0x-prefixed secp256k1 private key.");
+  }
+  if (address.toLowerCase() !== EXPECTED_ANNOUNCER_OWNER.toLowerCase()) {
+    throw new Error(
+      `[env] ANNOUNCER key derives to ${address}, NOT the router owner ${EXPECTED_ANNOUNCER_OWNER}. ` +
+        `announceStrategy() is onlyOwner — a wrong key reverts on stage. Fix agent/.env.`,
+    );
+  }
+  return { privateKey: raw as `0x${string}`, address, owner: EXPECTED_ANNOUNCER_OWNER };
+}
+
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
 // and defaulted to 3002 via ENV in the Dockerfile. (No serverConfig() helper — it was dead code.)
