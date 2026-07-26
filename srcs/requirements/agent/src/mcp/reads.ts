@@ -16,7 +16,19 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: 
 const Address = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 const Status = z.enum(["active", "stopped", "removed"]);
 
-const StrategyOut = z.object({ id: z.string(), programHash: z.string(), ensNode: z.string(), status: Status });
+const StrategyOut = z.object({
+  id: z.string(),
+  programHash: z.string(),
+  ensNode: z.string(),
+  status: Status,
+  // Ranking + retune inputs (R1 needs committedCapital). Mirrors clients/subgraph.ts Strategy.
+  cumulativeVolumeIn: z.string(),
+  cumulativeVolumeOut: z.string(),
+  committedCapital: z.string(),
+  swapCount: z.number(),
+  lastSwapTimestamp: z.number(),
+  followerCount: z.number(),
+});
 
 export const getStrategy = createTool({
   id: "getStrategy",

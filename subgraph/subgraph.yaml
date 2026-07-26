@@ -1,7 +1,8 @@
 specVersion: 1.3.0
-# Production wave subgraph (v0.0.2). Replaces the spike. Two data sources:
-#   (a) EnsStrategyRouter (Flaviano's deploy, address TBD) -> StrategyDeployed, Swapped
-#   (b) Sepolia ENS Public Resolver (constant)             -> TextChanged (filtered in mapping)
+# Production wave subgraph (v0.0.2). Replaces the spike. Three data sources:
+#   (a) EnsStrategyRouter (Flaviano's deploy)   -> StrategyDeployed, Swapped
+#   (b) Sepolia ENS Public Resolver (constant)  -> TextChanged (filtered in mapping), VersionChanged
+#   (c) Aqua (1inch balance protocol, constant) -> Pushed, Pulled, Docked  (committed capital + status)
 # NOTE: no indexerHints.prune — Strategy and Follower are MUTABLE aggregates; prune:auto only
 # works on fully immutable stores. Reorg safety = graph-node native block-level revert.
 schema:
@@ -61,4 +62,33 @@ dataSources:
           handler: handleTextChanged
         - event: VersionChanged(indexed bytes32,uint256)
           handler: handleVersionChanged
+      file: ./src/mapping.ts
+  # --- (c) Aqua (1inch balance-management protocol; committed capital + status source) ---
+  # Aqua is the AUTHORITATIVE source of committed capital: Pushed(amount)/Pulled(amount) maintain
+  # Strategy.committedCapital (returnPct's denominator); Docked flips status. Join key:
+  # Aqua.strategyHash == SwapVM.orderHash == Strategy.id (verified — see mapping.ts). All params
+  # are NON-indexed in the Aqua ABI, so the signature strings carry no `indexed` keyword.
+  - kind: ethereum/contract
+    name: Aqua
+    network: sepolia
+    source:
+      address: "0xdc8C2b141CF705F12f6BB45af3830341daBB1D1E" # Sepolia Aqua (Flaviano, Jul 25 2026)
+      abi: Aqua
+      startBlock: 11350041 # Aqua deploy block (broadcast record + on-chain receipt); Aqua 11350041 precedes router 11350046
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+      abis:
+        - name: Aqua
+          file: ./abis/Aqua.json
+      eventHandlers:
+        - event: Pushed(address,address,bytes32,address,uint256)
+          handler: handlePushed
+        - event: Pulled(address,address,bytes32,address,uint256)
+          handler: handlePulled
+        - event: Docked(address,address,bytes32)
+          handler: handleDocked
       file: ./src/mapping.ts

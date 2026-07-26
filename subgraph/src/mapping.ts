@@ -21,10 +21,12 @@
 import { Bytes, BigInt, store } from "@graphprotocol/graph-ts";
 import { StrategyDeployed, Swapped } from "../generated/EnsStrategyRouter/EnsStrategyRouter";
 import { TextChanged, VersionChanged } from "../generated/ENSResolver/ENSResolver";
+import { Pushed as AquaPushed, Pulled as AquaPulled, Docked as AquaDocked } from "../generated/Aqua/Aqua";
 import { Strategy, Swap, Follow, Follower, NodeFollows } from "../generated/schema";
 
 const WAVE_FOLLOWING_PREFIX = "wave.following/";
 const ACTIVE = "active";
+const STOPPED = "stopped";
 const HEX_CHARS = "0123456789abcdefABCDEF";
 const ID_BYTES = 32; // a strategyId / node is a bytes32
 
@@ -71,6 +73,7 @@ function createStrategy(id: Bytes): Strategy {
   s.status = ACTIVE;
   s.cumulativeVolumeIn = BigInt.zero();
   s.cumulativeVolumeOut = BigInt.zero();
+  s.committedCapital = BigInt.zero(); // running balance; Aqua Pushed/Pulled maintain it
   s.swapCount = 0;
   s.lastSwapTimestamp = BigInt.fromI32(0);
   s.followerCount = 0;
@@ -269,4 +272,49 @@ export function handleVersionChanged(event: VersionChanged): void {
   let cleared: Bytes[] = [];
   nf.strategies = cleared;
   nf.save();
+}
+
+// --- (c) Aqua balance-management events — committed capital + status ---
+// Aqua (1inch's balance protocol) is the AUTHORITATIVE source of committed capital: it emits
+// Pushed(amount) on every ship/push and Pulled(amount) on every withdrawal, keyed by
+// strategyHash. Aqua.strategyHash == SwapVM.orderHash == Strategy.id (verified:
+// test/helpers/AquaSwapVMHelper.sol:357 asserts assertEq(strategyHash, orderHash)), so these
+// join the existing Strategy rows with no bridge. committedCapital is a running balance:
+// Pushed adds, Pulled subtracts — so returnPct's denominator stays correct as capital moves.
+// Docked flips status to "stopped" (the only status transition in this path).
+// All three skip if no Strategy row exists yet (F2): a Pushed for a non-wave strategy, or one
+// arriving before StrategyDeployed, is ignored — no phantom rows.
+
+export function handlePushed(event: AquaPushed): void {
+  const s = Strategy.load(event.params.strategyHash);
+  if (s == null) {
+    return; // not a deployed wave strategy — skip (F2)
+  }
+  s.committedCapital = s.committedCapital.plus(event.params.amount);
+  s.save();
+}
+
+export function handlePulled(event: AquaPulled): void {
+  const s = Strategy.load(event.params.strategyHash);
+  if (s == null) {
+    return; // not a deployed wave strategy — skip (F2)
+  }
+  // Guard against underflow: Aqua should never pull more than it pushed, but BigInt minus
+  // would trap (abort the handler) on underflow. Clamp at 0 — a clamp is always safe here
+  // because committedCapital is a lower bound on realized value, never negative.
+  if (event.params.amount.gt(s.committedCapital)) {
+    s.committedCapital = BigInt.zero();
+  } else {
+    s.committedCapital = s.committedCapital.minus(event.params.amount);
+  }
+  s.save();
+}
+
+export function handleDocked(event: AquaDocked): void {
+  const s = Strategy.load(event.params.strategyHash);
+  if (s == null) {
+    return; // not a deployed wave strategy — skip (F2)
+  }
+  s.status = STOPPED; // Aqua Docked = maker withdrew the strategy → docked/dormant
+  s.save();
 }
