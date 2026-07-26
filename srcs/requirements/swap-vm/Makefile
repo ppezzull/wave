@@ -13,8 +13,11 @@ CURRENT_DIR:=$(shell pwd)
 
 FILE_CONSTANTS_JSON:=$(CURRENT_DIR)/config/constants.json
 
-OPS_NETWORK := $(subst ",,$(OPS_NETWORK))
-OPS_CHAIN_ID := $(subst ",,$(OPS_CHAIN_ID))
+# $(strip ...): a value with trailing whitespace (an inline `# comment` in .env leaves
+# padding before it) makes PREFIX read "SEPOLIA   ", so ${PREFIX}_RPC_URL resolves to
+# nothing and the deploy dies on an empty --fork-url. Config must not break the build.
+OPS_NETWORK := $(strip $(subst ",,$(OPS_NETWORK)))
+OPS_CHAIN_ID := $(strip $(subst ",,$(OPS_CHAIN_ID)))
 
 PREFIX:=$(shell echo "$(OPS_NETWORK)" | sed -r 's/([a-z0-9])([A-Z])/\1_\2/g' | tr '[:lower:]' '[:upper:]')
 REGOP_ENV_RPC_URL:=$(PREFIX)_RPC_URL
