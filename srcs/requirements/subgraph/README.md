@@ -75,3 +75,9 @@ That's why the real subgraph indexes **two contracts**: our `StrategyRouter` **a
 A strategy **ranks** once it has `swapCount >= 3` **AND** `now - lastSwapTimestamp >= 3600` (seconds). Before that it is **listed but unranked**.
 
 This rule is applied at the **CONSUMER layer** (UI `getFeed()` and the agent feed query), **not in the subgraph** — graph-node has no derived boolean that stays in sync without a block handler. The schema exposes raw `swapCount` and `lastSwapTimestamp`; both consumers MUST implement the identical formula to agree on what "exists/ranks".
+
+The shared consumer-layer math — `rank = returnPct × recencyDecay × (1 + log2(1 + followers))` over these raw wei-string aggregates — lives in [`srcs/requirements/agent/src/ranking.ts`](../agent/src/ranking.ts) (pure, BigInt-safe, tested). The future UI `getFeed()` and any agent-side feed sort call it; do not re-implement the formula.
+
+## Composable upside — a standardized Aqua-strategy index
+
+The SwapVM/Aqua core of this subgraph (`Swap`, per-strategy volume aggregates, Aqua-sourced `committedCapital`) is **generic** — 1inch ships SwapVM and Aqua but no indexer for either, so this is the first standardized Aqua-strategy index. The wave-specific layer (ENS `wave.following/` social follow) sits cleanly on top, not interleaved. Full assessment + the split that would make it reusable as a base subgraph: [`docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md`](../../../docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md).
