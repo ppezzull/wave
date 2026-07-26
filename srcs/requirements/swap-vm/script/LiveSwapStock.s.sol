@@ -12,6 +12,7 @@ import { Aqua } from "@1inch/aqua/src/Aqua.sol";
 import { TokenMock } from "@1inch/solidity-utils/contracts/mocks/TokenMock.sol";
 
 import { ISwapVM } from "../src/interfaces/ISwapVM.sol";
+import { EnsStrategyRouter } from "../src/routers/EnsStrategyRouter.sol";
 import { StrategyOpcodes } from "../src/opcodes/StrategyOpcodes.sol";
 import { Fee, FeeArgsBuilder } from "../src/instructions/Fee.sol";
 import { XYCSwap } from "../src/instructions/XYCSwap.sol";
@@ -116,6 +117,22 @@ contract LiveSwapStock is Script, StrategyOpcodes {
         uint256[] memory amounts = new uint256[](2);
         amounts[0] = MAKER_LIQUIDITY_A;
         amounts[1] = MAKER_LIQUIDITY_B;
+
+        // ── announce BEFORE ship. Not a style choice: the subgraph's
+        //    handlePushed/handleSwapped both do `Strategy.load(); if null return`
+        //    (F2 — no phantom rows), so an announce that arrives AFTER the ship
+        //    leaves the Pushed already dropped and committedCapital stuck at 0
+        //    forever — no returnPct, no ranking, policy R1 can never fire. It is
+        //    not recoverable by re-announcing or re-indexing: chronologically the
+        //    ship still comes first. (The router's own "post-ship hook" natspec
+        //    predates the subgraph and is misleading on this point.)
+        //    onlyOwner → broadcast with the announcer key, which is the maker key
+        //    in this setup (see root .env / ENS-PATH.md).
+        bytes32 ensNode = vm.envOr("ENS_NODE", bytes32(0));
+        vm.startBroadcast(makerPk);
+        EnsStrategyRouter(payable(router)).announceStrategy(order, ensNode);
+        vm.stopBroadcast();
+        console2.log("Strategy announced (StrategyDeployed emitted with the real programHash)");
 
         vm.startBroadcast(makerPk);
         tokenA.approve(address(aqua), type(uint256).max);
