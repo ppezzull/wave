@@ -18,7 +18,10 @@ generated/
 
 # foundry run artifacts
 broadcast/
-lib/
+# Scoped: a bare `lib/` matches ANY directory named lib at any depth, and was
+# silently swallowing source dirs (ui/lib). Its only intended target is the
+# Foundry deps dir — which this repo does not even use (deps are npm-managed).
+srcs/requirements/swap-vm/lib/
 
 # env (keep the example)
 .env

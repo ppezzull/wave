@@ -1,0 +1,289 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --gradient-lisboa: linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%);
+
+  /* Wave palette — LIGHT (default when no .dark on the tree) */
+  --wave-bg: #FFFFFF;
+  --wave-inverted: #0F1419;
+  --wave-surface: #F7F9FA;
+  --wave-border: #E1E8ED;
+  --wave-text: #0F1419;
+  --wave-muted: #536471;
+
+  /* Frosted surfaces — light */
+  --glass-panel-bg: rgba(255, 255, 255, 0.92);
+  --glass-panel-border: rgba(15, 20, 25, 0.1);
+  --glass-panel-highlight: rgba(255, 255, 255, 0.9);
+  --glass-card-bg: rgba(247, 249, 250, 0.8);
+  --glass-hairline: rgba(15, 20, 25, 0.08);
+  --glass-fill: rgba(15, 20, 25, 0.04);
+  --glass-fill-hover: rgba(15, 20, 25, 0.08);
+
+  /* shadcn compat — light */
+  --background: #FFFFFF;
+  --foreground: #0F1419;
+  --card: #F7F9FA;
+  --card-foreground: #0F1419;
+  --popover: #FFFFFF;
+  --popover-foreground: #0F1419;
+  --primary: #2A9D8F;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F7F9FA;
+  --secondary-foreground: #0F1419;
+  --muted: #F7F9FA;
+  --muted-foreground: #536471;
+  --accent: #F7F9FA;
+  --accent-foreground: #0F1419;
+  --destructive: #E5484D;
+  --destructive-foreground: #ffffff;
+  --border: #E1E8ED;
+  --input: #E1E8ED;
+  --ring: #2A9D8F;
+  --radius: 0.625rem;
+}
+
+.dark {
+  /* Wave palette — DARK (X-style) */
+  --wave-bg: #000000;
+  --wave-inverted: #FFFFFF;
+  --wave-surface: #16181C;
+  --wave-border: #2F3336;
+  --wave-text: #E7E9EA;
+  --wave-muted: #71767B;
+
+  /* Frosted surfaces — dark. Panel sits on near-black so it reads as the
+     same theme as the app, just lifted by border + shadow. */
+  --glass-panel-bg: rgba(0, 0, 0, 0.85);
+  --glass-panel-border: rgba(255, 255, 255, 0.12);
+  --glass-panel-highlight: rgba(255, 255, 255, 0.08);
+  --glass-card-bg: rgba(22, 24, 28, 0.72);
+  --glass-hairline: rgba(255, 255, 255, 0.08);
+  --glass-fill: rgba(255, 255, 255, 0.06);
+  --glass-fill-hover: rgba(255, 255, 255, 0.12);
+
+  /* shadcn compat — dark */
+  --background: #000000;
+  --foreground: #E7E9EA;
+  --card: #16181C;
+  --card-foreground: #E7E9EA;
+  --popover: #16181C;
+  --popover-foreground: #E7E9EA;
+  --primary: #2A9D8F;
+  --primary-foreground: #000000;
+  --secondary: #16181C;
+  --secondary-foreground: #E7E9EA;
+  --muted: #16181C;
+  --muted-foreground: #71767B;
+  --accent: #16181C;
+  --accent-foreground: #E7E9EA;
+  --destructive: #E5484D;
+  --destructive-foreground: #ffffff;
+  --border: #2F3336;
+  --input: #2F3336;
+  --ring: #2A9D8F;
+}
+
+@theme inline {
+  /* Fonts */
+  --font-sans: 'Inter', 'Inter Fallback';
+  --font-mono: 'JetBrains Mono', 'JetBrains Mono Fallback';
+
+  /* Wave color system — mapped to theme-aware vars */
+  --color-wave-bg: var(--wave-bg);
+  --color-wave-inverted: var(--wave-inverted);
+  --color-wave-surface: var(--wave-surface);
+  --color-wave-border: var(--wave-border);
+  --color-wave-text: var(--wave-text);
+  --color-wave-muted: var(--wave-muted);
+  --color-wave-success: #1F9D6B;
+  --color-wave-danger: #E5484D;
+  --color-wave-warning: #F5A623;
+  --color-wave-teal: #2A9D8F;
+  --color-wave-navy: #0F3460;
+
+  /* shadcn tokens */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+}
+
+/* ---- Utility classes ---- */
+.bg-lisboa {
+  background: var(--gradient-lisboa);
+}
+
+.glass-card {
+  background: var(--glass-card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-hairline);
+}
+
+.glass-drawer {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-left: 1px solid var(--glass-panel-border);
+}
+
+/* Frosted window that reads as the same theme as the app, lifted by a
+   border + deep drop shadow so the chat floats over the page. */
+.glass-panel {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 var(--glass-panel-highlight);
+}
+
+/* Frosted secondary button that sits on the glass. */
+.glass-btn {
+  background: var(--glass-fill);
+  backdrop-filter: blur(12px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  border: 1px solid var(--glass-panel-border);
+  box-shadow: inset 0 1px 0 var(--glass-panel-highlight);
+  transition:
+    background 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.glass-btn:hover {
+  background: var(--glass-fill-hover);
+  transform: translateY(-1px);
+}
+.glass-btn:active {
+  transform: translateY(0);
+}
+
+/* Translucent input on the glass. */
+.glass-input {
+  background: var(--glass-fill);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-panel-border);
+  transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.glass-input:focus,
+.glass-input:focus-within {
+  outline: none;
+  border-color: rgba(42, 157, 143, 0.8);
+  box-shadow: 0 0 0 3px rgba(42, 157, 143, 0.22);
+}
+
+/* ---- Animations ---- */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes safetyReveal {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-safety-reveal {
+  animation: safetyReveal 260ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ---- Floating chat panel entrance ---- */
+@keyframes drawerPop {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-drawer-pop {
+  animation: drawerPop 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* On mobile the panel is a bottom sheet; slide it up instead. */
+@media (max-width: 767px) {
+  @keyframes drawerPop {
+    from {
+      opacity: 0.4;
+      transform: translateY(100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-wave-border;
+  }
+  html,
+  body {
+    overflow-x: clip;
+    @apply bg-wave-bg text-wave-text;
+  }
+}
