@@ -36,8 +36,17 @@ export interface FetchOnChainHashOpts {
   toBlock?: bigint;
 }
 
-/** The default search window: most public Sepolia RPCs cap eth_getLogs ranges at 10k–50k. */
-const DEFAULT_WINDOW_BLOCKS = 50_000n;
+/**
+ * Default search window. 10k, not 50k: drpc — the endpoint the env contract
+ * recommends — rejects wider ranges on its free plan with
+ * `code: 35 "ranges over 10000 blocks are not supported"`. The old 50k default
+ * meant every caller that omitted `fromBlock` (all of them, including the
+ * resolveVerifyLive smoke) hit that on the G1 path.
+ *
+ * Pass `fromBlock` near the announce block when the strategy is older than 10k
+ * blocks (~1.5 days on Sepolia) — the window is a fallback, not a search.
+ */
+const DEFAULT_WINDOW_BLOCKS = 10_000n;
 
 /**
  * The most recent programHash emitted by `StrategyDeployed` for `strategyId`, or throws.
