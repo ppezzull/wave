@@ -9,6 +9,11 @@
 > the Sepolia parent `.eth` name is not registered yet.
 > Decisions locked this session: **viem direct** (no `ens-cli`), **full scope**
 > (core G1 + ENSIP-25/ERC-7930 + ENSIP-24 stretch), **parent name to register now**.
+> **Announce signature (PR #40, C1a — closes #36):** `announceStrategy(ISwapVM.Order
+> order, bytes32 ensNode)` — both event payloads derived on-chain; `strategyId =
+> hash(order)` (= `Swapped.orderHash` = Aqua `strategyHash`). Caller supplies neither id
+> nor program hash. Event fields/indexing UNCHANGED. #40 in flight; the announce path in
+> §8 builds on this signature.
 >
 > Sources cited inline; consolidated list at the end.
 
@@ -19,7 +24,8 @@
 - **What this doc covers:** the ENS *agent-side* — `resolveVerify`, `register`,
   program-hash verification, ENSIP-25/26 records, the ERC-7930 key, ENSIP-24 stretch.
 - **What it does NOT cover:** the on-chain `StrategyFactory` (P1, post-G2 stretch),
-  `programHash()` (P1, in-flight PR #26), `dock()`/`ship()` (P1), the subgraph (P3).
+  `dock()`/`ship()` (P1), the subgraph (P3). (`programHash()` is now on `main` via #37 —
+  covered in §5.)
 - **Hard rules (both ENS prizes):** functional demo, **no hard-coded values**,
   video/live link, **present at the ENS booth Sunday morning (mandatory)**.
 
@@ -51,9 +57,12 @@ no live demo; no-show at the booth.
   3. Resolve that key on the claimed ENS name via `text(node, key)`.
   4. **Non-empty ⇒ verified.** Absent/empty ⇒ verification MUST fail.
   - Value SHOULD be `"1"`; clients MUST NOT depend on the specific value.
-- **wave mapping:** `registry` = `EnsStrategyRouter`; `agentId` = the `strategyId`
-  (`bytes32`, hex string — contains no brackets, so valid). The strategy's own subname
-  carries the attestation that it is registered to the wave router.
+- **wave mapping:** `registry` = `EnsStrategyRouter`; `agentId` = the `strategyId`.
+  Since #40 (C1a), `strategyId = hash(order)` — derived **on-chain**, not caller-chosen
+  (in Aqua mode `SwapVM.hash = keccak256(abi.encode(order))` = the `strategyHash`
+  `Aqua.ship()` derives = `Swapped.orderHash`; verified `0xcbbdf005…fbb999`). It is a
+  `bytes32` hex string with no `[`/`]`, so valid as `<agentId>`. The strategy's own
+  subname carries the attestation that it is registered to the wave router.
 - **No endpoint fields** are defined by this ENSIP — it is purely a presence-based
   attestation.
 
@@ -122,9 +131,10 @@ Encoding: `uint16BE(version) | uint16BE(chainType) | uint8(len) | chainRef | uin
 ```
 ⇒ **29 bytes**: `0x0001000003aa36a714eb513fd18c391fae1513ff12c1f97bf659d052c4`.
 
-So the ENSIP-25 key for a wave strategy is:
+So the ENSIP-25 key for a wave strategy is (`<strategyId>` = `hash(order)`, the derived
+strategy id — see §2 / §5):
 ```
-agent-registration[0x0001000003aa36a714eb513fd18c391fae1513ff12c1f97bf659d052c4][<strategyId>]
+agent-registration[0x0001000003aa36a714eb513fd18c391fae1513ff12c1f97bf659d052c4][<strategyId=hash(order)>]
 ```
 
 > ⚠️ The EVM CAIP-350 profile encodes chainId as **minimal big-endian** (confirmed for
@@ -179,7 +189,9 @@ use `walletClient.writeContract` on the resolver/registry.
 
 > The `bytes32 ensNode` carried by `StrategyDeployed(strategyId, programHash, ensNode)`
 > **must equal** the namehash of the strategy subname — compute it identically here and
-> in the router's emitter (P1) so resolveVerify compares like with like.
+> in the router's emitter (P1) so resolveVerify compares like with like. (`strategyId`
+> itself is now `hash(order)` — derived on-chain since #40; `ensNode` parity is what
+> binds the on-chain event to the ENS subname.)
 
 ---
 
@@ -205,15 +217,34 @@ use `walletClient.writeContract` on the resolver/registry.
 | Base Registrar | `0x57f1887a8BF19b14fc0dF6Fd9B2acc9Af147eA85` | `PROD-TESTNET.md` §3 |
 | Parent `.eth` 2LD | **`wave.eth`** — registered on Sepolia, owned by `0x2058…ddf`, resolves to the wallet | verified 2026-07-26 |
 | Live swap (1inch qualified) | tx `0xd8056fde…9601`, block 11350065 | `docs/tasks/Flaviano.md` |
-| `programHash()` | **REAL** — wired via `dd35dc9` ("Wire real programHash into StrategyDeployed + TS disassembler") | commit `dd35dc9` (unblocks G1 real-hash + G3 CI) |
-| `StrategyDeployed` event | `(bytes32 indexed strategyId, bytes32 programHash, bytes32 indexed ensNode)` | frozen |
+| `programHash()` (TS) | **REAL** — `compiler/src/disassemble.ts` exports `programHash(bytes)` (keccak via `@noble/hashes`), on `main` via #37. Computes the **ENS record** `v0.programhash` from the compiled program bytes. | #37 (merged) |
+| on-chain `programHash` | emitted as `keccak256(order.traits.program(order.data))` — derived from the Order, **not** caller-supplied (since #40). Same keccak of the same program bytes the TS `programHash()` hashes. | #40 (C1a) |
+| `StrategyDeployed` event | `(bytes32 indexed strategyId, bytes32 programHash, bytes32 indexed ensNode)` — **fields/indexing frozen**; since #40 both payloads are derived on-chain (`hash(order)`, `keccak256(program)`) | #20 (frozen), #40 (derived values) |
 
 **Subname scheme:** `<pair>-<variant>.<parent>` (e.g. `eth-usdc-guarded.wave.eth`).
 
-> ⚠️ `announceStrategy()` is **`onlyOwner`** (owner = the EOA above). If the agent
-> announces from any other key it **reverts on stage**. Resolve before the demo:
-> (a) give the agent that key, or (b) `router.transferOwnership(<agent key>)`.
-> *(Runbook item, not code — but it silently breaks Beat B.)*
+> **`announceStrategy` signature (PR #40 / C1a, closes #36):**
+>
+> ```solidity
+> function announceStrategy(ISwapVM.Order calldata order, bytes32 ensNode) external onlyOwner
+>     emit StrategyDeployed(hash(order), keccak256(order.traits.program(order.data)), ensNode);
+> ```
+>
+> The caller passes the **`Order` shipped to Aqua** + the `ensNode` (namehash of the
+> strategy subname) — it supplies **neither** the id nor the program hash; both are
+> derived on-chain, so identity cannot split by accident (`strategyId = hash(order)` =
+> `Swapped.orderHash` = Aqua `strategyHash`). The announce path (`register.ts`, §8) builds
+> on this 2-arg signature.
+>
+> ⚠️ `announceStrategy()` stays **`onlyOwner`** (owner = the EOA above, unchanged). If the
+> agent announces from any other key it **reverts on stage**. Resolved for the demo: the
+> agent uses the owner key (`ANNOUNCER_PRIVATE_KEY`, validated fail-fast at boot — see
+> `agent/src/config/env.ts` `announcerConfig()`); no `transferOwnership` (owner also
+> controls `rescueFunds`). *(Runbook item — silently breaks Beat B if wrong.)*
+>
+> **Signature evolution:** v1 free `strategyId` → v2 (#37: `announceStrategy(strategyId,
+> program bytes, ensNode)`, on-chain keccak of the program) → v3 (#40/C1a:
+> `announceStrategy(order, ensNode)`, both payloads derived). The event ABI never changed.
 
 ---
 
@@ -226,7 +257,7 @@ use `walletClient.writeContract` on the resolver/registry.
 | `avatar` | ENSIP-5 | strategist (P2) | URL/data-URI for the card |
 | `agent-context` | **ENSIP-26** | `register.ts` (P2) | Markdown: pair, risk params, how to interact |
 | `agent-endpoint[mcp]` | **ENSIP-26** | `register.ts` (P2) | `http://agent:3002` (the MCP server) |
-| `agent-registration[<erc7930 router>][<strategyId>]` | **ENSIP-25** | `register.ts` (P2) | `"1"` — registry attestation |
+| `agent-registration[<erc7930 router>][<strategyId=hash(order)>]` | **ENSIP-25** | `register.ts` (P2) | `"1"` — registry attestation (`<strategyId>` derived on-chain) |
 | `wave.following/<strategy>` | ENSIP-5 | the **follower**, on the follower's own name | a follow = one such record; indexed by the subgraph (P3), not resolved directly |
 
 Sources: `TECH-STACK.md`, `PROD-TESTNET.md` §3, `docs/sponsors/ens/OVERVIEW.md`,
@@ -240,9 +271,10 @@ From `10-10-PLAYBOOK.md` L138, `Flavio.md` L15, `frontend.md` §3/§6:
 
 1. **Resolve** the strategy subname (e.g. `eth-usdc-guarded.wave.eth`).
 2. **Read** `v0.programhash` via `getEnsText`.
-3. **Recompute** the hash from the live on-chain program —
-   `router.getProgramHash(strategyId)` (wrapped by the `getProgramHash` MCP tool;
-   backed by the `StrategyDeployed` event).
+3. **Recompute** the hash from the live on-chain program — read `programHash` from the
+   `StrategyDeployed` event (or a router getter) keyed by `strategyId = hash(order)`
+   (wrapped by the `getProgramHash` MCP tool). The event is unchanged by #40; only the
+   values are now derived on-chain (`keccak256(order.traits.program(order.data))`).
 4. **Compare; abort on mismatch.**
 
 **Negative path (the ENS proof):** a tampered-record fixture (recorded hash ≠ on-chain
@@ -264,11 +296,16 @@ From `Flavio.md` L10–L14:
    Proves the loop end-to-end and "no hard-coded values."
 2. **`register.ts` skeleton:** subname on the Sepolia Public Resolver; write ENSIP-25
    records.
-3. **Complete `register.ts`:** also write `v0.programhash` from P1's `programHash()`
-   (placeholder `bytes32` until it lands).
+3. **Complete `register.ts`:** also write `v0.programhash` = `programHash(compiledBytes)`
+   (real, from `compiler/src/disassemble.ts` on `main` via #37).
+4. **Announce on-chain:** call `router.announceStrategy(order, ensNode)` — pass the
+   **`Order` shipped to Aqua** + `ensNode` (namehash of the subname). Supply neither id
+   nor program hash; the contract derives `strategyId = hash(order)` and `programHash =
+   keccak256(order.traits.program(order.data))`. `onlyOwner` — use the validated
+   `ANNOUNCER_PRIVATE_KEY` (see §5). For any strategy lookup, `strategyId = hash(order)`.
 
 Records written per subname: `v0.programhash`, `description`, `agent-context`,
-`agent-endpoint[mcp]`, `agent-registration[<erc7930 router>][<strategyId>]`.
+`agent-endpoint[mcp]`, `agent-registration[<erc7930 router>][<strategyId=hash(order)>]`.
 
 > **Tension to resolve:** `PROD-TESTNET.md` §3 says the on-chain **`StrategyFactory`
 > mints subnames**; `Flavio.md` says `register.ts` does. `StrategyFactory` is a
@@ -310,7 +347,8 @@ Records written per subname: `v0.programhash`, `description`, `agent-context`,
 2. **Parent 2LD + owner** → register a fresh name (user to register now) with a funded
    wallet; owner key via `SEPOLIA_PRIVATE_KEY`. Decide whether that key is the same as
    the router-owner EOA (`0x2058…ddf`) — reuse is the fewest moving parts for the demo.
-3. **`<registry>` / `<agentId>`** → registry = `EnsStrategyRouter`; agentId = `strategyId`.
+3. **`<registry>` / `<agentId>`** → registry = `EnsStrategyRouter`; `agentId = strategyId
+   = hash(order)` (derived on-chain since #40/C1a — no longer a free choice; closes #36).
 4. **`register.ts` architecture** → write ENS directly via viem now (factory is a
    stretch); delegate later.
 5. **`EnsDiscovery` payload** (for Pietro) → `{ subname, recordedProgramHash,
@@ -344,9 +382,9 @@ Records written per subname: `v0.programhash`, `description`, `agent-context`,
 | Need | Status | Owner | Action |
 |---|---|---|---|
 | Parent `.eth` on Sepolia | 🔴 not registered | Flavio | register now (funded key) |
-| `programHash()` real | `bytes32(0)` | Flaviano | PR #26 (`feat/compiler-emit`: `ir.ts`+`emit.ts`) imminent — unblocks real hash-verify + G3 CI |
+| `programHash()` real | ✅ on `main` (#37) | Flaviano | `compiler/src/disassemble.ts` `programHash(bytes)` merged; unblocks real hash-verify + G3 CI |
 | `dock()`/`ship()` | absent (by design) | Flaviano | confirm signature (gates `recompileAndShip`, G2) |
-| `announceStrategy` owner key | EOA `0x2058…ddf` | Flavio+Flaviano | key-share or `transferOwnership` (runbook) |
+| `announceStrategy` signature/key | `(Order, ensNode)`, onlyOwner, EOA `0x2058…ddf` | Flavio | resolved: agent uses the owner key (`ANNOUNCER_PRIVATE_KEY`, fail-fast at boot); sig = #40/C1a |
 | Subgraph endpoint | not authored | Pietro | author schema first (gates `graphDelta` real source, G2) |
 | Custom opcodes | PR #24 open | Flaviano | review #26 first (unblocks both) |
 
