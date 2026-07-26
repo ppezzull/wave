@@ -4,13 +4,14 @@ import type { Strategy } from '@/lib/mock-data'
 
 export function SafetyCardDetail({ strategy }: { strategy: Strategy }) {
   const { safety } = strategy
-  const isSafe = safety.verdict === 'SAFE'
+  const isPending = !!safety.pending
+  const isSafe = !isPending && safety.verdict === 'SAFE'
 
   const metrics = [
-    { label: 'Monotonicity', value: safety.monotonicity.toFixed(2) },
-    { label: 'Symmetry', value: safety.symmetry },
-    { label: 'Guard Triggers', value: String(safety.guardTriggers) },
-    { label: 'Skew vs Cap', value: safety.skewVsCap.toFixed(2) },
+    { label: 'Monotonicity', value: isPending ? '—' : safety.monotonicity.toFixed(2) },
+    { label: 'Symmetry', value: isPending ? '—' : safety.symmetry },
+    { label: 'Guard Triggers', value: isPending ? '—' : String(safety.guardTriggers) },
+    { label: 'Skew vs Cap', value: isPending ? '—' : safety.skewVsCap.toFixed(2) },
   ]
 
   return (
@@ -24,12 +25,14 @@ export function SafetyCardDetail({ strategy }: { strategy: Strategy }) {
 
       <div
         className="rounded-[14px] px-6 py-5 animate-safety-reveal"
-        style={{ background: isSafe ? '#1F9D6B' : '#E5484D' }}
+        style={{
+          background: isPending ? '#71767B' : isSafe ? '#1F9D6B' : '#E5484D',
+        }}
         role="status"
-        aria-label={`Safety verdict: ${safety.verdict}`}
+        aria-label={`Safety verdict: ${isPending ? 'PENDING' : safety.verdict}`}
       >
         <p className="font-sans font-extrabold text-[2rem] text-white mb-5 leading-none">
-          {safety.verdict}
+          {isPending ? 'PENDING' : safety.verdict}
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">

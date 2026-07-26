@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Search } from 'lucide-react'
-import { profiles, currentUser } from '@/lib/mock-data'
+import type { ENSProfile } from '@/lib/data'
+import type { CurrentUser } from './app-wrapper'
 
 function WhoToFollowRow({
   handle,
@@ -45,8 +46,16 @@ function WhoToFollowRow({
   )
 }
 
-export function RightColumn() {
-  const suggestions = profiles.filter((p) => p.handle !== currentUser.handle).slice(0, 4)
+export function RightColumn({
+  currentUser,
+  profiles,
+}: {
+  currentUser: CurrentUser
+  profiles: ENSProfile[]
+}) {
+  const suggestions = profiles
+    .filter((p) => p.handle !== currentUser.handle)
+    .slice(0, 4)
 
   return (
     <aside

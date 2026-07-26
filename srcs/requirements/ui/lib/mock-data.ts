@@ -10,9 +10,28 @@
 // display strings as the source of truth — the format helpers below derive
 // them at render time, exactly like the real subgraph (BigInt wei + unix ts).
 
+// The pure format helpers + ranking formula live in lib/strategy/format.ts
+// (shared with the live data layer). Re-export them here so existing
+// `@/lib/mock-data` imports keep working.
+export {
+  CURRENT_NOW,
+  formatEth,
+  formatUsd,
+  formatRecency,
+  returnPct,
+  returnPctStr,
+  recencyDecay,
+  rank,
+  isRanked,
+  hashState,
+  abbrevHash,
+  ZERO_HASH,
+  type HashState,
+} from './strategy/format'
+
 // Fixed "now" so the mock is deterministic (no Date.now() at module load that
 // would break SSR/hydration). The real app passes Date.now() / 1000.
-export const CURRENT_NOW = 1_780_000_000
+import { CURRENT_NOW, isRanked, rank, formatUsd } from './strategy/format'
 
 export type StrategyStatus = 'active' | 'stopped' | 'removed'
 
@@ -23,6 +42,9 @@ export interface SafetyReport {
   symmetry: string // '12 bps'
   guardTriggers: number // count
   skewVsCap: number // 0..1
+  // Live path: the safety report isn't computed until the compiler/safety
+  // tooling ships. Render "pending", never fabricate SAFE. (mock ignores this.)
+  pending?: boolean
 }
 
 // One retune evidence entry (autonomous, driven by a subgraph entity delta).
@@ -768,70 +790,10 @@ export const profileByStrategyId = (id: string): ENSProfile | undefined =>
   profiles.find((p) => p.strategyIds.includes(id))
 
 // ---------------------------------------------------------------------------
-// Format / derivation helpers — components call these. Raw values in, display
-// strings out. This is the whole point: the real subgraph returns raw BigInt
-// wei and unix timestamps, and these helpers turn them into UI text.
+// Format / derivation helpers live in lib/strategy/format.ts (shared with the
+// live data layer) and are re-exported at the top of this file. The mock-only
+// derived accessors below read from the mock arrays.
 // ---------------------------------------------------------------------------
-
-// wei string -> '12.4 ETH'
-export function formatEth(wei: string, decimals = 18, places = 1): string {
-  const n = Number(wei) / 10 ** decimals
-  return `${n.toFixed(places)} ETH`
-}
-
-// wei string -> '$847K' style (assume ~$3k/ETH for the mock)
-export function formatUsd(wei: string, ethUsd = 3000): string {
-  const usd = (Number(wei) / 1e18) * ethUsd
-  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`
-  if (usd >= 1_000) return `$${Math.round(usd / 1_000)}K`
-  return `$${Math.round(usd)}`
-}
-
-// unix seconds -> 'last swap 2h ago' / '47m ago' / 'never'
-export function formatRecency(unixSeconds: number, now = CURRENT_NOW): string {
-  if (unixSeconds === 0) return 'never swapped'
-  const diff = Math.max(0, now - unixSeconds)
-  const m = Math.floor(diff / 60)
-  if (m < 60) return `last swap ${m}m ago`
-  const h = Math.floor(diff / 3600)
-  if (h < 24) return `last swap ${h}h ago`
-  const d = Math.floor(diff / 86400)
-  return `last swap ${d}d ago`
-}
-
-// returnPct = (cumulativeVolumeOut - committedCapital) / committedCapital * 100
-export function returnPct(s: Strategy): number {
-  const cap = Number(s.committedCapital)
-  if (cap === 0) return 0
-  return ((Number(s.cumulativeVolumeOut) - cap) / cap) * 100
-}
-
-// signed, 1-decimal display string, e.g. '+247.3%' / '-12.4%'
-export function returnPctStr(s: Strategy): string {
-  const v = returnPct(s)
-  return `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(1)}%`
-}
-
-// recencyDecay = 0.5 ^ (hoursSinceLastSwap / 24)
-export function recencyDecay(s: Strategy, now = CURRENT_NOW): number {
-  if (s.lastSwapTimestamp === 0) return 0
-  const hours = (now - s.lastSwapTimestamp) / 3600
-  return 0.5 ** (hours / 24)
-}
-
-// rank = returnPct × recencyDecay × (1 + log2(1 + followerCount))
-export function rank(s: Strategy, now = CURRENT_NOW): number {
-  return (
-    returnPct(s) *
-    recencyDecay(s, now) *
-    (1 + Math.log2(1 + s.followerCount))
-  )
-}
-
-// L1 listing threshold (consumer-layer rule): ranks iff swapCount>=3 AND age>=1h.
-export function isRanked(s: Strategy, now = CURRENT_NOW): boolean {
-  return s.swapCount >= 3 && now - s.lastSwapTimestamp >= 3600
-}
 
 // pre-sorted ranked strategies by rank() desc — used by /explore
 export function rankedStrategies(now = CURRENT_NOW): Strategy[] {
@@ -842,23 +804,6 @@ export function rankedStrategies(now = CURRENT_NOW): Strategy[] {
 
 export function unrankedStrategies(now = CURRENT_NOW): Strategy[] {
   return strategies.filter((s) => !isRanked(s, now))
-}
-
-// Hash-verify state: 'pending' when programHash is bytes32(0) (D3 gate not yet
-// wired), 'match' when on-chain == ENS record, 'mismatch' when tampered.
-export type HashState = 'match' | 'mismatch' | 'pending'
-
-const ZERO_HASH = `0x${'0'.repeat(64)}`
-
-export function hashState(s: Strategy): HashState {
-  if (s.programHash === ZERO_HASH) return 'pending'
-  return s.programHash === s.ensProgramHash ? 'match' : 'mismatch'
-}
-
-// abbreviate a bytes32 hex for display: '0x3a7f...e072'
-export function abbrevHash(hash: string): string {
-  if (hash.length <= 12) return hash
-  return `${hash.slice(0, 6)}...${hash.slice(-4)}`
 }
 
 // ---------------------------------------------------------------------------

@@ -1,16 +1,20 @@
 import Link from 'next/link'
 import {
-  type Strategy,
-  profiles,
-  strategyById,
-  profileByHandle,
-  profileStats,
-} from '@/lib/mock-data'
+  getProfile,
+  getProfileStats,
+  getStrategy,
+  listProfileHandles,
+} from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 
-export function generateStaticParams() {
-  return profiles.map((p) => ({ handle: p.handle }))
+// Live profiles (not present at build) render dynamically; mock params are
+// generated so the mock build still prerenders the seed profile pages.
+export const dynamic = 'force-dynamic'
+export const dynamicParams = true
+
+export async function generateStaticParams() {
+  return (await listProfileHandles()).map((handle) => ({ handle }))
 }
 
 interface Props {
@@ -19,7 +23,7 @@ interface Props {
 
 export default async function ProfilePage({ params }: Props) {
   const { handle } = await params
-  const profile = profileByHandle(handle)
+  const profile = await getProfile(handle)
 
   if (!profile) {
     return (
@@ -44,12 +48,12 @@ export default async function ProfilePage({ params }: Props) {
     )
   }
 
-  const profileStrategies = profile.strategyIds
-    .map((id) => strategyById(id))
-    .filter((s): s is Strategy => Boolean(s))
+  const profileStrategies = (
+    await Promise.all(profile.strategyIds.map((id) => getStrategy(id)))
+  ).filter((s): s is NonNullable<typeof s> => Boolean(s))
 
   // Aggregate stats are computed from the authored strategies, not stored.
-  const stats = profileStats(profile)
+  const stats = await getProfileStats(profile)
 
   return (
     <div className="w-full max-w-[600px] mx-auto border-x border-wave-border min-h-screen flex flex-col">
