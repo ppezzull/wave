@@ -27,7 +27,7 @@ services:
     networks:
       - strategy-compiler
     restart: "no"                                 # run-once build/test/deploy
-    # env_file: [ .env ]                          # OPS_* deploy vars when deploying
+    env_file: [ ../.env ]                          # global root .env (OPS_* deploy vars)
 
   # ────────────────────────────────────────────────────────────────
   # compiler — deterministic TS compiler (NL → AST → IR → SwapVM bytecode)
@@ -106,7 +106,7 @@ services:
       - subgraph
       - swap-vm
     restart: unless-stopped
-    # env_file: [ .env ]               # FORK_RPC, wallet keys, ENS name
+    env_file: [ ../.env ]              # global root .env (RPC, wallet keys, ENS)
 
 networks:
   strategy-compiler:
