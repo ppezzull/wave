@@ -5,7 +5,13 @@
 //
 // The pure compare is split out so it is unit-testable OFFLINE (no network, no key) and
 // RED-on-mutation (flip the equality → the tampered-record test fails).
+//
+// `resolveVerifyLive` is the LIVE source: it reads BOTH the ENS record AND the on-chain
+// programHash (from the StrategyDeployed event) itself — the caller passes no hash, only the
+// subname + strategyId. This is the version the settle path / demo uses against real Sepolia.
 import { ens } from "../clients/ens.js";
+import { fetchOnChainProgramHash, type OnChainReadClient } from "./onChainHash.js";
+import type { Address } from "viem";
 
 export interface HashVerify {
   subname: string;
@@ -44,6 +50,48 @@ export async function resolveVerify(
     throw new Error(
       `[resolveVerify] TAMPERED — ${subname}: ENS record ${recorded ?? "(absent)"} ≠ on-chain ` +
         `${expectedProgramHash}. Settle ABORTED (G1 hash-verify gate).`,
+    );
+  }
+  return result;
+}
+
+export interface ResolveVerifyLiveOpts {
+  /** Injectable publicClient for the on-chain programHash read. Tests pass a stub. */
+  client?: OnChainReadClient;
+  /** Injectable router address (defaults to ensConfig().strategyRouter). Tests pass a stub. */
+  router?: Address;
+  /** Injectable ENS text-record read (defaults to ens.getTextRecord). Tests pass a stub. */
+  getTextRecord?: (subname: string, key: string) => Promise<string | null>;
+  /** Explicit announce-block start (skips the head lookup; see fetchOnChainProgramHash). */
+  fromBlock?: bigint;
+}
+
+/**
+ * resolveVerifyLive: the LIVE G1 proof. Reads the ENS `v0.programhash` record AND the on-chain
+ * programHash (from StrategyDeployed) itself, then compareProgramHash → ABORT on mismatch.
+ * The caller supplies NO hash — only the subname + strategyId. This is what the settle path and
+ * the demo's ENS chip run against real Sepolia (vs `resolveVerify`, which trusts a passed hash).
+ *
+ * Both I/O deps are injectable, so this is unit-testable OFFLINE (stub getTextRecord + client).
+ */
+export async function resolveVerifyLive(
+  subname: string,
+  strategyId: `0x${string}`,
+  opts: ResolveVerifyLiveOpts = {},
+): Promise<HashVerify> {
+  const getTextRecord = opts.getTextRecord ?? ((s, k) => ens.getTextRecord(s, k));
+  const recorded = await getTextRecord(subname, "v0.programhash");
+  const expected = await fetchOnChainProgramHash(strategyId, {
+    ...(opts.client ? { client: opts.client } : {}),
+    ...(opts.router ? { router: opts.router } : {}),
+    ...(opts.fromBlock ? { fromBlock: opts.fromBlock } : {}),
+  });
+  const cmp = compareProgramHash(recorded, expected);
+  const result: HashVerify = { subname, ...cmp };
+  if (!cmp.match) {
+    throw new Error(
+      `[resolveVerifyLive] TAMPERED — ${subname}: ENS record ${recorded ?? "(absent)"} ≠ on-chain ` +
+        `${expected}. Settle ABORTED (G1 hash-verify gate, LIVE source).`,
     );
   }
   return result;

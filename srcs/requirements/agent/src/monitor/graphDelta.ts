@@ -11,6 +11,9 @@
 import { decide } from "../policy/index.js";
 import type { PolicyAction, PolicyInput } from "../policy/index.js";
 import { logEvidence } from "../evidence/log.js";
+import { subgraph as defaultSubgraph } from "../clients/subgraph.js";
+import type { Strategy, Swap } from "../clients/subgraph.js";
+import { toPolicyInput, defaultStrategyConfig, type StrategyConfig } from "./assembler.js";
 
 /**
  * One subgraph entity delta for one strategy — the unit the monitor evaluates each tick.
@@ -105,3 +108,62 @@ export const setDeltaSource = (s: DeltaSource): void => {
   _source = s;
 };
 export const deltaSource = (): DeltaSource => _source ?? stubDeltaSource();
+
+/** Minimal subgraph surface subgraphDeltaSource needs (injectable for OFFLINE tests). */
+export interface SubgraphReadSurface {
+  listStrategies(status?: Strategy["status"]): Promise<Strategy[]>;
+  getSwapHistory(strategyId: string, limit?: number): Promise<Swap[]>;
+}
+
+export interface SubgraphDeltaSourceOpts {
+  /** Injectable subgraph surface (defaults to the real `subgraph` client). Tests pass a stub. */
+  source?: SubgraphReadSurface;
+  /** Per-strategy config provider (defaults to the conservative defaultStrategyConfig). */
+  configProvider?: (strategyId: string, now: number) => StrategyConfig;
+  /** Injectable tick timestamp for deterministic tests. */
+  now?: number;
+}
+
+/**
+ * The REAL DeltaSource: poll the live Sepolia subgraph → toPolicyInput per strategy.
+ * entityId = the latest Swap id (the data-caused proof anchor) — citing it in the evidence
+ * log is what PROVES the retune is caused by on-chain capital, not a timer (AGENT.md Graph-track).
+ * No swaps ⇒ the strategy id (no delta to cause a retune this tick anyway).
+ *
+ * Until Pietro re-deploys the subgraph with the StrategyRouter data source, listStrategies()
+ * returns [] (entity not deployed) → this yields no deltas → noop. HONEST: never fabricates.
+ */
+export const subgraphDeltaSource = (opts: SubgraphDeltaSourceOpts = {}): DeltaSource => {
+  const source = opts.source ?? defaultSubgraph;
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const configFor = opts.configProvider ?? ((id, t) => defaultStrategyConfig(id, t));
+  return {
+    async poll(): Promise<StrategyDelta[]> {
+      const strategies = await source.listStrategies();
+      const deltas: StrategyDelta[] = [];
+      for (const s of strategies) {
+        const swaps = await source.getSwapHistory(s.id, 50);
+        const policyInput = toPolicyInput(s, swaps, configFor(s.id, now), now);
+        const entityId = swaps[0]?.id ?? s.id; // latest swap (desc) — the proof anchor
+        deltas.push({
+          strategyId: s.id,
+          entityId,
+          query: `{ swaps(where: { strategy: "${s.id}" }, orderBy: timestamp, orderDirection: desc, first: 50) { id amountIn amountOut timestamp } }`,
+          policyInput,
+        });
+      }
+      return deltas;
+    },
+  };
+};
+
+/**
+ * Boot seam: register the real subgraph delta source when opted in via MONITOR_SOURCE=subgraph.
+ * Default stays on the stub until the production subgraph is live + the flag flips — so the
+ * monitor never silently fires on unsourced data. Idempotent + guarded; call once at boot.
+ */
+export const bootDeltaSource = (): void => {
+  if (process.env.MONITOR_SOURCE === "subgraph") {
+    setDeltaSource(subgraphDeltaSource());
+  }
+};

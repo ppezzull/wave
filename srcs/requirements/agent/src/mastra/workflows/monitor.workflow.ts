@@ -8,8 +8,12 @@
 // real subgraph lands. Spec: docs/strategy/AGENT.md (workflow + subagent routing).
 import { createWorkflow, createStep } from "@mastra/core/workflows";
 import { z } from "zod/v4";
-import { monitorTick, deltaSource } from "../../monitor/graphDelta.js";
+import { monitorTick, deltaSource, bootDeltaSource } from "../../monitor/graphDelta.js";
 import type { ActionType } from "../../policy/index.js";
+
+// One-time boot: flip the monitor onto the live subgraph source when MONITOR_SOURCE=subgraph.
+// Guarded + idempotent — a no-op otherwise (stays on the stub). Runs at module load (boot).
+bootDeltaSource();
 
 const ActionZ = z.object({
   type: z.enum(["retune", "stop", "remove", "askHuman", "noop"]),
