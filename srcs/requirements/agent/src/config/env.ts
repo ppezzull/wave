@@ -27,13 +27,15 @@ export const llmConfig = () => ({
 });
 
 /**
- * LibSQL storage. Durable by default: `file:./data.db` survives restarts, so HITL
- * workflow suspend/resume AND memory recall persist across process/container restarts.
- * Set LIBSQL_URL=:memory: for ephemeral smokes. (A1 / TIER 1 — was `:memory:`, which
- * lost all run + memory state on every restart.)
+ * LibSQL storage. Default `:memory:` is the container-safe choice — it needs no
+ * writable volume and always boots. Durability (HITL suspend/resume + memory recall
+ * surviving restarts) comes from setting `LIBSQL_URL=file:./data.db` in the DEPLOY
+ * env, once the TIER 1 named volume + `env_file` are wired (compose). Opting in there
+ * is a one-liner; defaulting to a file path here breaks the container build today
+ * (no mounted volume → unbootable / state lost each restart anyway).
  */
 export const storageConfig = () => ({
-  url: process.env.LIBSQL_URL ?? "file:./data.db",
+  url: process.env.LIBSQL_URL ?? ":memory:",
 });
 
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
