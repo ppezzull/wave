@@ -4,23 +4,32 @@
 # harness, restart: "no"), compiler, and subgraph (needs ipfs+postgres infra
 # that is still placeholder) are NOT web-facing and are excluded here — they
 # remain in git history for local dev. This file deploys the two public sites:
-#   - ui     → wave.craftale.it   (Next.js, container port 3000)
-#   - agent  → mastra.craftale.it (Mastra HTTP server, container port 3002)
+#   - ui     → wave.craftale.it    (Next.js, container port 3000 → host 3005)
+#   - agent  → mastra.craftale.it  (Mastra HTTP server, container port 3002 → host 4001)
 #
-# WHY NO host `ports:` — Dokploy's Traefik routes over the shared Docker
-# network, so the containers don't publish host ports. This sidesteps the
-# host-port-4000 collision with litellm-proxy on the Nebula host.
+# DELIVERY PATH (mirrors the CraftLead Frontend compose on this host):
+# craftale.it is fronted by Cloudflare and delivered via a cloudflared TUNNEL
+# → the service's published HOST port (VPS :80 is Apache, not Traefik, so
+# Dokploy Traefik is NOT the path for *.craftale.it). The required tunnel
+# ingress rules (added on the VPS cloudflared config, same as craftlead):
+#   wave.craftale.it   → http://localhost:3005
+#   mastra.craftale.it → http://localhost:4001
+#
+# HOST PORT CHOICE: mastra publishes 4001, NOT 4000 — host 4000 is already
+# litellm-proxy (ai.assistai.it). wave uses 3005 (free; matches request).
 #
 # Secrets: every ${VAR} is injected by Dokploy's compose environment
-# (encrypted at rest in Dokploy) — none are committed to this repo. The
-# original `env_file: ../.env` is dropped because `.env` is gitignored and
-# therefore absent in Dokploy's clone.
+# (encrypted at rest in Dokploy) — none are committed. The original
+# `env_file: ../.env` is dropped because `.env` is gitignored and therefore
+# absent in Dokploy's clone.
 services:
   ui:
     build:
       context: ./requirements/ui
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "3005:3000"
     networks:
       - dokploy-network
     environment:
@@ -34,6 +43,8 @@ services:
       context: ./requirements/agent
       dockerfile: Dockerfile
     restart: unless-stopped
+    ports:
+      - "4001:3002"
     networks:
       - dokploy-network
     environment:
