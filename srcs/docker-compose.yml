@@ -1,32 +1,29 @@
 # wave — Dokploy deployment compose (ui + agent only).
 #
-# Trimmed from the hackathon scaffold: swap-vm (Foundry, run-once build/deploy
-# harness, restart: "no"), compiler, and subgraph (needs ipfs+postgres infra
-# that is still placeholder) are NOT web-facing and are excluded here — they
-# remain in git history for local dev. This file deploys the two public sites:
+# Trimmed from the hackathon scaffold: swap-vm (Foundry, run-once), compiler,
+# and subgraph (needs ipfs+postgres) are NOT web-facing — excluded here, remain
+# in git history. Two public sites:
 #   - ui     → wave.craftale.it    (Next.js, container port 3000 → host 3005)
 #   - agent  → mastra.craftale.it  (Mastra HTTP server, container port 3002 → host 4001)
 #
-# DELIVERY PATH (mirrors the CraftLead Frontend compose on this host):
-# craftale.it is fronted by Cloudflare and delivered via a cloudflared TUNNEL
-# → the service's published HOST port (VPS :80 is Apache, not Traefik, so
-# Dokploy Traefik is NOT the path for *.craftale.it). The required tunnel
-# ingress rules (added on the VPS cloudflared config, same as craftlead):
+# DELIVERY: craftale.it is fronted by Cloudflare and delivered via a cloudflared
+# TUNNEL → the service's published HOST port (VPS :80 is Apache, not Traefik).
+# Tunnel ingress (on the VPS cloudflared config, same as craftlead.craftale.it):
 #   wave.craftale.it   → http://localhost:3005
 #   mastra.craftale.it → http://localhost:4001
 #
-# HOST PORT CHOICE: mastra publishes 4001, NOT 4000 — host 4000 is already
-# litellm-proxy (ai.assistai.it). wave uses 3005 (free; matches request).
+# HOST PORT: mastra publishes 4001, NOT 4000 (host 4000 = litellm-proxy).
 #
-# Secrets: every ${VAR} is injected by Dokploy's compose environment
-# (encrypted at rest in Dokploy) — none are committed. The original
-# `env_file: ../.env` is dropped because `.env` is gitignored and therefore
-# absent in Dokploy's clone.
+# Secrets: every ${VAR} is injected by Dokploy's compose env (encrypted at rest).
+# The original `env_file: ../.env` is dropped (`.env` is gitignored → absent in clone).
 services:
   ui:
     build:
       context: ./requirements/ui
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* must be present at `next build` time (inlined into client bundle).
+        - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
     restart: unless-stopped
     ports:
       - "3005:3000"
@@ -34,9 +31,14 @@ services:
       - dokploy-network
     environment:
       - NODE_ENV=production
-      # Server-side: the Next.js server reaches the agent over the shared network.
       - AGENT_URL=http://agent:3002
-      - COMPILER_URL=${COMPILER_URL:-}
+      - COMPILER_URL=${COMPILER_URL:-http://compiler:3001}
+      # Server-side feature flags (no NEXT_PUBLIC_ prefix → server-only at runtime).
+      - WAVE_USE_MOCK=${WAVE_USE_MOCK:-false}
+      - WAVE_ENS_WIRED=${WAVE_ENS_WIRED:-true}
+      - ENS_NODE=${ENS_NODE:-}
+      # Also exposed at runtime for server components / route handlers.
+      - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
 
   agent:
     build:
@@ -55,8 +57,9 @@ services:
       - ZAI_MODEL=${ZAI_MODEL}
       - LLM_TIMEOUT_MS=${LLM_TIMEOUT_MS:-90000}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
-      # Storage + HTTP port (Dockerfile also sets PORT=3002; repeated for clarity)
+      # Storage + HTTP port
       - LIBSQL_URL=${LIBSQL_URL:-:memory:}
+      - EVIDENCE_PATH=${EVIDENCE_PATH:-./evidence.jsonl}
       - PORT=3002
       # Sepolia settlement
       - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
@@ -68,10 +71,14 @@ services:
       - OPS_SWAP_VM_ROUTER_NAME=${OPS_SWAP_VM_ROUTER_NAME:-Wave}
       - OPS_SWAP_VM_ROUTER_VERSION=${OPS_SWAP_VM_ROUTER_VERSION:-1}
       - OPS_AQUA_ADDRESS=${OPS_AQUA_ADDRESS}
+      - OPS_WETH_ADDRESS=${OPS_WETH_ADDRESS:-}
       - AQUA_ADDRESS=${AQUA_ADDRESS}
       - ROUTER_ADDRESS=${ROUTER_ADDRESS}
       - ENS_STRATEGY_ROUTER=${ROUTER_ADDRESS}
+      - ENS_PARENT_NAME=${ENS_PARENT_NAME:-wave.eth}
+      - ENS_REGISTRY=${ENS_REGISTRY:-}
       - WAVE_SUBGRAPH_URL=${WAVE_SUBGRAPH_URL}
+      - MONITOR_SOURCE=${MONITOR_SOURCE:-subgraph}
       - AGENT_ENDPOINT_MCP=http://agent:3002
 
 networks:
