@@ -12,11 +12,14 @@ dataSources:
     name: EnsStrategyRouter
     network: sepolia
     source:
-      # PLACEHOLDER — Flaviano sets the real address + startBlock before `graph deploy`.
-      # (graph-cli rejects address 0x0…0 at deploy; build is fine with it.)
-      address: "0x0000000000000000000000000000000000000000" # REPLACE on deploy (WAVE_ROUTER_ADDRESS)
+      # Live Sepolia deploy (Flaviano, Jul 25 2026). Address + deploy block verified against
+      # srcs/requirements/swap-vm/deployments/sepolia/EnsStrategyRouter.json (0xeb513…052c4,
+      # receipt block 0xad301e = 11350046).
+      # ⚠️ startBlock is the ROUTER DEPLOY block (11350046), NOT the first swap (11350065) —
+      # starting at the swap misses the StrategyDeployed events that precede it.
+      address: "0xeb513fd18c391fae1513ff12c1f97bf659d052c4"
       abi: EnsStrategyRouter
-      startBlock: 0 # REPLACE on deploy (WAVE_ROUTER_BLOCK)
+      startBlock: 11350046
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
