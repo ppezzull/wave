@@ -1,44 +1,47 @@
-# wave — Dokploy deployment compose (ui + agent only).
+# wave — Dokploy deployment compose (3-service split: compiler + agent + ui).
 #
-# Trimmed from the hackathon scaffold: swap-vm (Foundry, run-once), compiler,
-# and subgraph (needs ipfs+postgres) are NOT web-facing — excluded here, remain
-# in git history. Two public sites:
-#   - ui     → wave.craftale.it    (Next.js, container port 3000 → host 3005)
-#   - agent  → mastra.craftale.it  (Mastra HTTP server, container port 3002 → host 4001)
+# Each component is a SEPARATE service with its own scoped env block, joined to
+# the same `dokploy-network` overlay so they resolve each other by bare service
+# name (compiler, agent, ui). Host port mapping is per-service; cloudflared on
+# this VPS routes public hostnames directly at the published host ports (Traefik
+# is NOT in the path on crafthost).
 #
-# DELIVERY: craftale.it is fronted by Cloudflare and delivered via a cloudflared
-# TUNNEL → the service's published HOST port (VPS :80 is Apache, not Traefik).
-# Tunnel ingress (on the VPS cloudflared config, same as craftlead.craftale.it):
-#   wave.craftale.it   → http://localhost:3005
-#   mastra.craftale.it → http://localhost:4001
+# Public routes (cloudflared → host port):
+#   wave.craftale.it      → http://localhost:3005   (ui, Next.js)
+#   mastra.craftale.it    → http://localhost:4001   (agent, Mastra HTTP)
+#   compiler.craftale.it  → http://localhost:5001   (compiler, placeholder HTTP)
 #
-# HOST PORT: mastra publishes 4001, NOT 4000 (host 4000 = litellm-proxy).
+# Internal DNS (dokploy-network, bare service name):
+#   http://compiler:3001   http://agent:3002   http://ui:3000
 #
-# Secrets: every ${VAR} is injected by Dokploy's compose env (encrypted at rest).
-# The original `env_file: ../.env` is dropped (`.env` is gitignored → absent in clone).
+# ENV SEPARATION: every ${VAR} is injected by Dokploy's compose env (encrypted
+# at rest in Dokploy). The original `env_file: ../.env` is dropped (.env is
+# gitignored → absent in clone). Each service below lists ONLY the env it needs.
+#
+# Compiler status (2026-07-26): the Dockerfile is the hackathon placeholder
+# (CMD = `echo ... && exit`). To keep the service discoverable on the network
+# for future /compile + /simulate wiring, the runtime command is overridden to
+# `tail -f /dev/null` until Move #1 lands. The container is UP and resolvable
+# but currently serves nothing on 3001 — that is expected.
 services:
-  ui:
+  compiler:
     build:
-      context: ./requirements/ui
+      context: ./requirements/compiler
       dockerfile: Dockerfile
-      args:
-        # NEXT_PUBLIC_* must be present at `next build` time (inlined into client bundle).
-        - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
     restart: unless-stopped
+    command: ["tail", "-f", "/dev/null"]   # placeholder until /compile HTTP lands
     ports:
-      - "3005:3000"
+      - "5001:3001"
     networks:
       - dokploy-network
     environment:
+      # Compiler is a pure-TS deterministic pipeline. It needs NO secrets and
+      # NO network egress today — only the addresses it bakes into bytecode at
+      # emit time. Kept in its own block so we never leak LLM/RPC keys into it.
       - NODE_ENV=production
-      - AGENT_URL=http://agent:3002
-      - COMPILER_URL=${COMPILER_URL:-http://compiler:3001}
-      # Server-side feature flags (no NEXT_PUBLIC_ prefix → server-only at runtime).
-      - WAVE_USE_MOCK=${WAVE_USE_MOCK:-false}
-      - WAVE_ENS_WIRED=${WAVE_ENS_WIRED:-true}
-      - ENS_NODE=${ENS_NODE:-}
-      # Also exposed at runtime for server components / route handlers.
-      - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
+      - ROUTER_ADDRESS=${ROUTER_ADDRESS}
+      - AQUA_ADDRESS=${AQUA_ADDRESS}
+      - OPS_WETH_ADDRESS=${OPS_WETH_ADDRESS:-}
 
   agent:
     build:
@@ -50,18 +53,21 @@ services:
     networks:
       - dokploy-network
     environment:
-      # LLM (craftshost OpenAI-compat gateway, Langfuse-traced)
+      # Cross-service pointers (internal DNS, bare service name).
+      - AGENT_ENDPOINT_MCP=http://agent:3002
+      - COMPILER_URL=http://compiler:3001
+      # LLM via craftshost OpenAI-compat gateway (Langfuse-traced).
       - ZAI_BASE_URL=${ZAI_BASE_URL}
       - ZAI_API_KEY=${ZAI_API_KEY}
       - ZAI_PUBLIC_KEY=${ZAI_PUBLIC_KEY}
       - ZAI_MODEL=${ZAI_MODEL}
       - LLM_TIMEOUT_MS=${LLM_TIMEOUT_MS:-90000}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-2}
-      # Storage + HTTP port
+      # Storage + HTTP port.
       - LIBSQL_URL=${LIBSQL_URL:-:memory:}
       - EVIDENCE_PATH=${EVIDENCE_PATH:-./evidence.jsonl}
       - PORT=3002
-      # Sepolia settlement
+      # Sepolia settlement (agent announces strategies from the router owner EOA).
       - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL}
       - SEPOLIA_PRIVATE_KEY=${SEPOLIA_PRIVATE_KEY}
       - MAKER_PRIVATE_KEY=${MAKER_PRIVATE_KEY}
@@ -71,7 +77,6 @@ services:
       - OPS_SWAP_VM_ROUTER_NAME=${OPS_SWAP_VM_ROUTER_NAME:-Wave}
       - OPS_SWAP_VM_ROUTER_VERSION=${OPS_SWAP_VM_ROUTER_VERSION:-1}
       - OPS_AQUA_ADDRESS=${OPS_AQUA_ADDRESS}
-      - OPS_WETH_ADDRESS=${OPS_WETH_ADDRESS:-}
       - AQUA_ADDRESS=${AQUA_ADDRESS}
       - ROUTER_ADDRESS=${ROUTER_ADDRESS}
       - ENS_STRATEGY_ROUTER=${ROUTER_ADDRESS}
@@ -79,7 +84,33 @@ services:
       - ENS_REGISTRY=${ENS_REGISTRY:-}
       - WAVE_SUBGRAPH_URL=${WAVE_SUBGRAPH_URL}
       - MONITOR_SOURCE=${MONITOR_SOURCE:-subgraph}
-      - AGENT_ENDPOINT_MCP=http://agent:3002
+
+  ui:
+    build:
+      context: ./requirements/ui
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* must be present at `next build` time (inlined into the
+        # client bundle). Passed as a build arg from the compose.
+        - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    networks:
+      - dokploy-network
+    environment:
+      # Cross-service pointers (internal DNS). UI proxies /api/compile → agent
+      # and spawns the compiler CLI for /api/emit (the compiler container is on
+      # the same network for the upcoming /compile + /simulate HTTP move).
+      - NODE_ENV=production
+      - AGENT_URL=http://agent:3002
+      - COMPILER_URL=http://compiler:3001
+      # Server-side feature flags (no NEXT_PUBLIC_ prefix → server-only).
+      - WAVE_USE_MOCK=${WAVE_USE_MOCK:-false}
+      - WAVE_ENS_WIRED=${WAVE_ENS_WIRED:-true}
+      - ENS_NODE=${ENS_NODE:-}
+      # Also exposed at runtime for server components / route handlers.
+      - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
 
 networks:
   dokploy-network:
