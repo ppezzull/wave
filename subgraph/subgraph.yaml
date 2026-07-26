@@ -74,7 +74,7 @@ dataSources:
     source:
       address: "0xdc8C2b141CF705F12f6BB45af3830341daBB1D1E" # Sepolia Aqua (Flaviano, Jul 25 2026)
       abi: Aqua
-      startBlock: 11350061 # Aqua deploy block (verified on Etherscan); router is 11350046, Aqua 11350061
+      startBlock: 11350041 # Aqua deploy block (broadcast record + on-chain receipt); Aqua 11350041 precedes router 11350046
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
