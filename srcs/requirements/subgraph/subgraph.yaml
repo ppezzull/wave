@@ -18,9 +18,9 @@ dataSources:
       # receipt block 0xad301e = 11350046).
       # ⚠️ startBlock is the ROUTER DEPLOY block (11350046), NOT the first swap (11350065) —
       # starting at the swap misses the StrategyDeployed events that precede it.
-      address: "0xeb513fd18c391fae1513ff12c1f97bf659d052c4"
+      address: "0x698d798895a03c858aab493564e0795732da0c68"
       abi: EnsStrategyRouter
-      startBlock: 11350046
+      startBlock: 11352568 # router DEPLOY block (redeploy per #49 — 0xeb513f… era il placeholder #20 con programHash=0)
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
