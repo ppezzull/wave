@@ -60,11 +60,56 @@ export default function LandingPage() {
             className="text-balance text-center font-sans font-extrabold leading-[1.05] tracking-tight text-wave-text"
             style={{ fontSize: 'clamp(2.5rem, 4.5vw, 4rem)' }}
           >
-            likes are liquidity
+            never miss the wave
           </h1>
-          <p className="mx-auto mt-4 max-w-md text-pretty text-center font-sans text-lg leading-relaxed text-wave-muted">
-            Never miss the waves. If you have a pool, you might drown.
-          </p>
+          <h2 className="mx-auto mt-4 max-w-md text-pretty text-center font-sans text-lg leading-relaxed text-wave-muted">
+            If you have a pool, you might drown.
+          </h2>
+
+          {/* Credits */}
+          <div className="mx-auto mt-8 flex w-full max-w-md flex-col items-center gap-5">
+            <div className="flex flex-col items-center gap-3">
+              <span className="font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-wave-muted">
+                Powered by
+              </span>
+              <div className="flex items-center justify-center gap-6">
+                <Image
+                  src="/1inch-1inch-logo-3869602491.png"
+                  alt="1inch"
+                  width={120}
+                  height={26}
+                  className="h-[22px] w-auto object-contain opacity-80 brightness-0 invert"
+                />
+                <Image
+                  src="/thegraph-logo.svg"
+                  alt="The Graph"
+                  width={120}
+                  height={26}
+                  className="h-[22px] w-auto object-contain opacity-90"
+                />
+                <Image
+                  src="/ethereum-name-service-ens-logo-1314521848.png"
+                  alt="ENS"
+                  width={100}
+                  height={24}
+                  className="h-[20px] w-auto object-contain"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center gap-3">
+              <span className="font-sans text-[11px] font-medium uppercase tracking-[0.18em] text-wave-muted">
+                Developed at
+              </span>
+              <Image
+                src="/ethlisbon-logo.png"
+                alt="ETHGlobal Lisboa 2026"
+                width={140}
+                height={34}
+                className="h-[32px] w-auto object-contain"
+              />
+            </div>
+          </div>
         </section>
 
         <section
@@ -82,10 +127,10 @@ export default function LandingPage() {
                 aria-hidden="true"
               />
               <h1 className="mt-3 font-sans text-3xl font-extrabold tracking-tight text-wave-text">
-                likes are liquidity
+                never miss the wave
               </h1>
               <p className="mt-2 text-pretty font-sans text-sm leading-relaxed text-wave-muted">
-                Never miss the waves. If you have a pool, you might drown.
+                If you have a pool, you might drown.
               </p>
             </div>
 
