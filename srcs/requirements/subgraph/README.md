@@ -1,6 +1,6 @@
 # wave subgraph
 
-The Graph subgraph for **wave** — indexes the on-chain data the feed and the retune agent read. There is **no database**; `getFeed()` and `graphDelta` query this subgraph + ENS resolve, nothing else. See [`docs/spikes/GRAPH-NODE-SPIKE.md`](../docs/spikes/GRAPH-NODE-SPIKE.md) for the indexing-path decision (decentralized network vs self-hosted `graph-node` vs `eth_getLogs`).
+The Graph subgraph for **wave** — indexes the on-chain data the feed and the retune agent read. There is **no database**; `getFeed()` and `graphDelta` query this subgraph + ENS resolve, nothing else. See [`docs/spikes/GRAPH-NODE-SPIKE.md`](../../../docs/spikes/GRAPH-NODE-SPIKE.md) for the indexing-path decision (decentralized network vs self-hosted `graph-node` vs `eth_getLogs`).
 
 ## Status — production subgraph LIVE on Studio (v0.0.2)
 
@@ -14,14 +14,14 @@ The Graph subgraph for **wave** — indexes the on-chain data the feed and the r
 | **Query endpoint (v0.0.2, live)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2` |
 | **Query endpoint (v0.0.1, historical)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.1` |
 
-**See also:** contract-layer gaps that block the demo (strategyId binding, committed capital, programHash) — see [`SUBGRAPH-CONTRACT-GAPS.md`](../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md).
+**See also:** contract-layer gaps that block the demo (strategyId binding, committed capital, programHash) — see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md).
 
 ### Production entities (v0.0.2, live) — matches the agent client (`srcs/requirements/agent/src/clients/subgraph.ts`)
 
 - **`Strategy`** (mutable): `id` (= orderHash), `programHash` (tolerates `bytes32(0)`), `ensNode`, `status`, ranking aggregates `cumulativeVolumeIn/Out`, **`committedCapital`**, `swapCount`, `lastSwapTimestamp`, `followerCount`.
   - **`cumulativeVolumeIn/Out` are `BigInt`, not `BigDecimal`** — GraphQL decimal128 caps at 34 significant figures and loses wei; the UI converts to `BigDecimal` at read time.
-  - **`committedCapital` is sourced from Aqua** (`Pushed` − `Pulled`, keyed by `strategyHash == Strategy.id`) — `returnPct`'s denominator. Maintained as a running balance, so it stays correct as capital enters/leaves. No contract change was needed (C2 resolved); see [`SUBGRAPH-CONTRACT-GAPS.md`](../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C2.
-  - **`programHash` is `bytes32(0)`** for every strategy until the compiler lands → the UI hash-verify chip must gate on `programHash != 0` (D3); see [`SUBGRAPH-CONTRACT-GAPS.md`](../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C3.
+  - **`committedCapital` is sourced from Aqua** (`Pushed` − `Pulled`, keyed by `strategyHash == Strategy.id`) — `returnPct`'s denominator. Maintained as a running balance, so it stays correct as capital enters/leaves. No contract change was needed (C2 resolved); see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C2.
+  - **`programHash` is `bytes32(0)`** for every strategy until the compiler lands → the UI hash-verify chip must gate on `programHash != 0` (D3); see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C3.
 - **`Swap`** (immutable): `strategy` (join key = `Swapped.orderHash`), `amountIn/Out`, `timestamp`, … The client filters `swaps(where:{strategy:$id})`.
 - **`Follow`** (immutable log): one row per `wave.following/<id>` `TextChanged` event.
 - **`Follower`** (mutable index): `id = node‖strategyId` — makes `followerCount` O(1) per event, reorg-exact.
@@ -35,7 +35,7 @@ The Graph subgraph for **wave** — indexes the on-chain data the feed and the r
 ## Build (verified green)
 
 ```bash
-cd subgraph
+cd srcs/requirements/subgraph
 npm install
 npx graph codegen    # ✔ Types generated successfully
 npx graph build      # ✔ Build completed: build/subgraph.yaml
@@ -44,7 +44,7 @@ npx graph build      # ✔ Build completed: build/subgraph.yaml
 ## Layout
 
 ```
-subgraph/
+srcs/requirements/subgraph/
 ├── schema.graphql        # TextRecordChanged @entity(immutable) — the spike entity
 ├── subgraph.yaml         # specVersion 1.3.0, network: sepolia, ENSResolver data source
 ├── src/mapping.ts        # handleTextChanged — reorg-safe composite id (txHash+logIndex)
