@@ -33,3 +33,6 @@ lib/
 
 # MCP config — machine-specific paths, use .mcp.example.json as template
 .mcp.json
+
+# Mastra monitor evidence log (agent) — default ./evidence.jsonl
+evidence*.jsonl
