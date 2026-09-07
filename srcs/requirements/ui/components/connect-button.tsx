@@ -8,12 +8,13 @@
 import { usePrivy } from '@privy-io/react-auth'
 
 export function ConnectButton({ collapsed = false }: { collapsed?: boolean }) {
-  const { ready, authenticated, connectWallet, logout } = usePrivy()
+  const { ready, authenticated, login, connectWallet, logout } = usePrivy()
   if (!ready) return null
 
   if (authenticated) {
     return (
       <button
+        type="button"
         onClick={() => void logout()}
         className={`rounded-full font-sans text-[14px] font-semibold transition-colors hover:bg-wave-surface ${
           collapsed ? 'p-2 text-wave-muted' : 'px-4 py-2.5 text-wave-muted'
@@ -25,9 +26,15 @@ export function ConnectButton({ collapsed = false }: { collapsed?: boolean }) {
     )
   }
 
+  const handleConnect = () => {
+    if (typeof login === 'function') void login()
+    else void connectWallet()
+  }
+
   return (
     <button
-      onClick={() => connectWallet()}
+      type="button"
+      onClick={handleConnect}
       className={`flex items-center justify-center rounded-full font-sans text-[14px] font-bold text-white shadow-sm transition-all duration-[220ms] hover:brightness-110 active:scale-[0.98] ${
         collapsed ? 'w-12 h-12' : 'w-full px-4 py-2.5'
       }`}

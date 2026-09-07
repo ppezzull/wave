@@ -8,27 +8,19 @@
 // account chip read this so identity comes from the actual connected wallet,
 // never a fabricated value.
 //
-// ENS reverse-lookup is best-effort and client-side only (no server agent call
-// wired yet); it degrades to the raw address until the ENS reader lands.
+// ENS resolution happens server-side via resolveEnsName (app/actions/
+// resolve-identity.ts) — reverse record first, forward (owned-name) fallback
+// second — so ENS RPC never reaches the browser (frontend.md §8). Best-effort:
+// never blocks, never throws into the UI; degrades to the raw address.
 import { useEffect, useState } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
-import { createPublicClient, http } from 'viem'
-import { sepolia } from 'viem/chains'
-import { getEnsName } from 'viem/actions'
+import { resolveEnsName, claimHandle } from '@/app/actions/resolve-identity'
 
 export interface SessionUser {
   walletAddress: string
-  /** ENS name if reverse-resolved, else null. */
+  /** ENS name if resolved (reverse or owned-name), else null. */
   ensName: string | null
 }
-
-const sepoliaClient = createPublicClient({
-  chain: sepolia,
-  transport: http(
-    process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ??
-      'https://ethereum-sepolia-rpc.publicnode.com',
-  ),
-})
 
 export function useSessionUser(): {
   sessionUser: SessionUser | null
@@ -44,9 +36,17 @@ export function useSessionUser(): {
     let cancelled = false
     setEnsName(null)
     if (!connected) return
-    // Best-effort reverse lookup; never blocks, never throws into the UI.
-    getEnsName(sepoliaClient, { address: connected as `0x${string}` })
-      .then((name: string | null) => {
+    // Resolve (reverse then owned-name fallback). If the wallet is truly nameless,
+    // auto-provision a *.wave.eth subname via the agent so follow has a name to write on.
+    // Never blocks, never throws into the UI.
+    resolveEnsName(connected)
+      .then(async (name) => {
+        if (cancelled) return
+        if (name) return name
+        // Nameless — claim an identity subname (agent-custodied, idempotent).
+        return claimHandle(connected)
+      })
+      .then((name) => {
         if (!cancelled) setEnsName(name ?? null)
       })
       .catch(() => {

@@ -5,6 +5,7 @@ import { X, Send, CheckCircle2, Minus, GripHorizontal, MessageSquare } from 'luc
 import { useDrawer } from './drawer-context'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { StreamNotifications } from './stream-notifications'
+import { shipStrategy, type ShipResult } from '@/app/actions/ship'
 
 const LISBOA =
   'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
@@ -65,48 +66,111 @@ const DEFAULT_MESSAGES: Message[] = [
   },
 ]
 
-function InlineSafetyCard() {
+/**
+ * Compile-time safety card. Renders the REAL deterministic-compiler output (programHash,
+ * emitted-byte count, applied rule rewrites, canonicalization) fetched via /api/emit — no
+ * hardcoded "SAFE". The programHash is byte-exact: it is the value the ENS v0.programhash
+ * record and the on-chain program both carry, so it is the actual tamper-check root.
+ *
+ * Honest label: this is COMPILE-TIME verification (Zod→canonical→IR→bytecode + rule
+ * rewrites), not the full quote-grid settle simulation (both directions, monotonicity,
+ * split-vs-single, etc.) which is out of scope for the event demo. The card says what it
+ * proved, nothing more.
+ */
+function InlineSafetyCard({ emit }: {
+  emit: {
+    programHash?: string
+    bytes?: number
+    rulesApplied?: number
+    canonicalized?: boolean
+    error?: string
+  } | null
+}) {
+  if (emit?.error) {
+    return (
+      <div
+        className="animate-safety-reveal rounded-[14px] p-4 text-white"
+        style={{ background: '#B0341F' }}
+        role="status"
+        aria-label="Strategy compile failed"
+      >
+        <p className="font-sans text-[15px] font-bold mb-1">Compile rejected</p>
+        <p className="font-mono text-[11px] text-white/80 break-all">{emit.error}</p>
+      </div>
+    )
+  }
+  const shortHash = emit?.programHash ? `${emit.programHash.slice(0, 10)}…${emit.programHash.slice(-4)}` : '…'
   return (
     <div
       className="animate-safety-reveal rounded-[14px] p-4 text-white"
       style={{ background: '#1F9D6B' }}
       role="status"
-      aria-label="Strategy safety result: SAFE"
+      aria-label="Strategy compiled — deterministic bytecode verified"
     >
-      <p className="font-sans text-lg font-bold mb-3">SAFE</p>
+      <p className="font-sans text-[15px] font-bold mb-3">Compiled · bytecode verified</p>
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: 'Monotonicity', value: '0.97' },
-          { label: 'Symmetry', value: '12 bps' },
-          { label: 'Guard Triggers', value: '3' },
-          { label: 'Skew vs Cap', value: '0.04' },
+          { label: 'program hash', value: shortHash },
+          { label: 'emitted bytes', value: emit?.bytes != null ? String(emit.bytes) : '…' },
+          { label: 'rule rewrites', value: emit?.rulesApplied != null ? String(emit.rulesApplied) : '…' },
+          { label: 'canonicalized', value: emit?.canonicalized == null ? '…' : emit.canonicalized ? 'yes' : 'no' },
         ].map((m) => (
           <div key={m.label}>
             <p className="font-sans text-[11px] text-white/70 mb-0.5">
               {m.label}
             </p>
-            <p className="font-mono font-bold text-[1rem] text-white">
+            <p className="font-mono font-bold text-[0.95rem] text-white">
               {m.value}
             </p>
           </div>
         ))}
       </div>
+      <p className="font-sans text-[10px] text-white/60 mt-3">
+        Deterministic compile (Zod → canonical → IR → bytecode). Quote-grid settle sim not run.
+      </p>
     </div>
   )
 }
 
-function PostShipMessage() {
+function PostShipMessage({ result }: { result: ShipResult | null }) {
+  // Real on-chain evidence from the agent shipStrategy action. Falls back to a neutral
+  // line only when no result is present (e.g. a stale shipped flag) — never a fake tx hash.
+  if (!result || !result.ok) {
+    return (
+      <p className="font-sans text-[14px] text-wave-muted">
+        Shipped. (No receipt returned.)
+      </p>
+    )
+  }
+  const shortHash = (h?: string) => (h ? `${h.slice(0, 10)}…${h.slice(-4)}` : null)
+  const ship = shortHash(result.shipTxHash)
+  const announce = shortHash(result.announceTxHash)
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <CheckCircle2 size={14} style={{ color: '#2A9D8F' }} aria-hidden="true" />
-        <span className="font-mono text-[13px]" style={{ color: '#2A9D8F' }}>
-          tx 0x1a2b3c4d5e6f...7890
-        </span>
-      </div>
-      <p className="font-sans text-[14px] text-wave-text">
-        Registered as eth-usdc-momentum.wave.eth
-      </p>
+      {ship && (
+        <div className="flex items-center gap-2">
+          <CheckCircle2 size={14} style={{ color: '#2A9D8F' }} aria-hidden="true" />
+          <span className="font-mono text-[13px]" style={{ color: '#2A9D8F' }}>
+            ship {ship}
+          </span>
+        </div>
+      )}
+      {announce && (
+        <span className="font-mono text-[12px] text-wave-muted">announce {announce}</span>
+      )}
+      {result.subname && (
+        <p className="font-sans text-[14px] text-wave-text">Registered as {result.subname}</p>
+      )}
+      {result.programHash && (
+        <p className="font-mono text-[11px] text-wave-muted break-all">
+          v0.programhash {result.programHash.slice(0, 18)}…
+        </p>
+      )}
+      {result.alreadyDeployed && (
+        <p className="font-sans text-[12px] text-wave-muted">
+          (Already on-chain — no duplicate ship sent.)
+        </p>
+      )}
     </div>
   )
 }
@@ -197,19 +261,113 @@ interface LiveMessage {
   kind?: 'text' | 'spec' | 'ship'
 }
 
+const LIVE_CHAT_MESSAGES_KEY = 'wave:chat:messages:v1'
+const LIVE_CHAT_COMPOSE_KEY = 'wave:chat:compose:v1'
+
+function readLiveMessages(): LiveMessage[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const value = JSON.parse(window.localStorage.getItem(LIVE_CHAT_MESSAGES_KEY) ?? '[]') as unknown
+    if (!Array.isArray(value)) return []
+    return value.filter(
+      (message): message is LiveMessage =>
+        Boolean(message) &&
+        typeof message === 'object' &&
+        typeof (message as LiveMessage).id === 'string' &&
+        ((message as LiveMessage).role === 'agent' || (message as LiveMessage).role === 'user') &&
+        (message as LiveMessage).kind !== undefined,
+    )
+  } catch {
+    return []
+  }
+}
+
 export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const { state, close, minimize, restore } = useDrawer()
   const { open, minimized, forkSource, agentStrategy } = state
 
   const [inputValue, setInputValue] = useState('')
+  // Ship flow states: idle → confirming (HITL gate) → shipping → done|error.
+  // `shipped` is kept for the existing PostShipMessage branch; `shipResult` carries the
+  // real on-chain evidence (tx hashes, ENS subname, programHash) returned by the agent.
   const [shipped, setShipped] = useState(false)
+  const [shipPending, setShipPending] = useState(false)
+  const [shipConfirming, setShipConfirming] = useState(false)
+  const [shipResult, setShipResult] = useState<ShipResult | null>(null)
+  // Real compiler output for the safety card — fetched via /api/emit (spawns the wave-compiler
+  // CLI: canonicalize → resolveRejections → lower → emit → disassemble). Replaces the prior
+  // hardcoded "SAFE" verdict with the actual programHash + emitted-byte count + applied
+  // rules. Honest label: this is COMPILE-TIME safety (byte-exact hash + rule rewrites), not
+  // the full quote-grid settle simulation (out of scope for the demo).
+  const [emit, setEmit] = useState<{
+    programHash?: string
+    bytes?: number
+    rulesApplied?: number
+    canonicalized?: boolean
+    error?: string
+  } | null>(null)
   const [isDesktop, setIsDesktop] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Live compose stream (live mode only). Mock mode replays DEFAULT_MESSAGES.
-  const compose = useComposeStream()
-  const [liveMessages, setLiveMessages] = useState<LiveMessage[]>([])
+  const compose = useComposeStream(LIVE_CHAT_COMPOSE_KEY)
+  const [liveMessages, setLiveMessages] = useState<LiveMessage[]>(readLiveMessages)
+
+  // Chat history is deliberately local-only: no conversation data is written
+  // to the app backend, chain, ENS, or subgraph. Refreshing the page restores
+  // the local draft/conversation and its last completed StrategySpec.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LIVE_CHAT_MESSAGES_KEY, JSON.stringify(liveMessages))
+    } catch {
+      // Storage is optional; the live chat remains usable when unavailable.
+    }
+  }, [liveMessages])
+
+  // When the spec finalizes, run the deterministic compiler (/api/emit) to surface the REAL
+  // programHash + emitted-byte count + applied rules in the safety card. The compiler output
+  // is the byte-exact evidence that the ENS v0.programhash record + the on-chain program will
+  // match — this is what "safety-checked" means at compile time for the demo.
+  useEffect(() => {
+    if (useMock || !compose.spec) return
+    const spec = compose.spec
+    let cancelled = false
+    setEmit(null)
+    ;(async () => {
+      try {
+        const res = await fetch('/api/emit', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(spec),
+          signal: AbortSignal.timeout(15000),
+        })
+        const json = (await res.json()) as {
+          programHash?: string
+          bytecode?: unknown[]
+          rulesApplied?: unknown[]
+          canonicalized?: boolean
+          error?: string
+        }
+        if (cancelled) return
+        if (!res.ok || json.error) {
+          setEmit({ error: json.error ?? `compile failed (HTTP ${res.status})` })
+        } else {
+          setEmit({
+            programHash: json.programHash,
+            bytes: Array.isArray(json.bytecode) ? json.bytecode.length : undefined,
+            rulesApplied: Array.isArray(json.rulesApplied) ? json.rulesApplied.length : undefined,
+            canonicalized: json.canonicalized,
+          })
+        }
+      } catch (err) {
+        if (!cancelled) setEmit({ error: String(err).slice(0, 160) })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [useMock, compose.spec])
 
   // Track viewport so the floating window's fixed size/position only applies on
   // desktop. On mobile the panel is a full-width docked sheet.
@@ -397,12 +555,56 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     }
   }, [onPointerMove, onPointerUp, onResizeMove, onResizeUp])
 
-  const handleShip = () => {
-    setShipped(true)
-    setTimeout(() => {
-      close()
-      setShipped(false)
-    }, 2000)
+  // Ship is a destructive on-chain write. The HITL gate is the explicit confirm step:
+  // the first click arms (shipConfirming), the second click fires the agent shipStrategy
+  // action. The agent signs with server keys for the demo (post-event: user wallet).
+  const handleShip = async () => {
+    // Stage 1 — arm the confirm gate (the destructive-op HITL approval).
+    if (!shipConfirming) {
+      setShipConfirming(true)
+      return
+    }
+    // Stage 2 — confirmed. Forward the finalized spec to the agent; the agent re-derives
+    // bytes/hashes, so nothing client-supplied can misreport the on-chain program.
+    const spec = compose.spec
+    if (!spec) {
+      setShipConfirming(false)
+      return
+    }
+    setShipConfirming(false)
+    setShipPending(true)
+    setShipResult(null)
+    try {
+      const result = await shipStrategy({
+        specVersion: Number(spec.specVersion ?? 1),
+        pair: {
+          token0: String(spec.pair?.token0 ?? ''),
+          token1: String(spec.pair?.token1 ?? ''),
+        },
+        size: {
+          amount0: String(spec.size?.amount0 ?? ''),
+          amount1: String(spec.size?.amount1 ?? ''),
+        },
+        blocks: Array.isArray(spec.blocks)
+          ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+          : [],
+      })
+      setShipResult(result)
+      if (result.ok) {
+        setShipped(true)
+        // Clear the in-progress draft now that the strategy is live on-chain.
+        try {
+          window.localStorage.removeItem(LIVE_CHAT_COMPOSE_KEY)
+          window.localStorage.removeItem(LIVE_CHAT_MESSAGES_KEY)
+        } catch {
+          // Storage optional.
+        }
+      }
+    } catch (err) {
+      setShipResult({ ok: false, reason: String(err).slice(0, 200) })
+    } finally {
+      setShipPending(false)
+    }
   }
 
   const handleSend = (e: React.FormEvent) => {
@@ -530,7 +732,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
           if (msg.type === 'safety-card') {
             return (
               <div key={msg.id} className="max-w-[85%]">
-                <InlineSafetyCard />
+                <InlineSafetyCard emit={null} />
                 <p className="font-sans text-[11px] text-wave-muted mt-1 pl-1">
                   {msg.timestamp}
                 </p>
@@ -542,7 +744,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
             return (
               <div key={msg.id} className="w-full">
                 {shipped ? (
-                  <PostShipMessage />
+                  <PostShipMessage result={null} />
                 ) : (
                   <button
                     onClick={handleShip}
@@ -616,6 +818,16 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
             )
           }
           const isAgent = msg.role === 'agent'
+          // The compile bubble is the "Compiling…" affordance. While the LLM
+          // streams, surface its live reasoning (compose.progress) instead of a
+          // frozen word — a 14–120s self-hosted-model wait otherwise looks stuck.
+          // Only this bubble (id prefix a-compile-) is live; other agent bubbles
+          // are static canned copy.
+          const isCompileBubble = isAgent && msg.id.startsWith('a-compile-')
+          const liveProgress =
+            isCompileBubble && compose.isStreaming && compose.progress
+              ? compose.progress.replace(/\s+/g, ' ').trim().slice(-220)
+              : ''
           return (
             <div
               key={msg.id}
@@ -628,7 +840,20 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
                   borderRadius: isAgent ? '12px 12px 12px 4px' : '12px 12px 4px 12px',
                 }}
               >
-                {msg.content}
+                {isCompileBubble && compose.isStreaming ? (
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full"
+                      style={{ background: '#2A9D8F', animation: 'wave-pulse 1.1s ease-in-out infinite' }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-wave-muted">
+                      {liveProgress ? `thinking… ${liveProgress}` : 'thinking…'}
+                    </span>
+                  </span>
+                ) : (
+                  msg.content
+                )}
               </div>
             </div>
           )
@@ -639,25 +864,48 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
         {!useMock && compose.spec && (
           <>
             <div className="max-w-[85%]">
-              <InlineSafetyCard />
+              <InlineSafetyCard emit={emit} />
             </div>
             {compose.error ? (
               <p className="font-sans text-[13px]" style={{ color: '#E5484D' }}>
                 {compose.error}
               </p>
             ) : (
-              <div className="w-full">
+              <div className="w-full flex flex-col gap-2">
                 {shipped ? (
-                  <PostShipMessage />
+                  <PostShipMessage result={shipResult} />
+                ) : shipPending ? (
+                  <div
+                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] flex items-center justify-center gap-2"
+                    style={{ background: LISBOA, minHeight: '52px' }}
+                    aria-live="polite"
+                  >
+                    <span
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{ background: '#fff', animation: 'wave-pulse 1.1s ease-in-out infinite' }}
+                      aria-hidden="true"
+                    />
+                    Shipping on Sepolia…
+                  </div>
                 ) : (
                   <button
                     onClick={handleShip}
                     className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
-                    style={{ background: LISBOA, minHeight: '52px' }}
-                    aria-label="Confirm and ship strategy on-chain"
+                    style={{
+                      background: shipConfirming ? '#E5484D' : LISBOA,
+                      minHeight: '52px',
+                    }}
+                    aria-label={
+                      shipConfirming ? 'Confirm: ship strategy on-chain (destructive)' : 'Ship strategy on-chain'
+                    }
                   >
-                    Ship on-chain
+                    {shipConfirming ? 'Confirm — ship on-chain (cannot be undone)' : 'Ship on-chain'}
                   </button>
+                )}
+                {shipResult && !shipResult.ok && shipResult.reason && (
+                  <p className="font-sans text-[12px]" style={{ color: '#E5484D' }}>
+                    {shipResult.reason}
+                  </p>
                 )}
               </div>
             )}

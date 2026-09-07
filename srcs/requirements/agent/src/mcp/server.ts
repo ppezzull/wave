@@ -28,5 +28,10 @@ export const waveMcpServer = new MCPServer({
     // Writes — autonomous ENS (ensAgent), never HITL-gated. Per AGENT.md authz matrix.
     setText: writes.setText,
     registerSubname: writes.registerSubname,
+    claimHandle: writes.claimHandle,
+    // Live ship — compile → ENS → announce → approve → ship → verify. Destructive: the UI
+    // MUST gate behind explicit human approval (Ship confirm). Agent signs (demo); user-wallet
+    // signing is the post-event hardening.
+    shipStrategy: writes.shipStrategy,
   },
 });

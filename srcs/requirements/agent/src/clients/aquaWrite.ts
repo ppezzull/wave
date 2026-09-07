@@ -86,6 +86,21 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
   const makerWallet = createWalletClient({ account: maker, chain: sepolia, transport: http(cfg.rpcUrl) });
   const ownerWallet = createWalletClient({ account: owner, chain: sepolia, transport: http(cfg.rpcUrl) });
 
+  // Minimal ERC-20 surface — only `approve` is needed before aqua.ship (the maker must
+  // approve Aqua for both tokens so ship can register virtual balances; LiveSwapStock.s.sol:138).
+  const ERC20_ABI = [
+    {
+      name: "approve",
+      type: "function",
+      stateMutability: "nonpayable",
+      inputs: [
+        { name: "spender", type: "address" },
+        { name: "amount", type: "uint256" },
+      ],
+      outputs: [{ name: "", type: "bool" }],
+    },
+  ] as const;
+
   const send = async (wallet: typeof makerWallet, request: Parameters<typeof wallet.writeContract>[0]) => {
     const hash = await wallet.writeContract(request);
     const receipt = await pub.waitForTransactionReceipt({ hash });
@@ -131,6 +146,26 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
         args: [cfg.router, strategy, tokens, amounts],
       });
       return send(makerWallet, request);
+    },
+
+    /**
+     * Approve each token to Aqua for max (the maker wallet). MUST run before ship so Aqua can
+     * register the maker's virtual balances — LiveSwapStock.s.sol:138-139. Re-approving max is
+     * a no-op on the allowance. Returns the last approval tx hash.
+     */
+    async approve(tokens: `0x${string}`[]): Promise<Hash> {
+      let last: Hash | undefined;
+      for (const token of tokens) {
+        const { request } = await pub.simulateContract({
+          account: maker,
+          address: token,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [cfg.aqua, 2n ** 256n - 1n],
+        });
+        last = await send(makerWallet, request);
+      }
+      return last!;
     },
   };
 }

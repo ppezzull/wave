@@ -8,8 +8,11 @@ import { labelhash, namehash, normalize } from "../ens/namehash.js";
 import { publicClient, walletClient } from "../ens/clients.js";
 import { ensConfig } from "../ens/config.js";
 
-// Public Resolver (setText) + ENS Registry (setSubnodeRecord) — minimal human-readable ABIs.
-const RESOLVER_ABI = parseAbi(["function setText(bytes32 node, string key, string value) external"]);
+// Public Resolver (setText / setAddr) + ENS Registry (setSubnodeRecord) — minimal human-readable ABIs.
+const RESOLVER_ABI = parseAbi([
+  "function setText(bytes32 node, string key, string value) external",
+  "function setAddr(bytes32 node, address a) external",
+]);
 const REGISTRY_ABI = parseAbi([
   "function setSubnodeRecord(bytes32 node, bytes32 label, address owner, address resolver, uint64 ttl) external",
 ]);
@@ -55,6 +58,25 @@ export const ens = {
       abi: RESOLVER_ABI,
       functionName: "setText",
       args: [node, opts.key, opts.value],
+      account,
+    });
+  },
+  /** Set the ETH addr record for a name on its resolver. Caller holds the ENS-owner key. */
+  async setAddr(opts: {
+    name: string;
+    address: Address;
+    privateKey: `0x${string}`;
+  }): Promise<Hash> {
+    const node = namehash(opts.name);
+    const resolver = await this.getResolver(opts.name);
+    const wc = walletClient(opts.privateKey);
+    const account = wc.account;
+    if (!account) throw new Error("[ens] walletClient has no account");
+    return wc.writeContract({
+      address: resolver,
+      abi: RESOLVER_ABI,
+      functionName: "setAddr",
+      args: [node, opts.address],
       account,
     });
   },

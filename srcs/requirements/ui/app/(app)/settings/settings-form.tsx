@@ -6,6 +6,7 @@ import { Footer } from '@/components/footer'
 import { ConnectButton } from '@/components/connect-button'
 import { useSessionUser } from '@/hooks/use-session-user'
 import type { CurrentUser } from '@/components/app-wrapper'
+import { usePrivy } from '@privy-io/react-auth'
 
 interface Props {
   user: CurrentUser
@@ -19,6 +20,7 @@ export function SettingsForm({ user }: Props) {
   const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl ?? '')
   const [saved, setSaved] = useState(false)
   const { sessionUser } = useSessionUser()
+  const { logout } = usePrivy()
 
   const walletAddress = sessionUser?.walletAddress ?? user.walletAddress
   const ensName = sessionUser?.ensName ?? null
@@ -186,6 +188,7 @@ export function SettingsForm({ user }: Props) {
             <div className="h-px bg-wave-border my-6" aria-hidden="true" />
             <button
               type="button"
+              onClick={() => void logout()}
               className="font-sans text-[14px] font-semibold min-h-[44px] transition-colors hover:opacity-80"
               style={{ color: '#E5484D' }}
               aria-label="Sign out of wave"
