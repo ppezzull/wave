@@ -19,7 +19,7 @@ const COMPOSE_INSTRUCTIONS = `You are wave's strategy composer. Given one natura
 Rules:
 - Fill ONLY fields the schema allows. Unknown block types, unknown enum values, and out-of-range numbers must be OMITTED, never invented.
 - pair.token0 and pair.token1 are 0x-prefixed 40-hex ADDRESSES — take them VERBATIM from the input intent; NEVER use a symbol like "ETH" there. If the input omits addresses, you cannot fill the pair.
-- Pick an oracle feed by SYMBOL (ETH/USD, BTC/USD, LINK/USD, USDC/USD, DAI/USD), never an address.
+- Oracle guard feed is a Chainlink USD feed and MUST be exactly one of: "ETH/USD", "BTC/USD", "LINK/USD", "USDC/USD", "DAI/USD". For an ETH/USDC pair, use "ETH/USD" — NEVER use "ETH/USDC".
 - amounts are human-readable decimal strings (e.g. "1.5", "3000").
 - bps fields are basis points: 1.5% = 150 (not 1500); ceiling 1000.
 - Emit nothing but the JSON object. No prose, no code, no markdown fences.`;
@@ -27,20 +27,15 @@ Rules:
 // Recall the last turns of conversation so the agent "remembers" prior strategies.
 const composeMemory = new Memory({ options: { lastMessages: 20 } });
 
-export const composeAgent = new Agent({
-  id: "compose",
-  name: "wave compose agent",
-  instructions: COMPOSE_INSTRUCTIONS,
-  model: gemmaModel(),
-  memory: composeMemory,
-});
-
-/** Memory scope — (resource=user, thread=session). Pass to compose/composeStream for recall. */
-export type ComposeScope = { resource: string; thread: string };
-
-const generateOptions = (scope?: ComposeScope) => {
-  // Fresh per call — AbortSignal.timeout arms at creation and is single-use, so it
-  // must NOT be reused across compose() invocations (a fired signal stays aborted).
+/**
+ * Fresh per call — AbortSignal.timeout is single-use (a fired signal stays aborted),
+ * so this MUST be a factory, never a frozen object on the Agent.
+ *
+ * Also applied as `defaultOptions` so Mastra's HTTP `/api/agents/composeAgent/stream`
+ * (what the UI proxies) gets structuredOutput — without this, the generic stream path
+ * is freeform chat and never emits `object` chunks (blank form in the create drawer).
+ */
+const composeExecutionOptions = () => {
   const { timeoutMs, maxRetries } = llmConfig();
   return {
     structuredOutput: {
@@ -52,24 +47,79 @@ const generateOptions = (scope?: ComposeScope) => {
     // maxRetries: transient 5xx/429/connection retries (AI SDK default is 2).
     modelSettings: { temperature: 0, maxOutputTokens: 1000, maxRetries },
     // TIER 2 #6 — hard deadline. AI SDK v5 dropped the `timeout` CallSetting, so
-    // the stall guard is an abortSignal. Bounds compose() at timeoutMs → demo-safe:
+    // the stall guard is an abortSignal. Bounds compose at timeoutMs → demo-safe:
     // a hung craftshost call can't hang the live demo past the deadline.
     abortSignal: AbortSignal.timeout(timeoutMs),
-    ...(scope ? { memory: scope } : {}),
   };
 };
+
+export const composeAgent = new Agent({
+  id: "compose",
+  name: "wave compose agent",
+  instructions: COMPOSE_INSTRUCTIONS,
+  model: gemmaModel(),
+  memory: composeMemory,
+  // Mastra's AgentConfig resolves `defaultOptions` through a second copy of
+  // StandardSchema types; our installed zod/v4 schema is runtime-compatible
+  // (and used directly by generateOptions below) but does not satisfy that
+  // duplicate declaration structurally. Keep the cast at this integration
+  // boundary so the HTTP auto-route still receives structured output.
+  defaultOptions: composeExecutionOptions as never,
+});
+
+/** Memory scope — (resource=user, thread=session). Pass to compose/composeStream for recall. */
+export type ComposeScope = { resource: string; thread: string };
+
+const LOG = "[wave:compose]";
+
+const generateOptions = (scope?: ComposeScope) => ({
+  ...composeExecutionOptions(),
+  ...(scope ? { memory: scope } : {}),
+});
+
+function intentMeta(nl: string, scope?: ComposeScope) {
+  return {
+    intentChars: nl.length,
+    has0xAddress: /0x[a-fA-F0-9]{40}/.test(nl),
+    preview: nl.replace(/\s+/g, " ").trim().slice(0, 120),
+    scope: scope ?? null,
+  };
+}
+
+function specSummary(spec: StrategySpec | null | undefined) {
+  if (!spec) return null;
+  const s = spec as {
+    pair?: unknown;
+    size?: unknown;
+    blocks?: Array<{ type?: string }>;
+  };
+  return {
+    pair: s.pair ?? null,
+    size: s.size ?? null,
+    blocks: Array.isArray(s.blocks) ? s.blocks.map((b) => b.type) : [],
+  };
+}
 
 /**
  * Parse a natural-language intent into a bounded StrategySpec.
  * Throws on schema drift (errorStrategy: 'strict'). Optional scope for memory recall.
  */
 export async function compose(nl: string, scope?: ComposeScope): Promise<StrategySpec> {
-  const res = await composeAgent.generate(nl, generateOptions(scope));
-  if (!res.object) throw new Error("compose: model returned no structured object");
-  // Mastra infers res.object from the schema's INPUT type, so maxStalenessSecs
-  // (which uses .default(7200)) shows as optional here. zod applies the default
-  // at parse → runtime always has it. Cast to the OUTPUT type is sound.
-  return res.object as StrategySpec;
+  const t0 = Date.now();
+  console.info(LOG, "compose() start", intentMeta(nl, scope));
+  try {
+    const res = await composeAgent.generate(nl, generateOptions(scope));
+    if (!res.object) throw new Error("compose: model returned no structured object");
+    // Mastra infers res.object from the schema's INPUT type, so maxStalenessSecs
+    // (which uses .default(7200)) shows as optional here. zod applies the default
+    // at parse → runtime always has it. Cast to the OUTPUT type is sound.
+    const object = res.object as StrategySpec;
+    console.info(LOG, "compose() ok", { ms: Date.now() - t0, spec: specSummary(object) });
+    return object;
+  } catch (err) {
+    console.error(LOG, "compose() fail", { ms: Date.now() - t0, err: String(err) });
+    throw err;
+  }
 }
 
 /**
@@ -78,5 +128,6 @@ export async function compose(nl: string, scope?: ComposeScope): Promise<Strateg
  * for the final StrategySpec. Same strict schema as compose().
  */
 export async function composeStream(nl: string, scope?: ComposeScope) {
+  console.info(LOG, "composeStream() start", intentMeta(nl, scope));
   return composeAgent.stream(nl, generateOptions(scope));
 }

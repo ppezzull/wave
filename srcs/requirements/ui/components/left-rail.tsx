@@ -97,9 +97,9 @@ function RailContent({
       {/* Logo */}
       <div className={`mb-1 ${collapsed ? 'flex justify-center px-0 py-2' : 'px-3 py-2'}`}>
         <Link
-          href="/explore"
+          href="/"
           className="inline-flex items-center gap-2.5 rounded-full p-1 hover:bg-wave-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wave-teal"
-          aria-label="wave - go to explore"
+          aria-label="wave - go to home"
         >
           <Image
             src="/wave-logo.png"
@@ -204,9 +204,9 @@ export function LeftRail({ currentUser }: { currentUser: CurrentUser }) {
           <Menu size={22} aria-hidden="true" />
         </button>
         <Link
-          href="/explore"
+          href="/"
           className="flex items-center gap-2"
-          aria-label="wave - go to explore"
+          aria-label="wave - go to home"
         >
           <Image
             src="/wave-logo.png"

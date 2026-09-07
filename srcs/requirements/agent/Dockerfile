@@ -2,14 +2,14 @@
 # .mastra/output/ (server bundle + its own node_modules); the runtime stage copies
 # it and runs `node index.mjs`. Secrets (ZAI_* keys) are injected at runtime via
 # env_file — never baked into the image (see .dockerignore).
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
 RUN npm run build            # mastra build → .mastra/output/ (self-contained)
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 # PORT must be set here (not just EXPOSE'd): the Mastra server defaults PORT to
 # 4111 if unset → healthcheck on 3002 would always fail → container "unhealthy".

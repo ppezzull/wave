@@ -158,7 +158,7 @@ export default function LandingPage() {
 
       <footer className="relative z-10 shrink-0 py-4 text-center">
         <p className="font-sans text-[13px] text-wave-muted">
-          Powered by SwapVM — © Degensoft Ltd 2025 · wave · ETHGlobal Lisboa 2026
+          Powered by SwapVM · Flavio, Pietro & Flaviano · 2026
         </p>
       </footer>
     </main>
