@@ -64,6 +64,12 @@ services:
       - SEPOLIA_PRIVATE_KEY=${SEPOLIA_PRIVATE_KEY}
       - MAKER_PRIVATE_KEY=${MAKER_PRIVATE_KEY}
       - TAKER_PRIVATE_KEY=${TAKER_PRIVATE_KEY}
+      # Testnet faucet (agent faucetDrip tool — the buffer wallet; blank key falls back
+      # to SEPOLIA_/MAKER_, which is what the deployed default resolves to).
+      - FAUCET_PRIVATE_KEY=${FAUCET_PRIVATE_KEY:-}
+      - FAUCET_DRIP_ETH=${FAUCET_DRIP_ETH:-0.05}
+      - FAUCET_COOLDOWN_HOURS=${FAUCET_COOLDOWN_HOURS:-6}
+      - FAUCET_MAX_TOTAL_ETH=${FAUCET_MAX_TOTAL_ETH:-2}
       - PS_NETWORK=${PS_NETWORK:-sepolia}
       - OPS_CHAIN_ID=${OPS_CHAIN_ID:-11155111}
       - OPS_SWAP_VM_ROUTER_NAME=${OPS_SWAP_VM_ROUTER_NAME:-Wave}

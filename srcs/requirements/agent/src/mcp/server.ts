@@ -27,5 +27,7 @@ export const waveMcpServer = new MCPServer({
     // MUST gate behind explicit human approval (Ship confirm). Agent signs (demo); user-wallet
     // signing is the post-event hardening.
     shipStrategy: writes.shipStrategy,
+    // Testnet faucet — capped Sepolia ETH drip to a wallet (PROD-TESTNET §4 buffer wallet).
+    faucetDrip: writes.faucetDrip,
   },
 });

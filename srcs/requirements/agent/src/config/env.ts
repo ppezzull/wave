@@ -1,5 +1,6 @@
 // Env contract for the wave agent. `.env` is gitignored — see `.env.example`.
 // Loaded via `dotenv/config` at entry points (index.ts, smoke, spike).
+import { parseEther } from "viem";
 
 /** Required env var — throws clearly if missing. */
 function required(name: string): string {
@@ -52,8 +53,8 @@ export const storageConfig = () => ({
  * / `MAKER_PRIVATE_KEY` so the shared faucet key works unchanged). NEVER logged,
  * committed, or pasted — only the derived address is exposed.
  */
-export const EXPECTED_ANNOUNCER_OWNER =
-  "0x2058C253029bB0Cf1E1aD43DfAEF63D658A8dddf" as const;
+export const EXPECTED_ANNOUNCER_OWNER = (process.env.EXPECTED_ANNOUNCER_OWNER ??
+  "0x2058C253029bB0Cf1E1aD43DfAEF63D658A8dddf") as `0x${string}`;
 
 export interface AnnouncerConfig {
   address: `0x${string}`; // derived EOA (== EXPECTED_ANNOUNCER_OWNER after validation)
@@ -86,6 +87,61 @@ export async function announcerConfig(): Promise<AnnouncerConfig & { privateKey:
     );
   }
   return { privateKey: raw as `0x${string}`, address, owner: EXPECTED_ANNOUNCER_OWNER };
+}
+
+/**
+ * Faucet key — the in-app "buffer wallet" (PROD-TESTNET §4/§7: judge/demo wallets must
+ * be funded, and public-faucet rate limits are a listed demo risk). Default: REUSE the
+ * announcer EOA — testnet + capped drips make reuse acceptable, and it means the one
+ * top-up the announcer already needs covers the faucet too.
+ *
+ * Chain: FAUCET_PRIVATE_KEY ?? ANNOUNCER_PRIVATE_KEY ?? SEPOLIA_PRIVATE_KEY ??
+ * MAKER_PRIVATE_KEY. NB: compose only passes SEPOLIA_/MAKER_, so the deployed default
+ * resolves to SEPOLIA_PRIVATE_KEY. No owner pinning (unlike announcerConfig — the
+ * faucet need never be the router owner, any funded EOA works).
+ *
+ * NEVER logged, committed, or pasted — only the derived address is exposed.
+ */
+export interface FaucetConfig {
+  address: `0x${string}`; // derived EOA the UI shows as "top up here"
+  privateKey: `0x${string}`;
+}
+
+/** Read + validate the faucet key. Throws a clear error on missing/malformed. */
+export async function faucetConfig(): Promise<FaucetConfig> {
+  const raw =
+    process.env.FAUCET_PRIVATE_KEY ??
+    process.env.ANNOUNCER_PRIVATE_KEY ??
+    process.env.SEPOLIA_PRIVATE_KEY ??
+    process.env.MAKER_PRIVATE_KEY;
+  if (!raw || raw.length === 0) {
+    throw new Error(
+      "[env] FAUCET_PRIVATE_KEY missing — set it (or ANNOUNCER_PRIVATE_KEY/SEPOLIA_PRIVATE_KEY) in agent/.env",
+    );
+  }
+  const { privateKeyToAccount } = await import("viem/accounts");
+  try {
+    return {
+      privateKey: raw as `0x${string}`,
+      address: privateKeyToAccount(raw as `0x${string}`).address,
+    };
+  } catch {
+    throw new Error("[env] FAUCET_PRIVATE_KEY is not a valid 0x-prefixed secp256k1 private key.");
+  }
+}
+
+/**
+ * Faucet caps — all env-tunable with demo-safe defaults. 0.05 SEP/drip ≫ a dozen Sepolia
+ * swaps (each ≲ 0.001–0.005 ETH incl. gas spikes); 6h cooldown = max 4 top-ups/address/day
+ * (better than the 24h public faucets it de-risks, still bounds one wallet); 2 ETH/process
+ * ≈ 40 drips — a drained notifier, not a hard budget.
+ */
+export function faucetTunables(): { dripWei: bigint; cooldownMs: number; maxTotalWei: bigint } {
+  return {
+    dripWei: parseEther(process.env.FAUCET_DRIP_ETH ?? "0.05"),
+    cooldownMs: Number(process.env.FAUCET_COOLDOWN_HOURS ?? 6) * 3_600_000,
+    maxTotalWei: parseEther(process.env.FAUCET_MAX_TOTAL_ETH ?? "2"),
+  };
 }
 
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)

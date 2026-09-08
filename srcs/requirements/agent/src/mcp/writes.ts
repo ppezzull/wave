@@ -1,9 +1,11 @@
 // mcp__wave__* WRITE tools. ENS writes (setText/registerSubname/claimHandle) are gone with
 // the ENS layer — identity is World AgentKit's job now (ETHOnline continuity: replaces ENS,
-// client-visible "verified human" distinction). What remains is the live ship arm.
+// client-visible "verified human" distinction). What remains is the live ship arm and the
+// testnet faucet.
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod/v4";
 import { deployStrategy } from "../actions/deployStrategy.js";
+import { faucetDrip as runFaucetDrip } from "../actions/faucet.js";
 
 const Address = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 
@@ -51,4 +53,34 @@ export const shipStrategy = createTool({
     error: z.string().optional(),
   }),
   execute: async (input) => deployStrategy(input),
+});
+
+/**
+ * Drip Sepolia ETH from the agent's faucet wallet to an address — the in-app "buffer
+ * wallet" (PROD-TESTNET §4) behind the Settings "Get test ETH" button. Capped:
+ * 0.05/drip, per-address 6h cooldown, empty-wallet gate, per-process budget. Returns
+ * {ok:false, error} for every expected failure (config included) — never throws.
+ *
+ * Authz (event demo): moves server-wallet funds, so the UI MUST only invoke it from an
+ * explicit user action (the button click itself is the gate — a capped testnet drip
+ * needs no confirm dialog).
+ */
+export const faucetDrip = createTool({
+  id: "faucetDrip",
+  description:
+    "Drip Sepolia ETH from the agent's faucet wallet to an address (the in-app buffer wallet, " +
+    "PROD-TESTNET §4). Capped: 0.05/drip, per-address 6h cooldown, empty-wallet gate, per-process " +
+    "budget. Moves server-wallet funds — caller must be an explicit user action.",
+  inputSchema: z.object({
+    address: Address,
+  }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    txHash: z.string().optional(),
+    dripped: z.string().optional(),
+    faucetAddress: z.string().optional(),
+    retryInSec: z.number().optional(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ address }) => runFaucetDrip({ address }),
 });

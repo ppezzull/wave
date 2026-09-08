@@ -8,6 +8,8 @@ import { useSessionUser } from '@/hooks/use-session-user'
 import { identityFromAddress } from '@/lib/identity'
 import type { CurrentUser } from '@/components/app-wrapper'
 import { usePrivy } from '@privy-io/react-auth'
+import { faucetDrip } from '@/app/actions/faucet'
+import type { FaucetResult } from '@/app/actions/faucet'
 
 interface Props {
   user: CurrentUser
@@ -41,6 +43,24 @@ export function SettingsForm({ user }: Props) {
     e.preventDefault()
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+
+  // Testnet faucet (the agent's capped buffer wallet). The server action never throws,
+  // so the catch is belt-and-braces; a failed drip just shows the agent's reason line.
+  const [faucet, setFaucet] = useState<{
+    status: 'idle' | 'pending' | 'sent' | 'error'
+    result?: FaucetResult
+  }>({ status: 'idle' })
+
+  const handleFaucet = async () => {
+    if (!walletAddress || faucet.status === 'pending') return
+    setFaucet({ status: 'pending' })
+    try {
+      const result = await faucetDrip(walletAddress)
+      setFaucet(result.ok ? { status: 'sent', result } : { status: 'error', result })
+    } catch (err) {
+      setFaucet({ status: 'error', result: { ok: false, reason: String(err).slice(0, 200) } })
+    }
   }
 
   return (
@@ -94,6 +114,43 @@ export function SettingsForm({ user }: Props) {
               <p className="font-sans text-[13px] text-wave-muted">
                 {walletAddress ? 'Connected via Privy' : 'No wallet connected'}
               </p>
+
+              {/* Testnet faucet — drips Sepolia ETH from the agent's buffer wallet
+                  (0.05/drip, 6h cooldown, empty wallets only). */}
+              {walletAddress && (
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handleFaucet}
+                    className="self-start px-6 py-2.5 rounded-[10px] font-sans text-[14px] font-semibold text-wave-text transition-all duration-150 hover:bg-wave-surface min-h-[44px] disabled:opacity-60"
+                    style={{ border: '1px solid #000000' }}
+                    aria-label="Get test ETH from the wave faucet"
+                    disabled={faucet.status === 'pending'}
+                  >
+                    {faucet.status === 'pending'
+                      ? 'Dripping…'
+                      : faucet.status === 'sent'
+                        ? 'Sent ✓'
+                        : 'Get test ETH'}
+                  </button>
+                  {faucet.status === 'sent' && faucet.result?.txHash && (
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${faucet.result.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-sans text-[13px]"
+                      style={{ color: '#1F9D6B' }}
+                    >
+                      Sent {faucet.result.dripped ?? '0.05'} SEP — receipt ↗
+                    </a>
+                  )}
+                  {faucet.status === 'error' && faucet.result?.reason && (
+                    <p className="font-sans text-[13px]" style={{ color: '#E5484D' }}>
+                      {faucet.result.reason}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 
