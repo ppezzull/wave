@@ -1,0 +1,168 @@
+# wave → ETHOnline 2026 (4–16 set) — Continuity Track
+
+> ## ⚠️ AGGIORNAMENTO 8 set sera (dopo il clone del repo reale)
+> Questo piano è stato scritto sulla copia ZIP del 26 luglio. Il `main` reale è **avanti** — riletture necessarie:
+> - **`f441287` (8 set, Pietro) "Remove ENS identity layer; World AgentKit to replace it"** — il team ha GIÀ rimosso l'intero layer ENS e scelto World AgentKit (stessa direzione di questo piano). **I follow sono stati eliminati del tutto** (pagine/azioni follow cancellate, `followerCount` e follow entities rimossi dal subgraph, ranking senza il termine follower) → la narrativa anti-sybil sui follow di Fase 1 è **obsoleta**: la storia si sposta su identity/publish. Nota: qui sotto, dove il piano dice "l'integrazione ENS resta nel codice", vale il contrario — rimossa.
+> - **`94cf0ef`** — ship-on-chain flow: UI ship action + agent `deployStrategy` arm (compile → announce → approve → ship).
+> - **`deea4f3`** — retune autonomo eseguito LIVE su Sepolia (G2): l'item "completare retune zero-click" di Fase 2 è **fatto**.
+> - **`d48f368` (8 set)** — faucet Sepolia in-app (agente `faucetDrip` + bottone Settings).
+> - **AgentKit NON è ancora integrato** (nessuna dipendenza `@worldcoin` nel repo): il seam è pronto in `ui/lib/identity.ts` con `{address, handle, verifiedHuman}` — *"AgentKit plugs in there"*. → **Fase 1 è il lavoro aperto**: gating AgentKit sui writes MCP + registrazione AgentBook + trust panel + feedback doc, da innestare su quel seam.
+> - Subgraph a 2 data source (router + Aqua), deploy **v0.0.5 pending** — da completare.
+> - **Siamo a giorno 4/12 dell'evento** (4–16 set): le azioni a lead time — form Sandbox World ID e email per il feature flag Selfie Check (`developers@toolsforhumanity.com`) — vanno fatte **oggi**.
+
+## Context
+
+wave è stato costruito e submitted a **ETHGlobal Lisboa 2026** (track Classic/from-scratch): social market per strategie on-chain in linguaggio naturale su 1inch SwapVM. **ETHOnline 2026 (4–16 settembre**, finestra da 12 giorni**)** ha pool **Continuity** dedicati che a luglio erano inaccessibili (Classic track). Il progetto è già qualificato su 1inch e The Graph; ENS qui vale solo $500 e richiederebbe un porting a ENSv2.
+
+**Risposta alla domanda-chiave (swap sponsor): SÌ, verificato sulle regole ufficiali.**
+- Regole ETHGlobal ([rules](https://ethglobal.com/rules), [details](https://ethglobal.com/events/ethonline/info/details), [start](https://ethglobal.com/events/ethonline/info/start)): Continuity = *"you may build on an existing codebase"*, la submission deve *"clearly document what work existed before the hackathon"* e includere *"substantive new features, improvements, or functionality developed during the event"*; sui premi partner: *"For Continuity-track submissions, eligibility for specific partner prizes may vary — check the event and partner rules"* → decide il testo di ogni bounty, non c'è vincolo ETHGlobal sugli sponsor.
+- Nessun premio Continuity richiede che la tecnologia dello sponsor fosse già nel progetto: World dice esplicitamente *"Extend an existing project with AgentKit"* → l'integrazione World fatta durante l'evento È il lavoro Continuity. La continuity è del progetto (submitted a Lisboa), non dello sponsor.
+- Impegni obbligatori delle regole: (1) **divulgazione scritta** del pre-esistente con *"full details in your submission (repo history, video, and description)"* → `CONTINUITY.md`; (2) **version control per tutto l'evento** — *"Any repositories with single commits... without proper history will be default assumed to be unqualified"*; (3) *"All new parts of extending an existing project must remain open source"*.
+- Avvertenza di giudizio: *"projects that use a majority of pre-existing work do not score as high"* → il lavoro nuovo deve essere sostanziale e protagonista del demo.
+- Quindi ENS **esce dal pitch premi** (l'integrazione resta nel codice — è load-bearing: nomi, `v0.programhash`, resolveVerify) e **entra World** come lavoro nuovo.
+
+**Decisioni prese:** World AgentKit come terzo target · partecipazione col team originale (repo `github.com/ppezzul/wave`) · focus 3 premi core.
+
+## Lineup premi target — matrice di ammissibilità
+
+Regola: i bounty marcati `🆕 only Continuity` sono i nostri pool naturali; quelli **senza** marcatura sono aperti a entrambi i track → li possiamo ottinare. Da evitare solo i pool esplicitamente **from-scratch** (Graph AI "From Scratch": wave ha codice pre-esistente). Una sola submission ETHGlobal, registrata come **Continuity** (link alla submission di Lisboa), con opt-in ai bounty in fase di submission.
+
+| Bounty | Pool | wave entra? | Importo |
+|---|---|---|---|
+| 1inch 💧 Aqua App | aperto | ✅ sì (nessun vincolo di track nei requisiti) | $5k |
+| 1inch 💦 Aqua App Continuity | continuity-only | ✅ pool naturale | $2k |
+| Graph 🧩 Composable/Standardized | aperto | ✅ se composiamo 2+ prodotti (nostro subgraph + Subgraph MCP ufficiale) | $5k |
+| Graph 🤖 AI Use Case **From Scratch** | from-scratch | ❌ NO — esplicitamente per progetti net-new | $5k |
+| Graph 🤖 AI Use Case **Continuity** | continuity-only | ✅ pool naturale | $5k (1° $2,5k) |
+| World 🤖 AgentKit Continuity | continuity-only | ✅ la continuità è del PROGETTO, non dello sponsor: "extend an existing project with AgentKit" — l'integrazione World è il lavoro nuovo dell'evento | $3,5k |
+| World 🤳 Selfie Check | aperto | ✅ fast-follow opzionale (giorni 8–10): Selfie Check come **piolo "presenza viva all'azione"** sui cancelli HITL — vedi Fase 1bis. Pool aperto (competiamo anche coi from-scratch) | $3,5k |
+
+**Target core (3):** 1inch Continuity + Graph AI Continuity + World AgentKit Continuity, con opt-in gratuiti ai pool aperti 1inch $5k e Graph Composable $5k.
+
+| Premio | Perché wave è già forte / cosa manca |
+|---|---|
+| **1inch — Aqua App Continuity** (+ opt-in pool aperto $5k) | Già qualificato a luglio: SwapVM ufficiale + 2 opcodes custom, swap live su Sepolia (`quote()==swap()`). Manca: nuovo lavoro visibile + commit incrementali durante l'evento |
+| **The Graph — AI Use Case (Continuity)** (+ opt-in Composable se facciamo MCP) | $2,5k 1° — Subgraph live su Studio + agente che agisce sui dati. Manca: riverifica/redeploy, completare il retune zero-click end-to-end (rimasto ☐ a luglio) |
+| **World — AgentKit Continuity** | $3,5k — Lavoro NUOVO dell'evento: umani verificati nel social graph + agenti registrati. Manca tutto: sandbox, integrazione, feedback doc obbligatoria |
+
+Requisiti d'occhio: 1inch = contratti ufficiali + transfer onchain nel demo (fork locali ok) + **proper git commit history, no commit singolo l'ultimo giorno** · Graph = dati live da provider (Studio API key) + reasoning/automazione + video 2–4 min + selezione pool Continuity · World = AgentKit significativo + AgentBook + test via World ID Sandbox App + **feedback document**.
+
+## Stato attuale (verificato in questa copia)
+
+- **Contratti** (`srcs/requirements/swap-vm/`): `src/opcodes/StrategyOpcodes.sol` (Guard=33, Skew=34), `src/routers/EnsStrategyRouter.sol` deployato su Sepolia `0x698d798895a03c858aab493564e0795732da0c68` (block 11352568), Aqua self-deployed `0xdc8C…D1E`. Test wave: `test/EnsStrategyRouter.t.sol`, `test/StrategyOpcodesSlots.t.sol`, invariants OracleGuard/InventorySkew. `test/base/AquaStrategyBuilders.sol` **esiste** (il warning in CLAUDE.md è stale).
+- **Subgraph** (`srcs/requirements/subgraph/`): Studio account 1756983, progetto `wave` v0.0.4; endpoint hardcoded in `agent/src/clients/subgraph.ts:60` e `ui/lib/clients/subgraph.ts:60`. Schema Strategy/Swap/Follow/Follower/NodeFollows + capitale Aqua.
+- **Agente** (`srcs/requirements/agent/`): Mastra + z.ai, MCP server (`src/mcp/{reads,writes,server}.ts`), monitor `graphDelta`, policy R1–R4 autonome / S1–S4 HITL.
+- **UI** (`srcs/requirements/ui/`): Next.js 16, pagine chat/compose/explore/follow; `app/actions/follow.ts` scrive i text record `wave.following/`.
+- **ENS**: via viem (ENSIP-25/26, `agent/src/ens/`) — resta nel prodotto, esce dai premi.
+- **Debt noti**: `.env.example` punta al vecchio router `0xeb513fd…52c4` (buono: `0x698d…0c68`) · drift versione subgraph v0.0.1/v0.0.2/v0.0.4 · package ui ancora `my-project` · **questa copia è uno ZIP senza `.git` e senza `node_modules`** → non lavorarci sopra.
+
+## Fase 0 — Prep (stasera / prima dell'apertura)
+
+1. `git clone github.com/ppezzul/wave` (repo vero, history intatta) → branch `continuity-online-2026`. **Non** lavorare sulla copia ZIP.
+2. `npm install` in `srcs/requirements/swap-vm/` → `forge build` → `forge test` (sanity, suite era verde a luglio: 85 suite / 706 test).
+3. Boot stack via `srcs/docker-compose.yml`; verificare UI + agent + endpoint subgraph.
+4. Health-check subgraph: `scripts/verify-subgraph.sh` (v0.0.4). Se unhealthy → redeploy (conta come lavoro evento).
+5. Verifica onchain: router/Aqua su Sepolia ancora operativi; seed di transazioni per il demo.
+6. Registrazione ETHGlobal come **Continuity**, linkando la submission di Lisboa.
+7. **Subito**: richiesta accesso World ID Sandbox (form nelle risorse del premio — lead time) + World App installata sul telefono di chi registra (serve la verifica World ID per `agentkit-cli register`) + **email a developers@toolsforhumanity.com per il feature flag Selfie Check** (Beta access-gated, lead time). Compito naturale di P2/Flavio (area agentic/identity), come da divisione task di luglio.
+
+## Fase 1 — World AgentKit Continuity ($3,500) — piano dettagliato
+
+**Cosa giudica il bounty:** estendere un progetto esistente con AgentKit per distinguere bot da agenti che agiscono per conto di un umano reale verificato; autorizzazione human-backed per accesso, commercio, rate limit, fiducia. Requisiti espliciti: uso significativo di AgentKit · app funzionante · registrazione/risoluzione agenti in AgentBook · test via World ID Sandbox App · **feedback document obbligatoria**.
+
+**Cosa è AgentKit (verificato su docs.world.org + repo worldcoin/agentkit):**
+- Estende x402: `@worldcoin/agentkit` (client `createAgentkitClient` + server `createAgentkitHooks` con `AgentBookVerifier`, mode `free-trial`/`discount`), `@worldcoin/agentkit-cli` (`register`/`status`), stack `@x402/{hono,core,evm}`.
+- **AgentBook** = registry on-chain canonico su World Chain (`eip155:480`) che lega wallet-agente → umano World ID-verificato. Registrazione gasless via relay hosted: `npx @worldcoin/agentkit-cli register <agent-address>` (verifica via World App, una volta per wallet).
+- Runtime flow: l'agente firma un messaggio CAIP-122 (EIP-191, con chainId) → il server verifica firma + risolve il wallet in AgentBook → ottiene l'identificatore umano anonimo → applica la policy (free/trial/discount/rate-limit).
+
+**La mappatura su wave (il cuore del lavoro nuovo):**
+- Problema reale nel prodotto: `rank = returnPct × recencyDecay × (1 + log2(1+followers))` — social graph (follow via text record ENS) e pubblicazione sono superficie sybil: bot a costo zero gonfiano i follower e inondano il feed. E la superficie agent-facing **esiste già**: MCP server `agent/src/mcp/{reads,writes,server}.ts` su `http://agent:3002`.
+- Mossa principale — **wave diventa un servizio AgentKit/x402-gated**:
+  - **Reads MCP** (feed/strategia/ranking) → mode `free-trial` (es. 5 richieste, poi x402).
+  - **Writes MCP** (announce/publish, follow, retune) → solo agenti human-backed (risolti in AgentBook): gratuiti, rate limit più alti; agenti anonimi → x402 pay-per-write (World Chain/Base); wallet non registrati → 403.
+  - Storage persistente `AgentKitStorage` (usage counter + anti-replay nonce) su **libsql** — riusiamo `@mastra/libsql` già nel progetto.
+- **Agenti wave in AgentBook**: wallet per ruolo (almeno compose/publish e retune autonomo) registrati con il World ID del team → il retune zero-click dimostra di agire per conto di un umano verificato = "durable human-backed authorization".
+- **Client**: chiamate outbound degli agenti wave via `createAgentkitClient({ signer: { address, chainId, type: 'eip191', signMessage } })` — demo end-to-end: l'agente wave chiama il proprio API gated, firma, viene risolto in AgentBook, accesso free.
+- **Livello utenti web — World ID via IDKit** (scope scelto: verifica anche per gli umani nel browser):
+  - IDKit widget nel flusso UI: chi pubblica una strategia o segue (`ui/app/actions/follow.ts` + flusso compose→ship) deve completare la verifica World ID (Sandbox App per i test).
+  - Server-side: verifica della proof (cloud verification World) con `signal` per-azione (es. strategyId/programHash per publish, ensNode per follow) → la prova è unica e non riutilizzabile (anti double-spend della proof).
+  - Serve registrare l'app nel Developer Portal (App ID + action `wave-publish`/`wave-follow`) — l'esperienza sul Portal finisce dritto nella feedback doc richiesta dal bounty.
+  - Badge *"verified human"* su profilo/autore; azioni non verificate rifiutate.
+- **UI — trust panel**: stato AgentBook dell'agente agente (human-backed ✓, identificatore anonimo, tier di rate limit), stato World ID dell'utente, badge "shipped by a human-backed agent" sulle card strategia, e il percorso negativo (bot bloccato / reindirizzato a x402).
+- **Gerarchia da rispettare nella submission**: il bounty è *AgentKit* Continuity → il pezzo load-bearing resta il gating agenti/AgentBook; il livello World ID utentiweb è il complemento che completa la storia anti-sybil ("ogni attore su wave prova la propria natura: gli umani via World ID, gli agenti via AgentKit"). Non il contrario.
+
+**Demo beat (atto 2 del video) — contrasto a tre vie:**
+1. 🟢 Umano nel browser verifica con World ID → pubblica/segue → badge *verified human*;
+2. 🟢 Agente wave registrato in AgentBook → pubblica/ritocca → badge *human-backed agent*;
+3. 🔴 Script anonimo tenta il mass-follow → la policy lo blocca o gli chiede x402.
+Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano — in carne od ossa o dietro un agente verificato"*.
+
+**Task sequencing (finestra 4–16 set):**
+1. **Giorno 0 (4 set)**: form Sandbox World ID + World App sul telefono · `npm i @worldcoin/agentkit @worldcoin/agentkit-cli` (+ `@x402/hono` se serve) · `register` in sandbox · smoke-test risoluzione AgentBook (`status`) · registrazione app nel Developer Portal (App ID, actions).
+2. **Giorni 1–4**: gating server sull'API agente — middleware x402/AgentKit davanti al server MCP di Mastra (verificare il transport; fallback: piccolo gateway Hono dedicato, `@x402/hono` è il reference) · storage libsql · policy reads/writes.
+3. **Giorni 4–6**: registrazione AgentBook dei wallet agente wave · client `createAgentkitClient` · trust panel in UI.
+4. **Giorni 6–9**: livello utenti web — IDKit nei flussi publish/follow (`ui/app/actions/follow.ts`, flusso compose) · verifica server delle proof con signal per-azione · badge verified human.
+5. **Giorni 9–10**: end-to-end a tre vie (✓ umano / ✓ agente / ✗ bot) · edge case (nonce replay, wallet non registrato, proof riusata, verify fallita) · `FEEDBACK-WORLD.md` scritta in itinere.
+
+**Rischi specifici:**
+- AgentKit è **Beta**: verificare al giorno 0 che register/verify funzionino in sandbox; se qualcosa è rotto, documentarlo nella feedback doc (è esattamente il materiale che il premio chiede).
+- Mastra MCP transport vs middleware x402: da verificare; fallback gateway Hono.
+- **Non toccare i flussi Sepolia (1inch)**: AgentBook/x402 vivono su World Chain/Base — rail ortogonale, nessun conflitto con router/Aqua/subgraph.
+- Il livello World ID utenti-web aggiunge ~2 giorni e non è richiesto dal bounty: **prima cosa da tagliare** se il tempo stringa. Scope floor invariato: gating AgentKit sui writes MCP + registrazione AgentBook + trust panel + feedback doc.
+
+## Fase 1bis — World Selfie Check ($3,500, pool aperto — fast-follow opzionale, giorni 8–10)
+
+**La tesi (ciò che il bounty chiede di dimostrare):** Selfie Check non è un'identità più debole — è lo strumento giusto quando la domanda non è *"chi sei"* ma *"ci sei, adesso?"*. Credenziale media-assurance (credito ID 11, Beta): prova **liveness** (persona viva, anti-spoof/anti-injection) e **continuity** (stessa persona che si è iscritta); NON prova unicità né dà un sybil score. Valida 90 giorni.
+
+**La scala della fiducia a tre pioli di wave** (narrativa per submission e video):
+| Piolo | Domanda | Strumento | Dove |
+|---|---|---|---|
+| Account | "sei un umano unico?" | World ID | publish/follow (serve unicità: il ranking usa `followers`) |
+| Agente | "chi firma ha un umano dietro?" | AgentKit/AgentBook | API/MCP writes |
+| Azione | "c'è un umano vivo ADESSO?" | **Selfie Check** | cancelli HITL |
+
+**Integrazione concreta — il cancello HITL diventa biometrico:**
+- wave ha già la coda HITL (`agent/src/policy/` S1–S4/M1 + `gateAgent`): oggi l'approvazione è un click che prova solo il possesso della sessione (rubabile/replayabile).
+- Le azioni che muovono capitale (classi di rischio più alte) richiedono il Selfie Check: finestra di approvazione con **QR cross-device** (desktop → telefono, la proof torna alla sessione web — è il percorso indicato dalle doc per i demo remoti), verifica server-side della proof con **signal per-cancello** (hash dell'azione → proof non riutilizzabile).
+- Trust panel: triplo stato account ✓ / agente ✓ / azione ✓ + timestamp.
+- Keywords del premio coperte: risk (capitale-moving), continuity (returning user = stessa persona), abuse prevention (approvazioni replayate muoiono), fairness (no Orb richiesto per un click: chiunque abbia una telecamera passa).
+- IDKit è già nel piano per il layer World ID → seconda credenziale, costo ~1–1,5 giorni.
+- **Seconda feedback doc separata** (`FEEDBACK-SELFIE.md`): doc SelfieCheck, Developer Portal, stati sandbox Hot/Cold/Semi-cold, limiti noti (es. semi-cold iOS rotto), cosa era confuso/mancante.
+
+**Demo beat (quarto atto):** retune rischioso → cancello → QR → selfie → verde → esecuzione on-chain. Contrario: script che tenta di auto-approvare → rifiutato, nessuna faccia viva.
+
+**Vincoli/rischi:** feature flag da email day-0 (`developers@toolsforhumanity.com`) — se tarda, si taglia senza dolore e il ritardo va nella feedback doc · pool APERTO (si compete anche coi from-scratch) · secondo nella lista di taglio (prima il layer World ID utenti-web).
+
+## Fase 2 — The Graph (approfondimento)
+
+- Completare il leg rimasto ☐ a luglio: **retune zero-click end-to-end** (delta subgraph → soglia → `dock()`+recompile+`ship()`), con evidence log che cita il `Swapped` entity ID — è la beating "data-caused, not time-triggered" che il pool AI premia.
+- Integrare il **Subgraph MCP ufficiale** nella toolbox dell'agente (composizione 2 prodotti → abilita anche l'opt-in al track Composable come upside).
+- Bump subgraph (v0.0.5) + redeploy Studio; allineare le tre versioni sparse (env/README/codice).
+
+## Fase 3 — 1inch (core)
+
+- Nuovo lavoro contrattuale visibile: completare lo stretch tagliato a luglio (**StrategyFactory** on-chain) o un terzo opcode custom; comunque nuovo test invariant per ciò che si aggiunge, suite verde, snapshot gas.
+- Demo: swap live su Sepolia attraverso il router (path già provato: tx `0xd8056fde…9601`).
+
+## Fase 4 — Submission
+
+- **`CONTINUITY.md`** alla radice: cosa esisteva prima (link al range di commit fino al 26 lug 2026) vs cosa è nuovo (commit dall'apertura evento), in chiave per-sponsor. Sezione analoga nel README.
+- **Video unico 3–4 min** che serve tutti i premi: atto 1 feed + compose→reject-and-rewrite→ship live (1inch) · atto 2 discovery + halt con autore verificato (World + 1inch) · atto 3 retune autonomo causato dal subgraph (Graph) · [se Fase 1bis entra] atto 4 cancello HITL con Selfie Check (World). Aggiornare `docs/strategy/PITCH.md`.
+- **Commit incrementali costanti** per tutto l'evento — mai un mega-commit finale (requisito esplicito 1inch).
+- Opt-in ai bounty: 1inch Continuity (+ pool aperto $5k), Graph AI Continuity (+ Composable se MCP fatto), World AgentKit Continuity.
+
+## Rischi & mitigazioni
+
+- **Sandbox World in ritardo** → domanda subito in Fase 0; sviluppare il gate con la flow di test dev nel frattempo.
+- **Subgraph unhealthy** dopo 6 settimane → verify/redeploy in Fase 0.
+- **Lavorare per sbaglio sulla copia ZIP** (no `.git`) → perdita irreversibile del requisito commit history di 1inch. Solo clone del repo vero.
+- **Sovraccarico SDK World** → rispettare lo scope floor.
+- Il judge-triggered halt continua a usare il `MockAggregatorV3` dichiarato (beat demo, nessun impatto World).
+
+## Verification
+
+1. `cd srcs/requirements/swap-vm && npm install && forge build && forge test` — suite verde.
+2. Query manuale all'endpoint Studio: entity Strategy/Swap (ID storici + nuovi della sessione).
+3. `docker compose up` in `srcs/`: UI raggiungibile, path chat → compile → ship su Sepolia funzionante.
+4. Flusso World end-to-end: verify → follow/publish consentito; non-verified → negato; AgentBook risolve l'agente.
+5. `git log` pulito: commit incrementali, nessun commit singolo nell'ultimo giorno.
