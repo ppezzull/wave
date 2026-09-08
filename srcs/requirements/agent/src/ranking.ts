@@ -1,12 +1,17 @@
 // Consumer-layer ranking math — the feed sort. Pure, no I/O, no LLM.
 // Spec: docs/tasks/Pietro.md §"🔢 The ranking algorithm":
-//   rank = returnPct × recencyDecay × (1 + log2(1 + followers))
+//   rank = returnPct × recencyDecay
+//
+// (Historical: the formula's third term, the (1 + log2(1 + followers)) follower
+// nudge, is GONE — follows were an ENS text-record write and ENS is removed; World
+// AgentKit verifies identity but stores no follow edges. Capital IS the social
+// signal now.)
 //
 // This is the CONSUMER layer (UI getFeed() + agent feed query), NOT the subgraph
 // and NOT the policy. graph-node has no computed/derived field that stays in sync
 // without a block handler, so the raw aggregates are indexed (Strategy.
-// cumulativeVolumeIn/Out, committedCapital, lastSwapTimestamp, followerCount) and
-// BOTH consumers implement this identical formula to agree on rank.
+// cumulativeVolumeIn/Out, committedCapital, lastSwapTimestamp) and BOTH consumers
+// implement this identical formula to agree on rank.
 //
 // PRECISION — why BigInt, not Number. The subgraph serializes every wei value as a
 // decimal STRING. 1 ETH = 1e18 wei already overflows Number.MAX_SAFE_INTEGER (≈9e15),
@@ -24,14 +29,12 @@
 // documented loudly so no one mistakes it for mark-to-market return.
 
 /** Inputs for one strategy's rank. Wei values arrive as decimal strings from the
- *  subgraph (Strategy.* fields); `lastSwapAt`/`now` are unix seconds; `followers`
- *  is the COUNT of distinct follow edges (Strategy.followerCount), not a list. */
+ *  subgraph (Strategy.* fields); `lastSwapAt`/`now` are unix seconds. */
 export interface RankInput {
   cumulativeVolumeIn: string; // wei string (Σ Swap.amountIn)
   cumulativeVolumeOut: string; // wei string (Σ Swap.amountOut)
   committedCapital: string; // wei string (Aqua Pushed − Pulled) — returnPct denominator
   lastSwapAt: number; // unix seconds of last Swap (0 if never swapped)
-  followers: number; // Strategy.followerCount (distinct follow edges)
   now: number; // tick / request timestamp, unix seconds
 }
 
@@ -80,17 +83,7 @@ export function recencyDecay(input: Pick<RankInput, "lastSwapAt" | "now">): numb
 }
 
 /**
- * followerNudge — the `(1 + log2(1 + followers))` term (Pietro.md). A follower is a
- * nudge, not a multiplier: the 1st follower takes 1→2 (×2 rank), the 100th takes
- * 100→101 (≈×1.007). log2 not ln so the half-life intuition matches (doubling
- * followers ≈ +1 unit of nudge).
- */
-export function followerNudge(followers: number): number {
-  return 1 + Math.log2(1 + Math.max(0, followers));
-}
-
-/**
- * rank — the full feed sort key: `returnPct × recencyDecay × (1 + log2(1 + followers))`.
+ * rank — the full feed sort key: `returnPct × recencyDecay`.
  *
  * Returns `null` when the strategy is UNRANKED (returnPct is null — no committed
  * capital). Callers sort ranked strategies (non-null) descending by this key, then
@@ -104,5 +97,5 @@ export function followerNudge(followers: number): number {
 export function rank(input: RankInput): number | null {
   const rp = returnPct(input);
   if (rp === null) return null; // unranked
-  return rp * recencyDecay(input) * followerNudge(input.followers);
+  return rp * recencyDecay(input);
 }

@@ -1,29 +1,27 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import type { Strategy } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 
-type Tab = 'foryou' | 'following'
+type Tab = 'foryou' | 'new'
 
 interface Props {
   ranked: Strategy[]
   unranked: Strategy[]
-  following: Strategy[]
 }
 
 // Tab toggle is pure client state; the strategy arrays are server-resolved.
 // "For you": unranked (new / low-fill) float to the top, then ranked.
-// "Following": only strategies the user follows, newest activity first.
-export function ExploreFeed({ ranked, unranked, following }: Props) {
+// "New": only the unranked strategies, newest activity first.
+export function ExploreFeed({ ranked, unranked }: Props) {
   const [tab, setTab] = useState<Tab>('foryou')
 
   const feed = useMemo<Strategy[]>(() => {
     if (tab === 'foryou') return [...unranked, ...ranked]
-    return [...following].sort((a, b) => b.lastSwapTimestamp - a.lastSwapTimestamp)
-  }, [tab, ranked, unranked, following])
+    return [...unranked].sort((a, b) => b.lastSwapTimestamp - a.lastSwapTimestamp)
+  }, [tab, ranked, unranked])
 
   return (
     <>
@@ -54,14 +52,14 @@ export function ExploreFeed({ ranked, unranked, following }: Props) {
           </button>
           <button
             role="tab"
-            aria-selected={tab === 'following'}
-            onClick={() => setTab('following')}
+            aria-selected={tab === 'new'}
+            onClick={() => setTab('new')}
             className={`flex-1 relative py-3.5 font-sans text-[15px] hover:bg-wave-surface transition-colors ${
-              tab === 'following' ? 'font-bold text-wave-text' : 'font-normal text-wave-muted'
+              tab === 'new' ? 'font-bold text-wave-text' : 'font-normal text-wave-muted'
             }`}
           >
-            Following
-            {tab === 'following' && (
+            New
+            {tab === 'new' && (
               <span
                 className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 rounded-full"
                 style={{ background: '#2A9D8F' }}
@@ -79,14 +77,8 @@ export function ExploreFeed({ ranked, unranked, following }: Props) {
         ) : (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center gap-3">
             <p className="font-sans text-[15px] text-wave-muted">
-              You&apos;re not following any strategies yet.
+              No strategies yet. Ship the first one.
             </p>
-            <Link
-              href="/follow"
-              className="font-sans text-[14px] font-semibold underline underline-offset-4 text-wave-text hover:text-wave-muted transition-colors"
-            >
-              Find strategies to follow
-            </Link>
           </div>
         )}
       </section>

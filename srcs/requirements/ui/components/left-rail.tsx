@@ -6,8 +6,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Compass,
-  UserPlus,
-  Sparkles,
   User,
   Settings,
   X,
@@ -27,8 +25,6 @@ function navItems(handle: string) {
   return [
     { label: 'Explore', href: '/explore', icon: Compass, id: 'explore' },
     { label: 'Compose', href: '/compose', icon: Feather, id: 'compose' },
-    { label: 'Follow', href: '/follow', icon: UserPlus, id: 'follow' },
-    { label: 'Followed', href: '/followed', icon: Sparkles, id: 'followed' },
     { label: 'Chat', href: '/chat', icon: MessageSquare, id: 'chat' },
     { label: 'Profile', href: `/u/${handle}`, icon: User, id: 'profile' },
     { label: 'Settings', href: '/settings', icon: Settings, id: 'settings' },

@@ -23,13 +23,7 @@ export const waveMcpServer = new MCPServer({
     getStrategyStatus: reads.getStrategyStatus,
     getProgramHash: reads.getProgramHash,
     quote: reads.quote,
-    resolveENS: reads.resolveENS,
-    getTextRecord: reads.getTextRecord,
-    // Writes — autonomous ENS (ensAgent), never HITL-gated. Per AGENT.md authz matrix.
-    setText: writes.setText,
-    registerSubname: writes.registerSubname,
-    claimHandle: writes.claimHandle,
-    // Live ship — compile → ENS → announce → approve → ship → verify. Destructive: the UI
+    // Live ship — compile → announce → approve → ship → verify. Destructive: the UI
     // MUST gate behind explicit human approval (Ship confirm). Agent signs (demo); user-wallet
     // signing is the post-event hardening.
     shipStrategy: writes.shipStrategy,

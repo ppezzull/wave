@@ -2,14 +2,14 @@ import { Check, AlertTriangle, Clock } from 'lucide-react'
 import type { Strategy } from '@/lib/mock-data'
 import { hashState, abbrevHash } from '@/lib/strategy/format'
 
-// ENS hash-verify chip (frontend.md L101, Pietro.md L64).
-// Two columns: on-chain programHash vs ENS v0.programhash.
+// Hash-verify chip (frontend.md L101, Pietro.md L64).
+// Two columns: on-chain programHash vs the author-committed hash.
 // match → green ✓; mismatch → both danger + "TAMPERED" (trust anchor);
 // pending → yellow when programHash is bytes32(0).
 //
-// Live path: hydrateStrategy() fills both hashes (subgraph + ENS). While
-// WAVE_ENS_WIRED is false, ensProgramHash falls back to on-chain → always
-// match/pending, never fabricated TAMPERED. That's correct.
+// Live path: hydrateStrategy() fills both hashes; without an identity source
+// the committed hash falls back to on-chain → always match/pending, never a
+// fabricated TAMPERED. That's correct.
 
 const STATE_META = {
   match: { color: '#1F9D6B', label: 'Match', Icon: Check },
@@ -24,7 +24,7 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
 
   const rows = [
     { label: 'On-chain hash', value: abbrevHash(strategy.programHash) },
-    { label: 'ENS record hash', value: abbrevHash(strategy.ensProgramHash) },
+    { label: 'Committed hash', value: abbrevHash(strategy.ensProgramHash) },
   ]
 
   return (
@@ -76,8 +76,8 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
             style={{ color: '#E5484D' }}
             role="alert"
           >
-            TAMPERED — the deployed bytecode hash does not match the hash
-            committed in the ENS record. Treat this strategy as untrusted.
+            TAMPERED — the deployed bytecode hash does not match the
+            author-committed hash. Treat this strategy as untrusted.
           </p>
         )}
         {state === 'pending' && (

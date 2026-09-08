@@ -15,10 +15,12 @@ import { GraphQLClient, ClientError } from 'graphql-request'
 export type StrategyStatus = 'active' | 'stopped' | 'removed'
 
 // Full production Strategy shape (srcs/requirements/subgraph/schema.graphql).
+// ensNode/followerCount exist on the deployed v0.0.4 but are intentionally NOT
+// queried: the ENS identity layer is gone and the upcoming ENS-free deploy
+// drops the fields — never select what we don't use.
 export interface SubgraphStrategy {
   id: string // bytes32 hex, lowercase 0x...
   programHash: string // bytes32
-  ensNode: string // bytes32 namehash hex
   status: StrategyStatus
   cumulativeVolumeIn: string // BigInt wei string
   cumulativeVolumeOut: string // BigInt wei string
@@ -26,7 +28,6 @@ export interface SubgraphStrategy {
   committedCapital: string
   swapCount: number
   lastSwapTimestamp: number // unix seconds (0 = never)
-  followerCount: number
 }
 
 export interface SubgraphSwap {
@@ -41,18 +42,6 @@ export interface SubgraphSwap {
   timestamp: number
   blockNumber: number
   transactionHash: string
-}
-
-// The production Follow entity (srcs/requirements/subgraph/schema.graphql): one row per
-// TextChanged event on a `wave.following/<strategyId>` key. isFollowing flips
-// false on a clear (value==""). node is the follower's ENS namehash;
-// strategyKey is the full "wave.following/<id>" key (Pietro.md names this field).
-export interface Follow {
-  id: string
-  node: string // ENS namehash of the follower's name
-  strategyKey: string // "wave.following/<strategyId>"
-  isFollowing: boolean
-  timestamp: number // unix seconds
 }
 
 const SUBGRAPH_URL =
@@ -91,40 +80,6 @@ function coerceStatus(raw: string | null | undefined): StrategyStatus {
 }
 
 export const subgraph = {
-  /** Production Follow entity (v0.0.4). Lists `wave.following/<id>` TextChanged
-   * events — the follow graph. Empty until follows happen.
-   */
-  async listFollows(first = 1000): Promise<Follow[]> {
-    try {
-      const data = await client.request<{
-        follows?: Array<{
-          id: string
-          node: string
-          strategyKey: string
-          isFollowing: boolean
-          timestamp: string | number
-        }>
-      }>(
-        `query($first: Int) {
-          follows(first: $first, where: { strategyKey_starts_with: "wave.following/" }, orderBy: timestamp, orderDirection: desc) {
-            id node strategyKey isFollowing timestamp
-          }
-        }`,
-        { first },
-      )
-      return (data.follows ?? []).map((r) => ({
-        id: r.id,
-        node: r.node,
-        strategyKey: r.strategyKey,
-        isFollowing: r.isFollowing,
-        timestamp: Number(r.timestamp),
-      }))
-    } catch (error) {
-      if (isEntityNotDeployed(error)) return []
-      throw error
-    }
-  },
-
   /** Production entity — empty while syncing / before any strategies seed. */
   async getStrategy(id: string): Promise<SubgraphStrategy | null> {
     const normalizedId = normalizeId(id)
@@ -134,9 +89,9 @@ export const subgraph = {
       }>(
         `query($id: ID!) {
           strategy(id: $id) {
-            id programHash ensNode status
+            id programHash status
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
-            swapCount lastSwapTimestamp followerCount
+            swapCount lastSwapTimestamp
           }
         }`,
         { id: normalizedId },
@@ -145,14 +100,12 @@ export const subgraph = {
       return {
         id: data.strategy.id,
         programHash: data.strategy.programHash,
-        ensNode: data.strategy.ensNode,
         status: coerceStatus(data.strategy.status),
         cumulativeVolumeIn: data.strategy.cumulativeVolumeIn,
         cumulativeVolumeOut: data.strategy.cumulativeVolumeOut,
         committedCapital: data.strategy.committedCapital ?? '',
         swapCount: Number(data.strategy.swapCount),
         lastSwapTimestamp: Number(data.strategy.lastSwapTimestamp),
-        followerCount: Number(data.strategy.followerCount),
       }
     } catch (error) {
       if (isEntityNotDeployed(error)) return null
@@ -167,21 +120,20 @@ export const subgraph = {
         strategies?: Array<
           Omit<
             SubgraphStrategy,
-            'swapCount' | 'lastSwapTimestamp' | 'followerCount' | 'status' | 'committedCapital'
+            'swapCount' | 'lastSwapTimestamp' | 'status' | 'committedCapital'
           > & {
             committedCapital?: string
             swapCount: string | number
             lastSwapTimestamp: string | number
-            followerCount: string | number
             status?: string
           }
         >
       }>(
         `query($first: Int) {
           strategies(first: $first, orderBy: lastSwapTimestamp, orderDirection: desc) {
-            id programHash ensNode status
+            id programHash status
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
-            swapCount lastSwapTimestamp followerCount
+            swapCount lastSwapTimestamp
           }
         }`,
         { first },
@@ -189,14 +141,12 @@ export const subgraph = {
       return (data?.strategies ?? []).map((s) => ({
         id: s.id,
         programHash: s.programHash,
-        ensNode: s.ensNode,
         status: coerceStatus(s.status),
         cumulativeVolumeIn: s.cumulativeVolumeIn,
         cumulativeVolumeOut: s.cumulativeVolumeOut,
         committedCapital: s.committedCapital ?? '',
         swapCount: Number(s.swapCount),
         lastSwapTimestamp: Number(s.lastSwapTimestamp),
-        followerCount: Number(s.followerCount),
       }))
     } catch (error) {
       if (isEntityNotDeployed(error)) return []

@@ -59,7 +59,7 @@ export default async function StrategyDetailPage({ params }: Props) {
           >
             <span className="font-sans text-[12px] text-wave-muted">Oracle band</span>
             <span className="font-sans text-[11px] text-wave-muted">
-              (ENS intent record)
+              (intent record)
             </span>
             <span className="font-mono text-[13px] text-wave-text ml-auto">
               {strategy.oracleBand}

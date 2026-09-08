@@ -35,8 +35,6 @@ services:
       - COMPILER_URL=${COMPILER_URL:-http://compiler:3001}
       # Server-side feature flags (no NEXT_PUBLIC_ prefix → server-only at runtime).
       - WAVE_USE_MOCK=${WAVE_USE_MOCK:-false}
-      - WAVE_ENS_WIRED=${WAVE_ENS_WIRED:-true}
-      - ENS_NODE=${ENS_NODE:-}
       # Also exposed at runtime for server components / route handlers.
       - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
 
@@ -75,8 +73,6 @@ services:
       - AQUA_ADDRESS=${AQUA_ADDRESS}
       - ROUTER_ADDRESS=${ROUTER_ADDRESS}
       - ENS_STRATEGY_ROUTER=${ROUTER_ADDRESS}
-      - ENS_PARENT_NAME=${ENS_PARENT_NAME:-wave.eth}
-      - ENS_REGISTRY=${ENS_REGISTRY:-}
       - WAVE_SUBGRAPH_URL=${WAVE_SUBGRAPH_URL}
       - MONITOR_SOURCE=${MONITOR_SOURCE:-subgraph}
       - AGENT_ENDPOINT_MCP=http://agent:3002

@@ -1,3 +1,8 @@
+> ⚠️ **HISTORICAL (2026-09-08, ETHOnline prep):** the ENS layer described here is REMOVED
+> from wave. World AgentKit replaces it as the identity layer; follows are gone (identity
+> verifies humans, it stores no edges); the router's `announceStrategy` bytes32 arg is now the
+> opaque strategyId. This doc stays as the Lisboa-era reference it was.
+
 # ENS Path — Implementation Reference (Flavio / P2)
 
 > Authoritative implementation reference for Flavio's ENS agent tasks. Grounds the

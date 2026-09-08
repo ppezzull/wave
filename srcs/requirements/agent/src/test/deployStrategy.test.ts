@@ -1,7 +1,7 @@
 // deployStrategy tests — the FIRST-DEPLOY EXECUTE arm, OFFLINE (every dep injected).
-// Asserts the load-bearing ordering (register → announce → approve → ship), the announce-
-// before-ship invariant, idempotency short-circuit, and that a mid-pipeline failure returns
-// partial state with `error` instead of throwing. No Solidity, no network, no Sepolia ETH.
+// Asserts the load-bearing ordering (announce → approve → ship), the announce-before-ship
+// invariant, idempotency short-circuit, and that a mid-pipeline failure returns partial
+// state with `error` instead of throwing. No Solidity, no network, no Sepolia ETH.
 //
 // The compile dep is stubbed to fixed bytes/hash, so this also pins the Order-shape contract:
 // strategyId = keccak256(abi.encode({maker, traits:1<<254, data:programHex})), matching
@@ -39,7 +39,7 @@ const SPEC: StrategySpecInput = {
 
 const h = (c: string) => `0x${c.repeat(32)}` as Hash;
 
-/** A call log lets each test assert ORDER of invocation (register→announce→approve→ship). */
+/** A call log lets each test assert ORDER of invocation (announce→approve→ship). */
 function makeDeps(overrides: {
   getOnchainProgramHash?: (id: Hex) => Promise<Hex | null>;
   shipShouldThrow?: boolean;
@@ -47,19 +47,13 @@ function makeDeps(overrides: {
   const calls: string[] = [];
   const announceTx = h("ab");
   const shipTx = h("cd");
-  const registerTx = h("ef");
   return {
     calls,
     deps: {
       announcer: async () => ({ address: MAKER, privateKey: MAKER_KEY }),
-      parentName: () => "wave.eth",
       compile: async () => {
         calls.push("compile");
         return { programHex: PROGRAM, programHash: PROGRAM_HASH };
-      },
-      register: async () => {
-        calls.push("register");
-        return { subname: "test.wave.eth", registerTxHash: registerTx };
       },
       announce: async () => {
         calls.push("announce");
@@ -77,24 +71,23 @@ function makeDeps(overrides: {
     },
     announceTx,
     shipTx,
-    registerTx,
   };
 }
 
 describe("deployStrategy (first-deploy EXECUTE arm)", () => {
-  it("runs the full pipeline in the load-bearing order: compile→register→announce→approve→ship", async () => {
-    const { calls, deps, announceTx, shipTx, registerTx } = makeDeps();
+  it("runs the full pipeline in the load-bearing order: compile→announce→approve→ship", async () => {
+    const { calls, deps, announceTx, shipTx } = makeDeps();
     const r = await deployStrategy({ spec: SPEC }, deps);
 
     expect(r.shipped).toBe(true);
     expect(r.approved).toBe(true);
     expect(r.shipTxHash).toBe(shipTx);
     expect(r.announceTxHash).toBe(announceTx);
-    expect(r.registerTxHash).toBe(registerTx);
     expect(r.strategyId).toBe(STRATEGY_ID);
     expect(r.programHash).toBe(PROGRAM_HASH);
+    expect(r.handle).toMatch(/^s-/); // display handle derived from the programHash
     // Ordering — announce MUST precede ship (subgraph drops a ship-before-announce).
-    expect(calls).toEqual(["compile", "register", "announce", "approve", "ship"]);
+    expect(calls).toEqual(["compile", "announce", "approve", "ship"]);
   });
 
   it("announce is always before ship — the invariant the subgraph depends on", async () => {

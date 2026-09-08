@@ -12,7 +12,7 @@ const LISBOA =
   'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
 
 interface Props {
-  /** Prefill from ?fork= — the author's ENS description, byte-for-byte. */
+  /** Prefill from ?fork= — the author's description, byte-for-byte. */
   initialDescription: string
   forkAuthor?: string
   forkId?: string
@@ -42,16 +42,14 @@ function draftStrategy(
   return {
     id: '0xcompose-draft',
     programHash: hash,
-    ensNode: ZERO_HASH,
     status: 'active',
     cumulativeVolumeIn: '0',
     cumulativeVolumeOut: '0',
     swapCount: 0,
     lastSwapTimestamp: 0,
-    followerCount: 0,
     authorHandle: 'you',
     description,
-    ensProgramHash: hash, // pre-ship: ENS not written yet — match on-chain draft
+    ensProgramHash: hash, // pre-ship: nothing committed yet — match on-chain draft
     committedCapital: '0',
     oracleBand: label,
     bytecode: emit?.bytecode ?? [],
@@ -177,7 +175,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
           </h1>
           <p className="font-sans text-[14px] text-wave-muted mt-1 max-w-xl">
             The description is the prompt — it ships byte-for-byte to the
-            compiler and the ENS record.
+            compiler.
           </p>
         </div>
         {forkId && (

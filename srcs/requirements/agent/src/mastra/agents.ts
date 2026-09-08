@@ -1,8 +1,9 @@
-// The 4 agent scaffolds (compose lives in compose.agent.ts). PLACEHOLDERS — their real
-// work is the monitor workflow (decide → retune|gate) + the action tools (dock/ship, ENS,
+// The 3 agent scaffolds (compose lives in compose.agent.ts). PLACEHOLDERS — their real
+// work is the monitor workflow (decide → retune|gate) + the action tools (dock/ship,
 // stop/remove), which land as teammates unblock. Registered so Studio shows the full
-// 5-agent roster (the "completo" story) and so the workflow can name them. Spec:
-// docs/strategy/AGENT.md (Subagent decomposition).
+// 4-agent roster (the "completo" story) and so the workflow can name them. Spec:
+// docs/strategy/AGENT.md (Subagent decomposition). The ENS agent is gone with the ENS
+// layer — identity is World AgentKit's job now.
 import { Agent } from "@mastra/core/agent";
 import { gemmaModel } from "./llm.js";
 
@@ -21,15 +22,6 @@ export const retuneAgent = new Agent({
   name: "wave retune agent",
   instructions:
     "You execute the autonomous retune: dock() → recompile → ship(). Never HITL-gated (the Graph invariant). Cite the Swapped entity id that caused the retune in the evidence log.",
-  model: gemmaModel(),
-});
-
-/** Resolves + verifies ENS (hash-verify before settle); writes v0.programhash / registers. */
-export const ensAgent = new Agent({
-  id: "ens",
-  name: "wave ens agent",
-  instructions:
-    "You resolve + verify ENS (hash-verify before settle) and write text records (v0.programhash) / register subnames. Abort on any hash mismatch.",
   model: gemmaModel(),
 });
 

@@ -2,9 +2,9 @@
 //
 // The field names and shapes here MIRROR the real production sources so that
 // swapping mock -> real later is a drop-in change:
-//   1. The Graph subgraph (Strategy, Swap, Follow, Follower entities)
-//   2. ENS text records (avatar, description, com.twitter, wave.following/<id>,
-//      and an agent-context/intent record carrying programHash + oracle band)
+//   1. The Graph subgraph (Strategy, Swap entities)
+//   2. The identity seam (lib/identity.ts) — author handles are plain display
+//      strings here; live attribution returns when World AgentKit lands
 //
 // Rule: store RAW values (wei strings, unix seconds, bytes32 hex). Never store
 // display strings as the source of truth — the format helpers below derive
@@ -67,18 +67,16 @@ export interface Strategy {
   // --- subgraph-sourced ---
   id: string // bytes32 hex, lowercase 0x...
   programHash: string // bytes32 hex; '0x0000...0000' = not yet wired (D3 gate)
-  ensNode: string // bytes32 namehash hex
   status: StrategyStatus
   cumulativeVolumeIn: string // wei string (BigInt)
   cumulativeVolumeOut: string // wei string (BigInt)
   swapCount: number
   lastSwapTimestamp: number // unix seconds (0 = never)
-  followerCount: number
-  // --- ENS text-record-sourced (author identity + intent) ---
-  authorHandle: string // e.g. 'alice.eth' (the authoring ENS name)
-  description: string // ENS description record — IS the compile prompt, byte-for-byte
-  // ENS agent-context record: the programHash the author committed to on-chain.
-  // For an honest strategy this equals `programHash`; a tampered one diverges.
+  // --- author identity + intent (display strings; seam-sourced live) ---
+  authorHandle: string // plain display name, e.g. 'alice.eth' in the mock
+  description: string // IS the compile prompt, byte-for-byte
+  // The programHash the author committed alongside the ship. For an honest
+  // strategy this equals `programHash`; a tampered one diverges.
   ensProgramHash: string
   // --- derived off-chain (compiler + safety tooling) ---
   // GAP C2: committedCapital is not yet emitted on-chain; mock-only until contract change.
@@ -89,17 +87,17 @@ export interface Strategy {
   retunes: RetuneEntry[]
 }
 
-export interface ENSProfile {
-  handle: string // 'alice' (label; full name is handle + '.eth')
-  name: string // 'alice.eth'
-  displayName: string // ENS display record
-  bio: string // ENS 'description' record
-  avatarUrl: string // ENS 'avatar' record ('' = none -> render gradient)
-  twitter: string // ENS 'com.twitter' record ('' = none)
-  ensNode: string // bytes32 namehash
-  followingCount: number
-  followersCount: number
-  strategyIds: string[] // ids of strategies authored by this name
+// Author profile — plain display data. The handles are just names in the mock
+// (kept verbatim); live profiles resolve through the identity seam once World
+// AgentKit lands.
+export interface Profile {
+  handle: string // 'alice' (profile slug)
+  name: string // 'alice.eth' — display string
+  displayName: string // display name
+  bio: string
+  avatarUrl: string // '' = none -> render gradient
+  twitter: string // '' = none
+  strategyIds: string[] // ids of strategies authored by this profile
 }
 
 // ---------------------------------------------------------------------------
@@ -114,14 +112,11 @@ export const strategies: Strategy[] = [
       '0x3a7f1c9e02d84b6f5a1e9c73d0b48f26a9c1e534d7b8069f2e4a15c8b3d9e072',
     ensProgramHash:
       '0x3a7f1c9e02d84b6f5a1e9c73d0b48f26a9c1e534d7b8069f2e4a15c8b3d9e072',
-    ensNode:
-      '0x1c8e4a09d3f7b6152e9c0d84b7f36a25c1e9438d7b06f2e5a4c19b8d3e7f0625',
     status: 'active',
     cumulativeVolumeIn: '40000000000000000000',
     cumulativeVolumeOut: '43065200000000000000', // (out-cap)/cap = +247.3%
     swapCount: 312,
     lastSwapTimestamp: CURRENT_NOW - 7200, // 2h ago
-    followerCount: 389,
     authorHandle: 'alice.eth',
     description:
       'ETH/USDC momentum: buy when 4h RSI crosses 55 from below, sell when it crosses 45 from above, hard stop at 3% drawdown from entry. Only trades during high-volume windows.',
@@ -177,14 +172,11 @@ export const strategies: Strategy[] = [
       '0x8b4e2c17f9a06d35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0653',
     ensProgramHash:
       '0x8b4e2c17f9a06d35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0653',
-    ensNode:
-      '0x4f9c2e18a3d07b65f1e9c48d2b70a36e5c1d9438b7f0625e4a19c8d3b7e0f265',
     status: 'active',
     cumulativeVolumeIn: '9000000000000000000',
     cumulativeVolumeOut: '9455000000000000000', // +89.1%
     swapCount: 87,
     lastSwapTimestamp: CURRENT_NOW - 9000, // 2h30m ago
-    followerCount: 1204,
     authorHandle: 'vitalik.wave.eth',
     description:
       'WBTC/USDC range-bound: fade moves beyond 2 standard deviations, mean-revert with 1.5% target, guard triggers if spread exceeds 40bps.',
@@ -228,19 +220,16 @@ export const strategies: Strategy[] = [
   // 3 — 0xdefi ARB/ETH cross-chain arb. NEGATIVE -12.4%. TAMPERED. UNSAFE.
   {
     id: '0x7c1e9a35b8f062d4e19c8b73a0d465f2e8c1b9047d3a6e5f8c2b1d9a4e6c0375',
-    // On-chain hash DIFFERS from the ENS record hash -> hash-verify shows TAMPERED.
+    // On-chain hash DIFFERS from the committed record hash -> hash-verify shows TAMPERED.
     programHash:
       '0xdead41c8f9027b65e1a8c47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0000',
     ensProgramHash:
       '0x5c1e9a37b8f042d6e19c8b74a0d365f2e8c1b9047d3a6e5f8c2b1d9a4e6c0371',
-    ensNode:
-      '0x9a3c1e28d4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2651',
     status: 'active',
     cumulativeVolumeIn: '2000000000000000000',
     cumulativeVolumeOut: '1839600000000000000', // -12.4%
     swapCount: 44,
     lastSwapTimestamp: CURRENT_NOW - 21600, // 6h ago
-    followerCount: 34,
     authorHandle: '0xdefi.eth',
     description:
       'ARB/ETH cross-chain arb: detect price delta above 15bps, execute on cheapest leg first, timeout after 90s if second leg unavailable.',
@@ -280,14 +269,11 @@ export const strategies: Strategy[] = [
       '0x6d2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0654',
     ensProgramHash:
       '0x6d2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0654',
-    ensNode:
-      '0x2e8c1a49d3f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2653',
     status: 'active',
     cumulativeVolumeIn: '11000000000000000000',
     cumulativeVolumeOut: '11853600000000000000', // +34.7%
     swapCount: 156,
     lastSwapTimestamp: CURRENT_NOW - 14400, // 4h ago
-    followerCount: 198,
     authorHandle: 'quant.wave.eth',
     description:
       'MATIC/USDC breakout: enter on 1h candle close above 20-day high, scale out in thirds at 2%, 4%, 8% targets.',
@@ -336,14 +322,11 @@ export const strategies: Strategy[] = [
       '0x9e3c1a28d4f07b65e1c8b47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0655',
     ensProgramHash:
       '0x9e3c1a28d4f07b65e1c8b47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0655',
-    ensNode:
-      '0x3d9c1e28a4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2654',
     status: 'active',
     cumulativeVolumeIn: '1250000000000000000',
     cumulativeVolumeOut: '1334400000000000000', // +11.2%
     swapCount: 2,
     lastSwapTimestamp: CURRENT_NOW - 1380, // 23m ago
-    followerCount: 22,
     authorHandle: 'marina.eth',
     description:
       'OP/ETH accumulation: DCA in 0.1 ETH increments every 4h if price is below 30-day MA, pause if weekly drawdown exceeds 8%.',
@@ -374,14 +357,11 @@ export const strategies: Strategy[] = [
       '0x7f2e9a18c4d06b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0656',
     ensProgramHash:
       '0x7f2e9a18c4d06b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0656',
-    ensNode:
-      '0x1c8e4a09d3f7b6152e9c0d84b7f36a25c1e9438d7b06f2e5a4c19b8d3e7f0625',
     status: 'active',
     cumulativeVolumeIn: '3600000000000000000',
     cumulativeVolumeOut: '3923700000000000000', // +18.9%
     swapCount: 201,
     lastSwapTimestamp: CURRENT_NOW - 3600, // 1h ago
-    followerCount: 121,
     authorHandle: 'alice.eth',
     description:
       'ETH/DAI grid: place limit orders at 0.5% intervals above and below current price, auto-rebalance every 6h.',
@@ -422,14 +402,11 @@ export const strategies: Strategy[] = [
       '0x2b8f1c9e04d76b35a1e9c73d0b48f26a9c1e534d7b8069f2e4a15c8b3d9e0721',
     ensProgramHash:
       '0x2b8f1c9e04d76b35a1e9c73d0b48f26a9c1e534d7b8069f2e4a15c8b3d9e0721',
-    ensNode:
-      '0x1c8e4a09d3f7b6152e9c0d84b7f36a25c1e9438d7b06f2e5a4c19b8d3e7f0625',
     status: 'active',
     cumulativeVolumeIn: '15000000000000000000',
     cumulativeVolumeOut: '22890000000000000000', // +52.6%
     swapCount: 268,
     lastSwapTimestamp: CURRENT_NOW - 5400, // 1h30m ago
-    followerCount: 210,
     authorHandle: 'alice.eth',
     description:
       'stETH/ETH basis: harvest the staking-yield spread when it widens beyond 30bps, unwind at 8bps, guard against depeg by halting if the peg slips past 1%.',
@@ -478,14 +455,11 @@ export const strategies: Strategy[] = [
       '0x5c2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0658',
     ensProgramHash:
       '0x5c2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0658',
-    ensNode:
-      '0x4f9c2e18a3d07b65f1e9c48d2b70a36e5c1d9438b7f0625e4a19c8d3b7e0f265',
     status: 'active',
     cumulativeVolumeIn: '20000000000000000000',
     cumulativeVolumeOut: '32680000000000000000', // +63.4%
     swapCount: 143,
     lastSwapTimestamp: CURRENT_NOW - 12600, // 3h30m ago
-    followerCount: 640,
     authorHandle: 'vitalik.wave.eth',
     description:
       'ETH/USDT volatility harvest: sell realized-vs-implied premium when the gap exceeds 6 vol points, delta-hedge every hour, cut on a 2% adverse move.',
@@ -526,14 +500,11 @@ export const strategies: Strategy[] = [
       '0x4d2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0659',
     ensProgramHash:
       '0x4d2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0659',
-    ensNode:
-      '0x2e8c1a49d3f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2653',
     status: 'active',
     cumulativeVolumeIn: '7000000000000000000',
     cumulativeVolumeOut: '8953000000000000000', // +27.9%
     swapCount: 98,
     lastSwapTimestamp: CURRENT_NOW - 18000, // 5h ago
-    followerCount: 132,
     authorHandle: 'quant.wave.eth',
     description:
       'LINK/USDC trend follow: go long when the 12h EMA crosses the 48h EMA and ADX is above 25, trail the stop at 1.5 ATR, flat when ADX falls below 20.',
@@ -582,14 +553,11 @@ export const strategies: Strategy[] = [
       '0x3f2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0660',
     ensProgramHash:
       '0x3f2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0660',
-    ensNode:
-      '0x9a3c1e28d4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2651',
     status: 'stopped',
     cumulativeVolumeIn: '3000000000000000000',
     cumulativeVolumeOut: '2856000000000000000', // -4.8%
     swapCount: 61,
     lastSwapTimestamp: CURRENT_NOW - 43200, // 12h ago
-    followerCount: 41,
     authorHandle: '0xdefi.eth',
     description:
       'GMX/ETH funding capture: collect perp funding when the 8h rate is positive, hedge spot on the cheapest venue, exit if funding flips negative for two epochs.',
@@ -628,14 +596,11 @@ export const strategies: Strategy[] = [
       '0x1e3c1a28d4f07b65e1c8b47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0661',
     ensProgramHash:
       '0x1e3c1a28d4f07b65e1c8b47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0661',
-    ensNode:
-      '0x3d9c1e28a4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2654',
     status: 'active',
     cumulativeVolumeIn: '800000000000000000',
     cumulativeVolumeOut: '850400000000000000', // +6.3%
     swapCount: 6,
     lastSwapTimestamp: CURRENT_NOW - 900, // 15m ago (unranked: age < 1h)
-    followerCount: 14,
     authorHandle: 'marina.eth',
     description:
       'ARB/USDC ladder: stack bids at 1% steps under the weekly VWAP, take profit at the VWAP reclaim, pause new rungs if the drawdown exceeds 6%.',
@@ -666,14 +631,11 @@ export const strategies: Strategy[] = [
     programHash: `0x${'0'.repeat(64)}`, // bytes32(0) -> pending
     ensProgramHash:
       '0x0a3c1a28d4f07b65e1c8b47d20f9a63e5c1d94b8072f6e3a5c19d8b47e2f0662',
-    ensNode:
-      '0x2e8c1a49d3f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2653',
     status: 'active',
     cumulativeVolumeIn: '0',
     cumulativeVolumeOut: '5000000000000000000', // no swaps yet -> ~0% effective
     swapCount: 0,
     lastSwapTimestamp: 0, // never swapped
-    followerCount: 3,
     authorHandle: 'quant.wave.eth',
     description:
       'rETH/ETH carry: accumulate the liquid-staking premium on dips below the 7-day mean, redeem into ETH when the premium normalizes, hard cap at 5 ETH.',
@@ -701,10 +663,10 @@ export const strategyById = (id: string): Strategy | undefined =>
   strategies.find((s) => s.id === id)
 
 // ---------------------------------------------------------------------------
-// ENS profiles
+// Profiles
 // ---------------------------------------------------------------------------
 
-export const profiles: ENSProfile[] = [
+export const profiles: Profile[] = [
   {
     handle: 'alice',
     name: 'alice.eth',
@@ -712,10 +674,6 @@ export const profiles: ENSProfile[] = [
     bio: 'On-chain momentum trader. 3y in DeFi. Building in public.',
     avatarUrl: '',
     twitter: 'alicechen',
-    ensNode:
-      '0x1c8e4a09d3f7b6152e9c0d84b7f36a25c1e9438d7b06f2e5a4c19b8d3e7f0625',
-    followingCount: 142,
-    followersCount: 389,
     strategyIds: [strategies[0].id, strategies[5].id, strategies[6].id],
   },
   {
@@ -726,10 +684,6 @@ export const profiles: ENSProfile[] = [
     avatarUrl:
       'https://images.pexels.com/photos/7135053/pexels-photo-7135053.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop',
     twitter: 'VitalikButerin',
-    ensNode:
-      '0x4f9c2e18a3d07b65f1e9c48d2b70a36e5c1d9438b7f0625e4a19c8d3b7e0f265',
-    followingCount: 320,
-    followersCount: 1204,
     strategyIds: [strategies[1].id, strategies[7].id],
   },
   {
@@ -740,10 +694,6 @@ export const profiles: ENSProfile[] = [
     avatarUrl:
       'https://images.pexels.com/photos/7190857/pexels-photo-7190857.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop',
     twitter: '0xdefi',
-    ensNode:
-      '0x9a3c1e28d4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2651',
-    followingCount: 12,
-    followersCount: 34,
     strategyIds: [strategies[2].id, strategies[9].id],
   },
   {
@@ -754,10 +704,6 @@ export const profiles: ENSProfile[] = [
     avatarUrl:
       'https://images.pexels.com/photos/5918384/pexels-photo-5918384.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop',
     twitter: 'quantwave',
-    ensNode:
-      '0x2e8c1a49d3f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2653',
-    followingCount: 56,
-    followersCount: 198,
     strategyIds: [strategies[3].id, strategies[8].id, strategies[11].id],
   },
   {
@@ -768,25 +714,21 @@ export const profiles: ENSProfile[] = [
     avatarUrl:
       'https://images.pexels.com/photos/7244319/pexels-photo-7244319.jpeg?auto=compress&cs=tinysrgb&w=200&h=200&fit=crop',
     twitter: 'marina',
-    ensNode:
-      '0x3d9c1e28a4f07b65e1c9b48d2a70f36e5c1d9438b70625e4f19c8d3b7e0f2654',
-    followingCount: 8,
-    followersCount: 22,
     strategyIds: [strategies[4].id, strategies[10].id],
   },
 ]
 
-export const profileByHandle = (handle: string): ENSProfile | undefined =>
+export const profileByHandle = (handle: string): Profile | undefined =>
   profiles.find((p) => p.handle === handle)
 
-// The signed-in identity (mocked as alice), plus the Privy-managed wallet that
-// owns the ENS name. Settings and the account chip read from here.
+// The signed-in identity (mocked as alice), plus the Privy-managed wallet.
+// Settings and the account chip read from here.
 export const currentUser = {
   ...profiles[0],
   walletAddress: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
 }
 
-export const profileByStrategyId = (id: string): ENSProfile | undefined =>
+export const profileByStrategyId = (id: string): Profile | undefined =>
   profiles.find((p) => p.strategyIds.includes(id))
 
 // ---------------------------------------------------------------------------
@@ -818,7 +760,7 @@ export interface ProfileStats {
   avgFills: number
 }
 
-export function profileStats(p: ENSProfile): ProfileStats {
+export function profileStats(p: Profile): ProfileStats {
   const authored = p.strategyIds
     .map((id) => strategyById(id))
     .filter((s): s is Strategy => Boolean(s))

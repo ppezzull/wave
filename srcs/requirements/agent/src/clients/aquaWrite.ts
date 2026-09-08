@@ -124,14 +124,16 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
       return send(makerWallet, request);
     },
 
-    /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. */
-    async announce(order: MakerOrder, ensNode: Hex): Promise<Hash> {
+    /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. The
+     * bytes32 id is OPAQUE to the router (born as an ENS namehash; we now pass the
+     * strategyId — the subgraph's Strategy.id — since ENS is gone). */
+    async announce(order: MakerOrder, strategyId: Hex): Promise<Hash> {
       const { request } = await pub.simulateContract({
         account: owner,
         address: cfg.router,
         abi: ROUTER_ABI,
         functionName: "announceStrategy",
-        args: [order, ensNode],
+        args: [order, strategyId],
       });
       return send(ownerWallet, request);
     },

@@ -5,6 +5,7 @@ import { Copy, Check } from 'lucide-react'
 import { Footer } from '@/components/footer'
 import { ConnectButton } from '@/components/connect-button'
 import { useSessionUser } from '@/hooks/use-session-user'
+import { identityFromAddress } from '@/lib/identity'
 import type { CurrentUser } from '@/components/app-wrapper'
 import { usePrivy } from '@privy-io/react-auth'
 
@@ -22,8 +23,8 @@ export function SettingsForm({ user }: Props) {
   const { sessionUser } = useSessionUser()
   const { logout } = usePrivy()
 
-  const walletAddress = sessionUser?.walletAddress ?? user.walletAddress
-  const ensName = sessionUser?.ensName ?? null
+  const walletAddress = sessionUser?.address ?? user.walletAddress
+  const identity = identityFromAddress(walletAddress)
   const truncated =
     walletAddress.length >= 10
       ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
@@ -91,43 +92,44 @@ export function SettingsForm({ user }: Props) {
                 </div>
               )}
               <p className="font-sans text-[13px] text-wave-muted">
-                {walletAddress
-                  ? ensName
-                    ? `${ensName} · connected via Privy`
-                    : 'Connected via Privy'
-                  : 'No wallet connected'}
+                {walletAddress ? 'Connected via Privy' : 'No wallet connected'}
               </p>
             </div>
           </section>
 
-          {/* ENS Identity section */}
-          <section aria-labelledby="ens-heading">
+          {/* Identity section */}
+          <section aria-labelledby="identity-heading">
             <h2
-              id="ens-heading"
+              id="identity-heading"
               className="font-sans font-semibold text-[1rem] text-wave-text mb-3"
             >
-              ENS Identity
+              Identity
             </h2>
             <div className="h-px bg-wave-border mb-5" aria-hidden="true" />
 
             <form onSubmit={handleSave} className="flex flex-col gap-5" noValidate>
-              {/* ENS Name (read-only) */}
+              {/* Handle (read-only, from the identity seam) */}
               <div className="flex flex-col gap-2">
                 <label
-                  htmlFor="ens-name"
+                  htmlFor="identity-handle"
                   className="font-sans text-[14px] text-wave-text font-medium"
                 >
-                  ENS Name
+                  Handle
                 </label>
                 <input
-                  id="ens-name"
+                  id="identity-handle"
                   type="text"
-                  value={ensName ?? user.name}
+                  value={sessionUser ? identity.handle : user.name}
                   readOnly
-                  placeholder={walletAddress ? 'no ENS name resolved' : 'connect a wallet'}
+                  placeholder={walletAddress ? '' : 'connect a wallet'}
                   className="h-11 px-3 rounded-[10px] font-mono text-[14px] text-wave-muted bg-wave-surface cursor-default border border-wave-border"
-                  aria-label="ENS name (read only)"
+                  aria-label="Identity handle (read only)"
                 />
+                <p className="font-sans text-[13px] text-wave-muted">
+                  {/* World "verified human" — renders nothing until AgentKit
+                      flips verifiedHuman (the client-visible World distinction). */}
+                  {sessionUser?.verifiedHuman && 'Verified human (World ID)'}
+                </p>
               </div>
 
               {/* Avatar URL */}
@@ -178,7 +180,7 @@ export function SettingsForm({ user }: Props) {
                 type="submit"
                 className="self-start px-6 py-2.5 rounded-[10px] font-sans text-[14px] font-semibold text-wave-text transition-all duration-150 hover:bg-wave-surface min-h-[44px]"
                 style={{ border: '1px solid #000000' }}
-                aria-label="Save ENS identity settings"
+                aria-label="Save identity settings"
               >
                 {saved ? 'Saved' : 'Save'}
               </button>

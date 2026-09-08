@@ -60,8 +60,8 @@ export function LandingSignIn() {
 
   // Authed: show identity on the right panel + Enter app + Log out (Privy).
   if (authenticated) {
-    const address = sessionUser?.walletAddress
-    const label = sessionUser?.ensName ?? (address ? short(address) : 'Connected')
+    const address = sessionUser?.address
+    const label = sessionUser?.handle ?? (address ? short(address) : 'Connected')
     return (
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 rounded-[12px] border border-wave-border bg-wave-surface/60 px-4 py-3">

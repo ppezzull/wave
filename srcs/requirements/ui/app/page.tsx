@@ -87,13 +87,6 @@ export default function LandingPage() {
                   height={26}
                   className="h-[22px] w-auto object-contain opacity-90"
                 />
-                <Image
-                  src="/ethereum-name-service-ens-logo-1314521848.png"
-                  alt="ENS"
-                  width={100}
-                  height={24}
-                  className="h-[20px] w-auto object-contain"
-                />
               </div>
             </div>
 

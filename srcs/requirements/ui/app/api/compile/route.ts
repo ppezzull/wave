@@ -144,8 +144,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Byte-for-byte: the description IS the prompt (Pietro.md). Do NOT trim,
-  // reflow, or normalize — a mismatch with the ENS description record is a
-  // compile failure, not polish. Empty-string only rejects missing input.
+  // reflow, or normalize — the description must match the compiled program
+  // byte-for-byte; a mismatch is a compile failure, not polish. Empty-string
+  // only rejects missing input.
   const intent = typeof body.intent === 'string' ? body.intent : ''
   if (intent.length === 0) {
     console.warn(LOG, 'missing intent')

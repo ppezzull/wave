@@ -1,11 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, GitFork, TrendingUp, TrendingDown } from 'lucide-react'
+import { GitFork, TrendingUp, TrendingDown } from 'lucide-react'
 import { useCountUp } from '@/hooks/use-count-up'
-import { useSessionUser } from '@/hooks/use-session-user'
-import { followStrategy } from '@/app/actions/follow'
 import {
   type Strategy,
   returnPct,
@@ -28,10 +25,6 @@ export function StrategyCard({
   isPreview = false,
 }: StrategyCardProps) {
   const router = useRouter()
-  const { sessionUser } = useSessionUser()
-  const [following, setFollowing] = useState(false)
-  const [followBusy, setFollowBusy] = useState(false)
-  const [followError, setFollowError] = useState<string | null>(null)
 
   const ret = returnPct(strategy)
   const retStr = returnPctStr(strategy)
@@ -46,22 +39,6 @@ export function StrategyCard({
 
   const handleCardClick = () => {
     if (!isDetailed && !isPreview) router.push(`/s/${strategy.id}`)
-  }
-  const handleFollow = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isPreview || followBusy) return
-    const followerName = sessionUser?.ensName
-    if (!followerName) {
-      setFollowError('Connect a wallet with an ENS name to follow')
-      return
-    }
-    setFollowBusy(true)
-    setFollowError(null)
-    void followStrategy(strategy.id, followerName).then((res) => {
-      setFollowBusy(false)
-      if (res.ok) setFollowing(true)
-      else setFollowError(res.reason ?? 'follow failed')
-    })
   }
   // Fork is a first-class verb → /compose?fork=<id> prefill (Pietro.md L61).
   const handleFork = (e: React.MouseEvent) => {
@@ -164,37 +141,15 @@ export function StrategyCard({
           </div>
 
           {!isPreview && (
-            <div className="flex flex-col gap-1 mt-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFollow}
-                  disabled={followBusy}
-                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold transition-colors duration-150 disabled:opacity-50"
-                  style={{
-                    border: following ? '1px solid #2F3336' : '1px solid #2A9D8F',
-                    color: following ? '#71767B' : '#2A9D8F',
-                    background: 'transparent',
-                  }}
-                  aria-label={following ? 'Unfollow this strategy' : 'Follow this strategy'}
-                  aria-pressed={following}
-                >
-                  {following && <Check size={14} aria-hidden="true" />}
-                  {followBusy ? '…' : following ? 'Following' : 'Follow'}
-                </button>
-                <button
-                  onClick={handleFork}
-                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
-                  aria-label="Fork this strategy"
-                >
-                  <GitFork size={14} aria-hidden="true" />
-                  Fork
-                </button>
-              </div>
-              {followError && (
-                <p className="font-sans text-[12px]" style={{ color: '#E5484D' }}>
-                  {followError}
-                </p>
-              )}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={handleFork}
+                className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
+                aria-label="Fork this strategy"
+              >
+                <GitFork size={14} aria-hidden="true" />
+                Fork
+              </button>
             </div>
           )}
         </div>

@@ -33,7 +33,7 @@ export default async function ProfilePage({ params }: Props) {
             Profile not found
           </h1>
           <p className="font-sans text-[15px] text-wave-muted mb-6 max-w-sm">
-            {`We couldn't find a profile for ${handle}.eth. It may not have shipped a strategy yet.`}
+            {`We couldn't find a profile for ${handle}. It may not have shipped a strategy yet.`}
           </p>
           <Link
             href="/explore"
@@ -74,7 +74,7 @@ export default async function ProfilePage({ params }: Props) {
       >
         <div className="w-full">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            {/* Avatar — ENS avatar record, or gradient fallback */}
+            {/* Avatar — profile image, or gradient fallback */}
             <div
               className="w-16 h-16 rounded-full shrink-0 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
@@ -90,7 +90,7 @@ export default async function ProfilePage({ params }: Props) {
               )}
             </div>
 
-            {/* Text block — ENS subdomain only, no display name or bio */}
+            {/* Text block — handle only, no display name or bio */}
             <div className="flex flex-col gap-1 min-w-0">
               <h1
                 id="profile-name"
@@ -98,19 +98,6 @@ export default async function ProfilePage({ params }: Props) {
               >
                 {profile.name}
               </h1>
-              <p
-                className="font-mono text-[13px] text-wave-text mt-1"
-                aria-label={`${profile.followingCount} following, ${profile.followersCount} followers`}
-              >
-                {profile.followingCount}
-                <span className="font-sans text-[13px] text-wave-muted ml-1 mr-3">
-                  following
-                </span>
-                {profile.followersCount}
-                <span className="font-sans text-[13px] text-wave-muted ml-1">
-                  followers
-                </span>
-              </p>
             </div>
           </div>
         </div>

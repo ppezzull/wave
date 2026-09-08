@@ -1,7 +1,7 @@
 // Pure render helpers + the ranking formula — shared by BOTH the mock data
 // layer (lib/mock-data.ts) and the live data layer (lib/data/server.ts).
 //
-// These are mode-independent: raw subgraph/ENS values in (wei strings, unix
+// These are mode-independent: raw subgraph values in (wei strings, unix
 // seconds, bytes32 hex), display strings out. They contain NO business logic
 // beyond the documented ranking formula (Pietro.md 🔢), so they're safe for
 // the server data layer and for leaf components alike.
@@ -44,7 +44,9 @@ export function formatRecency(unixSeconds: number, now = CURRENT_NOW): string {
 }
 
 // ── ranking formula (Pietro.md 🔢) ─────────────────────────────────────────
-// rank = returnPct × recencyDecay × (1 + log2(1 + followerCount))
+// rank = returnPct × recencyDecay
+// (The original formula had a log2 follower-count multiplier; the follow graph
+// is gone, so the ranking sorts on return × recency alone.)
 
 // C2b INTERIM (docs/strategy/SUBGRAPH-CONTRACT-GAPS.md C2).
 // returnPct's true denominator is committed capital, which NO event emits today
@@ -77,13 +79,9 @@ export function recencyDecay(s: Strategy, now = CURRENT_NOW): number {
   return 0.5 ** (hours / 24)
 }
 
-// rank = returnPct × recencyDecay × (1 + log2(1 + followerCount))
+// rank = returnPct × recencyDecay
 export function rank(s: Strategy, now = CURRENT_NOW): number {
-  return (
-    returnPct(s) *
-    recencyDecay(s, now) *
-    (1 + Math.log2(1 + s.followerCount))
-  )
+  return returnPct(s) * recencyDecay(s, now)
 }
 
 // L1 listing threshold (consumer-layer rule): ranks iff swapCount>=3 AND age>=1h.
@@ -93,7 +91,7 @@ export function isRanked(s: Strategy, now = CURRENT_NOW): boolean {
 
 // ── hash-verify ────────────────────────────────────────────────────────────
 // 'pending' when programHash is bytes32(0) (C3: compiler not wired yet — D3
-// gate), 'match' when on-chain == ENS record, 'mismatch' when tampered.
+// gate), 'match' when on-chain == committed record, 'mismatch' when tampered.
 export type HashState = 'match' | 'mismatch' | 'pending'
 
 export const ZERO_HASH = `0x${'0'.repeat(64)}`

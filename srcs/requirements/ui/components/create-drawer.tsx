@@ -52,8 +52,7 @@ const DEFAULT_MESSAGES: Message[] = [
   {
     id: 'a4',
     role: 'agent',
-    content:
-      'Strategy is safe. Ready to ship as eth-usdc-momentum.wave.eth. Confirm?',
+    content: 'Strategy is safe. Ready to ship on-chain. Confirm?',
     timestamp: '2:16 PM',
     type: 'text',
   },
@@ -69,8 +68,8 @@ const DEFAULT_MESSAGES: Message[] = [
 /**
  * Compile-time safety card. Renders the REAL deterministic-compiler output (programHash,
  * emitted-byte count, applied rule rewrites, canonicalization) fetched via /api/emit — no
- * hardcoded "SAFE". The programHash is byte-exact: it is the value the ENS v0.programhash
- * record and the on-chain program both carry, so it is the actual tamper-check root.
+ * hardcoded "SAFE". The programHash is byte-exact: it is the value the on-chain program
+ * carries, so it is the actual tamper-check root.
  *
  * Honest label: this is COMPILE-TIME verification (Zod→canonical→IR→bytecode + rule
  * rewrites), not the full quote-grid settle simulation (both directions, monotonicity,
@@ -158,12 +157,12 @@ function PostShipMessage({ result }: { result: ShipResult | null }) {
       {announce && (
         <span className="font-mono text-[12px] text-wave-muted">announce {announce}</span>
       )}
-      {result.subname && (
-        <p className="font-sans text-[14px] text-wave-text">Registered as {result.subname}</p>
+      {result.handle && (
+        <p className="font-sans text-[14px] text-wave-text">Shipped as {result.handle}</p>
       )}
       {result.programHash && (
         <p className="font-mono text-[11px] text-wave-muted break-all">
-          v0.programhash {result.programHash.slice(0, 18)}…
+          program hash {result.programHash.slice(0, 18)}…
         </p>
       )}
       {result.alreadyDeployed && (
@@ -289,7 +288,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const [inputValue, setInputValue] = useState('')
   // Ship flow states: idle → confirming (HITL gate) → shipping → done|error.
   // `shipped` is kept for the existing PostShipMessage branch; `shipResult` carries the
-  // real on-chain evidence (tx hashes, ENS subname, programHash) returned by the agent.
+  // real on-chain evidence (tx hashes, handle, programHash) returned by the agent.
   const [shipped, setShipped] = useState(false)
   const [shipPending, setShipPending] = useState(false)
   const [shipConfirming, setShipConfirming] = useState(false)
@@ -315,7 +314,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const [liveMessages, setLiveMessages] = useState<LiveMessage[]>(readLiveMessages)
 
   // Chat history is deliberately local-only: no conversation data is written
-  // to the app backend, chain, ENS, or subgraph. Refreshing the page restores
+  // to the app backend, chain, or subgraph. Refreshing the page restores
   // the local draft/conversation and its last completed StrategySpec.
   useEffect(() => {
     try {
@@ -327,8 +326,8 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
 
   // When the spec finalizes, run the deterministic compiler (/api/emit) to surface the REAL
   // programHash + emitted-byte count + applied rules in the safety card. The compiler output
-  // is the byte-exact evidence that the ENS v0.programhash record + the on-chain program will
-  // match — this is what "safety-checked" means at compile time for the demo.
+  // is the byte-exact evidence of what the on-chain program will carry — this is what
+  // "safety-checked" means at compile time for the demo.
   useEffect(() => {
     if (useMock || !compose.spec) return
     const spec = compose.spec

@@ -75,7 +75,8 @@ async function main() {
   console.log("  tx", dockTx);
 
   console.log("announce (BEFORE ship — the subgraph needs the row first)…");
-  const annTx = await aqua.announce(newOrder, need("ENS_NODE") as `0x${string}`);
+  // The bytes32 id is OPAQUE (born the ENS namehash; the strategyId itself is the id now).
+  const annTx = await aqua.announce(newOrder, newHash);
   console.log("  tx", annTx);
 
   console.log("ship  ", newHash, "…");

@@ -1,9 +1,10 @@
 // Ranking tests — consumer-layer feed sort. Falsifiable, RED-on-mutation.
 // Spec: docs/tasks/Pietro.md §"🔢 The ranking algorithm".
-// rank = returnPct × recencyDecay × (1 + log2(1 + followers))
+// rank = returnPct × recencyDecay
 // returnPct = (cumulativeVolumeOut − cumulativeVolumeIn) ÷ committedCapital
+// (Historical: the third term, the follower nudge, is gone with the ENS follow layer.)
 import { describe, expect, it } from "vitest";
-import { rank, returnPct, recencyDecay, followerNudge, type RankInput } from "../ranking.js";
+import { rank, returnPct, recencyDecay, type RankInput } from "../ranking.js";
 
 // Wei helpers — keep tests honest about precision (the whole point of the BigInt path).
 const ETH = "1000000000000000000"; // 1e18 wei = 1 ETH
@@ -17,7 +18,6 @@ const base = (over: Partial<RankInput> = {}): RankInput => ({
   cumulativeVolumeOut: wei("250"), // 250 ETH out → +150 ETH net PnL on 100 ETH capital = +150%
   committedCapital: wei("100"), // 100 ETH committed
   lastSwapAt: NOW, // just swapped → recencyDecay ≈ 1.0
-  followers: 0, // no nudge (1 + log2(1) = 1)
   now: NOW,
   ...over,
 });
@@ -102,41 +102,16 @@ describe("recencyDecay — 24h half-life", () => {
   });
 });
 
-describe("followerNudge — 1 + log2(1 + followers)", () => {
-  it("is 1.0 with no followers (no nudge)", () => {
-    expect(followerNudge(0)).toBeCloseTo(1.0, 6);
-  });
-
-  it("doubles rank's nudge term for the 1st follower (1 → 2)", () => {
-    // log2(2) = 1 → term = 2.0
-    expect(followerNudge(1)).toBeCloseTo(2.0, 6);
-  });
-
-  it("grows slowly: 100 followers ≈ 1 + log2(101) ≈ 7.66", () => {
-    expect(followerNudge(100)).toBeCloseTo(1 + Math.log2(101), 6);
-  });
-
-  it("treats negative input as zero (defensive)", () => {
-    expect(followerNudge(-5)).toBeCloseTo(1.0, 6);
-  });
-});
-
 describe("rank — the full sort key", () => {
-  it("multiplies the three terms", () => {
-    // base: returnPct 1.5 × recencyDecay 1.0 × nudge 1.0 = 1.5
+  it("multiplies the two terms", () => {
+    // base: returnPct 1.5 × recencyDecay 1.0 = 1.5
     expect(rank(base())).toBeCloseTo(1.5, 6);
   });
 
   it("applies recency decay (idle 24h halves a fresh +150% rank)", () => {
     const idle = rank(base({ lastSwapAt: NOW - 86_400 })); // one day stale
-    // 1.5 × 0.5 × 1.0 = 0.75
+    // 1.5 × 0.5 = 0.75
     expect(idle).toBeCloseTo(0.75, 6);
-  });
-
-  it("applies follower nudge (1 follower doubles the nudge term)", () => {
-    const nudged = rank(base({ followers: 1 }));
-    // 1.5 × 1.0 × 2.0 = 3.0
-    expect(nudged).toBeCloseTo(3.0, 6);
   });
 
   it("returns null (UNRANKED) when there's no committed capital", () => {
@@ -150,20 +125,12 @@ describe("rank — the full sort key", () => {
     expect(stale).not.toBeNull();
     expect(winner!).toBeGreaterThan(stale!);
   });
-
-  it("ranks a strategy with lower return% but more followers can beat a higher-return% lonely one", () => {
-    // Nudge is bounded (log2), so this only flips for extreme follower counts —
-    // documents that return% dominates but followers break ties upward.
-    const lonely = rank(base({ followers: 0 })); // 1.5 × 1 × 1
-    const popular = rank(base({ followers: 1023 })); // 1.5 × 1 × (1+log2(1024)) = 1.5 × 11 = 16.5
-    expect(popular!).toBeGreaterThan(lonely!);
-  });
 });
 
 describe("rank — precision across the pipeline", () => {
   it("the ETH-scale base ratio survives the full multiply (not just returnPct alone)", () => {
     // Same +150% as returnPct's precision test, now through the full rank() with
-    // a fresh swap and zero followers → must equal 1.5, not a Number-drifted 1.499...
+    // a fresh swap → must equal 1.5, not a Number-drifted 1.499...
     expect(rank(base())).toBeCloseTo(1.5, 6);
   });
 });

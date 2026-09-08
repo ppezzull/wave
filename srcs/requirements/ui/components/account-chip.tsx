@@ -3,17 +3,20 @@
 // AccountChip — the left-rail account slot, Privy-aware.
 //
 // Identity precedence (never fabricated):
-//   1. Privy connected wallet (real) — address from useWallets(), ENS name from
-//      a best-effort reverse lookup; logout via ConnectButton.
+//   1. Privy connected wallet (real) — resolved through the identity seam
+//      (lib/identity.ts): truncated-address handle, verifiedHuman false until
+//      World AgentKit lands; logout via ConnectButton.
 //   2. The server `currentUser` fallback (mock = alice; live stub = empty).
 //   3. If neither (live + disconnected) → show ConnectButton.
 //
-// `handle`/`name` for the profile link: the ENS name if resolved, else the
-// server user's handle, else the raw address (which /u/[handle] will render as
-// a not-found/empty profile — the honest state).
+// The profile link uses the identity handle (a live wallet has no profile page
+// yet — /u/[handle] renders the honest not-found state) or the server user's
+// handle.
 import Link from 'next/link'
+import { BadgeCheck } from 'lucide-react'
 import type { CurrentUser } from './app-wrapper'
 import { useSessionUser } from '@/hooks/use-session-user'
+import { identityFromAddress } from '@/lib/identity'
 import { ConnectButton } from './connect-button'
 
 interface Props {
@@ -41,11 +44,12 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
     )
   }
 
-  const address = sessionUser?.walletAddress ?? currentUser.walletAddress
-  const name =
-    sessionUser?.ensName ??
-    (currentUser.name ? currentUser.name : short(address))
-  const handle = sessionUser?.ensName?.replace(/\.eth$/, '') ?? currentUser.handle
+  const address = sessionUser?.address ?? currentUser.walletAddress
+  const identity = identityFromAddress(address)
+  const name = sessionUser
+    ? identity.handle
+    : currentUser.name || identity.handle
+  const handle = sessionUser ? identity.handle : currentUser.handle
   const avatarUrl = sessionUser ? '' : currentUser.avatarUrl
 
   return (
@@ -74,12 +78,23 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
         </div>
         {!collapsed && (
           <div className="flex flex-col min-w-0 leading-tight">
-            <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
+            <span className="font-mono text-[15px] font-semibold text-wave-text truncate flex items-center gap-1">
               {name}
+              {/* World "verified human" — renders nothing until AgentKit flips
+                  verifiedHuman (the client-visible World distinction). */}
+              {sessionUser?.verifiedHuman && (
+                <BadgeCheck
+                  size={14}
+                  style={{ color: '#2A9D8F' }}
+                  aria-label="Verified human"
+                />
+              )}
             </span>
-            <span className="font-mono text-[13px] text-wave-muted truncate">
-              {short(address)}
-            </span>
+            {name !== short(address) && (
+              <span className="font-mono text-[13px] text-wave-muted truncate">
+                {short(address)}
+              </span>
+            )}
           </div>
         )}
       </Link>

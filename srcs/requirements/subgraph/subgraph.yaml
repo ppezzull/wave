@@ -1,9 +1,10 @@
 specVersion: 1.3.0
-# Production wave subgraph (v0.0.2). Replaces the spike. Three data sources:
+# Production wave subgraph. Two data sources (the ENS resolver source is REMOVED with the ENS
+# layer — follows were ENS text records; identity is World AgentKit's job now, and it stores no
+# follow edges):
 #   (a) EnsStrategyRouter (Flaviano's deploy)   -> StrategyDeployed, Swapped
-#   (b) Sepolia ENS Public Resolver (constant)  -> TextChanged (filtered in mapping), VersionChanged
 #   (c) Aqua (1inch balance protocol, constant) -> Pushed, Pulled, Docked  (committed capital + status)
-# NOTE: no indexerHints.prune — Strategy and Follower are MUTABLE aggregates; prune:auto only
+# NOTE: no indexerHints.prune — Strategy is a MUTABLE aggregate; prune:auto only
 # works on fully immutable stores. Reorg safety = graph-node native block-level revert.
 schema:
   file: ./schema.graphql
@@ -32,36 +33,12 @@ dataSources:
         - name: EnsStrategyRouter
           file: ./abis/EnsStrategyRouter.abi.json
       eventHandlers:
+        # The event's third param (indexed bytes32) was born the ENS namehash; the announcer now
+        # passes the strategyId itself. Still indexed, still bytes32 — the handler ignores it.
         - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
           handler: handleStrategyDeployed
         - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
           handler: handleSwapped
-      file: ./src/mapping.ts
-  # --- (b) ENS Public Resolver (constant on Sepolia) ---
-  - kind: ethereum/contract
-    name: ENSResolver
-    network: sepolia
-    source:
-      address: "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5" # Sepolia ENS Public Resolver (PROD-TESTNET §3)
-      abi: ENSResolver
-      startBlock: 11348879 # spike value; resolver predates the router by a mile
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.9
-      language: wasm/assemblyscript
-      entities:
-        - Follow
-        - Follower
-        - NodeFollows
-        - Strategy
-      abis:
-        - name: ENSResolver
-          file: ./abis/ENSResolver.json
-      eventHandlers:
-        - event: TextChanged(indexed bytes32,indexed string,string,string)
-          handler: handleTextChanged
-        - event: VersionChanged(indexed bytes32,uint256)
-          handler: handleVersionChanged
       file: ./src/mapping.ts
   # --- (c) Aqua (1inch balance-management protocol; committed capital + status source) ---
   # Aqua is the AUTHORITATIVE source of committed capital: Pushed(amount)/Pulled(amount) maintain

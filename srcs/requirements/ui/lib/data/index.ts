@@ -2,7 +2,6 @@
 //
 // ONE switch: WAVE_USE_MOCK. Default 'true' for local/demo without env.
 // Flip to 'false' against Studio wave v0.0.4 (issue #51 — live seed).
-// Flip WAVE_ENS_WIRED=true once ENS records resolve for author identity.
 //
 // Every export is always-async (the live layer is async; the mock layer wraps
 // sync accessors in resolved promises) so call sites `await` once and never
@@ -10,9 +9,9 @@
 import 'server-only'
 import * as mock from './mock'
 import * as server from './server'
-import type { Strategy, ENSProfile, ProfileStats } from '../mock-data'
+import type { Strategy, Profile, ProfileStats } from '../mock-data'
 
-export type { Strategy, ENSProfile, ProfileStats }
+export type { Strategy, Profile, ProfileStats }
 
 const USE_MOCK = process.env.WAVE_USE_MOCK !== 'false' // default true
 
@@ -35,38 +34,20 @@ export async function getSwapHistory(strategyId: string, limit?: number) {
   return USE_MOCK ? mock.getSwapHistory(strategyId, limit) : server.getSwapHistory(strategyId, limit)
 }
 
-export async function getProfile(handle: string): Promise<ENSProfile | null> {
+export async function getProfile(handle: string): Promise<Profile | null> {
   return USE_MOCK ? mock.getProfile(handle) : server.getProfile(handle)
 }
 
-export async function getProfileStats(profile: ENSProfile): Promise<ProfileStats> {
+export async function getProfileStats(profile: Profile): Promise<ProfileStats> {
   return USE_MOCK ? mock.getProfileStats(profile) : server.getProfileStats(profile)
-}
-
-export async function getFollowed(ensNode?: string): Promise<Strategy[]> {
-  return USE_MOCK ? mock.getFollowed(ensNode ?? '') : server.getFollowed(ensNode ?? '')
-}
-
-export async function getFollowedStrategies(): Promise<Strategy[]> {
-  return USE_MOCK ? mock.getFollowedStrategies() : server.getFollowedStrategies()
-}
-
-export async function getFollowerStrategies(): Promise<Strategy[]> {
-  return USE_MOCK ? mock.getFollowerStrategies() : server.getFollowerStrategies()
 }
 
 export async function getRecentThreads(limit?: number): Promise<Strategy[]> {
   return USE_MOCK ? mock.getRecentThreads(limit) : server.getRecentThreads(limit)
 }
 
-export async function getCurrentUser(): Promise<ENSProfile & { walletAddress: string }> {
+export async function getCurrentUser(): Promise<Profile & { walletAddress: string }> {
   return USE_MOCK ? mock.getCurrentUser() : server.getCurrentUser()
-}
-
-// "Who to follow" suggestions for the right rail. Mock: seed profiles; live:
-// empty until an ENS discovery index lands.
-export async function getSuggestedProfiles(): Promise<ENSProfile[]> {
-  return USE_MOCK ? mock.getSuggestedProfiles() : server.getSuggestedProfiles()
 }
 
 // generateStaticParams helper for the dynamic routes — mock-only param sets
@@ -89,5 +70,5 @@ export async function listProfileHandles(): Promise<string[]> {
     const { profiles } = await import('../mock-data')
     return profiles.map((p) => p.handle)
   }
-  return [] // live profiles come from ENS discovery (not wired)
+  return [] // live profiles resolve through the identity seam (not wired)
 }

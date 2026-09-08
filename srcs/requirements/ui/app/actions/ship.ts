@@ -2,8 +2,8 @@
 
 // shipStrategy — the UI's "Ship on-chain" server action. Forwards the finalized
 // StrategySpec (from the compose agent) to the agent's shipStrategy tool, which runs the
-// full pipeline in the agent process: compile → ENS register → announce → approve → ship →
-// verify. The UI holds no keys, no compiler, no business logic (frontend.md §8).
+// full pipeline in the agent process: compile → announce → approve → ship → verify. The
+// UI holds no keys, no compiler, no business logic (frontend.md §8).
 //
 // It forwards the SPEC, never client-supplied program bytes or hashes — the agent
 // re-derives everything, so nothing the browser sends can misreport the on-chain program.
@@ -15,7 +15,7 @@
 //
 // Mounted tool path verified: POST /api/tools/:id/execute (probed against the running
 // agent; /api/mcp/wave/:id returns 404 on the installed Mastra). The tool input is wrapped
-// under `data` per Mastra's tool-execute body shape (see app/actions/follow.ts:48).
+// under `data` per Mastra's tool-execute body shape.
 
 const AGENT_URL = process.env.AGENT_URL ?? 'http://agent:3002'
 
@@ -34,10 +34,10 @@ export interface ShipResult {
   ok: boolean
   strategyId?: string
   programHash?: string
-  subname?: string
+  /** Display handle the agent attributed the ship to, e.g. "s-fab534ee". */
+  handle?: string
   announceTxHash?: string
   shipTxHash?: string
-  registerTxHash?: string
   alreadyDeployed?: boolean
   reason?: string
 }
@@ -76,10 +76,9 @@ export async function shipStrategy(
     output?: ShipResult & { shipped?: boolean; error?: string }
     strategyId?: string
     programHash?: string
-    subname?: string
+    handle?: string
     shipTxHash?: string
     announceTxHash?: string
-    registerTxHash?: string
     shipped?: boolean
     alreadyDeployed?: boolean
     error?: string
@@ -95,10 +94,9 @@ export async function shipStrategy(
     ok: true,
     strategyId: out.strategyId,
     programHash: out.programHash,
-    subname: out.subname,
+    handle: out.handle,
     announceTxHash: out.announceTxHash,
     shipTxHash: out.shipTxHash,
-    registerTxHash: out.registerTxHash,
     alreadyDeployed: out.alreadyDeployed,
   }
 }
