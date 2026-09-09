@@ -6,6 +6,7 @@ import { useDrawer } from './drawer-context'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { StreamNotifications } from './stream-notifications'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { emitProgram } from '@/app/actions/emit'
 
 const LISBOA =
   'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
@@ -67,7 +68,7 @@ const DEFAULT_MESSAGES: Message[] = [
 
 /**
  * Compile-time safety card. Renders the REAL deterministic-compiler output (programHash,
- * emitted-byte count, applied rule rewrites, canonicalization) fetched via /api/emit — no
+ * emitted-byte count, applied rule rewrites, canonicalization) via the emitProgram action — no
  * hardcoded "SAFE". The programHash is byte-exact: it is the value the on-chain program
  * carries, so it is the actual tamper-check root.
  *
@@ -281,11 +282,27 @@ function readLiveMessages(): LiveMessage[] {
   }
 }
 
+// The ship-time description fallback: the last user text bubble of the persisted
+// thread — the exact intent bytes the agent compiled (a reload clears `lastIntent`
+// but restores the thread, and Ship must stay reachable with the post attached).
+function lastUserText(messages: LiveMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role === 'user' && message.kind === 'text' && typeof message.content === 'string') {
+      return message.content
+    }
+  }
+  return ''
+}
+
 export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const { state, close, minimize, restore } = useDrawer()
-  const { open, minimized, forkSource, agentStrategy } = state
+  const { open, minimized, agentStrategy } = state
 
   const [inputValue, setInputValue] = useState('')
+  // The last sent intent, kept for the ship step: it is the description (the post)
+  // the agent announces on-chain as StrategyDescribed. inputValue is cleared on send.
+  const [lastIntent, setLastIntent] = useState('')
   // Ship flow states: idle → confirming (HITL gate) → shipping → done|error.
   // `shipped` is kept for the existing PostShipMessage branch; `shipResult` carries the
   // real on-chain evidence (tx hashes, handle, programHash) returned by the agent.
@@ -293,7 +310,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const [shipPending, setShipPending] = useState(false)
   const [shipConfirming, setShipConfirming] = useState(false)
   const [shipResult, setShipResult] = useState<ShipResult | null>(null)
-  // Real compiler output for the safety card — fetched via /api/emit (spawns the wave-compiler
+  // Real compiler output for the safety card — via the emitProgram action (spawns the wave-compiler
   // CLI: canonicalize → resolveRejections → lower → emit → disassemble). Replaces the prior
   // hardcoded "SAFE" verdict with the actual programHash + emitted-byte count + applied
   // rules. Honest label: this is COMPILE-TIME safety (byte-exact hash + rule rewrites), not
@@ -324,10 +341,10 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     }
   }, [liveMessages])
 
-  // When the spec finalizes, run the deterministic compiler (/api/emit) to surface the REAL
-  // programHash + emitted-byte count + applied rules in the safety card. The compiler output
-  // is the byte-exact evidence of what the on-chain program will carry — this is what
-  // "safety-checked" means at compile time for the demo.
+  // When the spec finalizes, run the deterministic compiler (emitProgram action) to surface
+  // the REAL programHash + emitted-byte count + applied rules in the safety card. The
+  // compiler output is the byte-exact evidence of what the on-chain program will carry —
+  // this is what "safety-checked" means at compile time for the demo.
   useEffect(() => {
     if (useMock || !compose.spec) return
     const spec = compose.spec
@@ -335,28 +352,16 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     setEmit(null)
     ;(async () => {
       try {
-        const res = await fetch('/api/emit', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(spec),
-          signal: AbortSignal.timeout(15000),
-        })
-        const json = (await res.json()) as {
-          programHash?: string
-          bytecode?: unknown[]
-          rulesApplied?: unknown[]
-          canonicalized?: boolean
-          error?: string
-        }
+        const out = await emitProgram(spec)
         if (cancelled) return
-        if (!res.ok || json.error) {
-          setEmit({ error: json.error ?? `compile failed (HTTP ${res.status})` })
+        if (!out.ok) {
+          setEmit({ error: out.error ?? 'compile failed' })
         } else {
           setEmit({
-            programHash: json.programHash,
-            bytes: Array.isArray(json.bytecode) ? json.bytecode.length : undefined,
-            rulesApplied: Array.isArray(json.rulesApplied) ? json.rulesApplied.length : undefined,
-            canonicalized: json.canonicalized,
+            programHash: out.programHash,
+            bytes: Array.isArray(out.bytecode) ? out.bytecode.length : undefined,
+            rulesApplied: Array.isArray(out.rulesApplied) ? out.rulesApplied.length : undefined,
+            canonicalized: out.canonicalized,
           })
         }
       } catch (err) {
@@ -433,35 +438,11 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
       ]
     : null
 
-  // Canned mock/demo messages. Empty in live mode (no fork/agent replay) so the
+  // Canned mock/demo messages. Empty in live mode (no agent replay) so the
   // live compose thread owns the panel; the live branch below renders it.
-  const messages: Message[] = !useMock && !forkSource && !agentStrategy
+  // (Fork no longer opens the drawer — /compose?fork= is the fork surface.)
+  const messages: Message[] = !useMock && !agentStrategy
     ? []
-    : forkSource
-    ? [
-        {
-          id: 'a1',
-          role: 'agent',
-          content:
-            "Describe your trading strategy in plain English. I'll compile it, check it for safety, and ship it on-chain.",
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-        {
-          id: 'u1-fork',
-          role: 'user',
-          content: forkSource.description,
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-        {
-          id: 'a2-fork',
-          role: 'agent',
-          content: 'Got it. Compiling your fork... Checking safety constraints.',
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-      ]
     : agentMessages ?? DEFAULT_MESSAGES
 
   useEffect(() => {
@@ -573,21 +554,29 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     setShipConfirming(false)
     setShipPending(true)
     setShipResult(null)
+    // The post: the exact intent bytes the compiler consumed — the agent's described
+    // announce stores them on-chain (StrategyDescribed). The thread outlives a reload
+    // (localStorage) but `lastIntent` is in-memory only, so fall back to the persisted
+    // user message — the same bytes, re-read.
+    const description = lastIntent || lastUserText(liveMessages)
     try {
-      const result = await shipStrategy({
-        specVersion: Number(spec.specVersion ?? 1),
-        pair: {
-          token0: String(spec.pair?.token0 ?? ''),
-          token1: String(spec.pair?.token1 ?? ''),
+      const result = await shipStrategy(
+        {
+          specVersion: Number(spec.specVersion ?? 1),
+          pair: {
+            token0: String(spec.pair?.token0 ?? ''),
+            token1: String(spec.pair?.token1 ?? ''),
+          },
+          size: {
+            amount0: String(spec.size?.amount0 ?? ''),
+            amount1: String(spec.size?.amount1 ?? ''),
+          },
+          blocks: Array.isArray(spec.blocks)
+            ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+            : [],
         },
-        size: {
-          amount0: String(spec.size?.amount0 ?? ''),
-          amount1: String(spec.size?.amount1 ?? ''),
-        },
-        blocks: Array.isArray(spec.blocks)
-          ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
-          : [],
-      })
+        description ? { description } : undefined,
+      )
       setShipResult(result)
       if (result.ok) {
         setShipped(true)
@@ -611,6 +600,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     // Byte-for-byte: do not trim — description IS the compiler input.
     const intent = inputValue
     setInputValue('')
+    setLastIntent(intent)
     // Mock mode: the canned demo conversation is already on screen; sending is
     // a no-op (the input is decorative in the mock). Live mode: drive the real
     // compose stream — the agent parses the intent to a bounded StrategySpec.
@@ -632,11 +622,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
 
   if (!open) return null
 
-  const title = forkSource
-    ? `Fork: ${forkSource.authorHandle}`
-    : agentStrategy
-      ? agentStrategy.authorHandle
-      : 'New strategy'
+  const title = agentStrategy ? agentStrategy.authorHandle : 'New strategy'
 
   // --- Minimized pill ---
   if (minimized) {
@@ -792,7 +778,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
 
         {/* Live compose stream (live mode only). Mock mode uses the canned
             messages above + the HITL approval demo below. */}
-        {!useMock && !forkSource && !agentStrategy && liveMessages.length === 0 && (
+        {!useMock && !agentStrategy && liveMessages.length === 0 && (
           <div className="flex flex-col max-w-[85%] self-start">
             <div
               className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed bg-wave-surface"
