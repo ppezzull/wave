@@ -11,6 +11,13 @@
 > - Subgraph: v0.0.5 **deploy pending** (schema/mapping committed), Studio serve v0.0.4.
 > - **Giorno 6/13**: la form Sandbox World ID + l'email per il flag Selfie Check (`developers@toolsforhumanity.com`) sono **OVERDUE** — solo Flavio può farle (issue #61, item #1).
 
+## 📌 Stato lavori (9 set, sera)
+
+- **Step 0 (utente)**: form Sandbox World ✅ · email flag Selfie Check a Tools for Humanity ✅ · signing key salvata ✅ · app creata sul Developer Portal (`app_d088…13e` / `rp_6d0…4de`, committate in `.env.example` perché pubbliche) · **da fare**: azione `wave-publish` (staging / `proofOfHuman` / max verifications 100) — nel portale nuovo non sta in "World ID Configuration" ma nella sezione **Verification** della sidebar.
+- **Step 1 (branch `feat/world-agentkit`, commit `8a4d928`)**: dep `@worldcoin/agentkit@0.2.1` (+ `agentkit-core`, `@x402/core`) · due wallet agente throwaway per la registrazione AgentBook — publisher `0xf4AF4E8f4F49032257D9C1e3F1d9c5324a040620`, retuner `0x92b4747d624253f1B7598A996bb44855d8008017` (chiavi private SOLO nel `.env`, permessi 600) · `FEEDBACK-WORLD.md` alla radice con le 4 sezioni richieste dal bounty, già con i primi rilievi del giorno 1.
+- **Nota repo**: `srcs/requirements/agent/package-lock.json` è rimasto stale rispetto a `pnpm-lock.yaml` (il repo è passato a pnpm) — da rimuovere o rigenerare prima che qualcuno faccia `npm ci`.
+- **In corso**: Step 2 — gating AgentKit sui tool MCP (reads `free-trial`, `shipStrategy`/`faucetDrip` solo agenti human-backed), storage `AgentKitStorage` su libsql, test con firme mock.
+
 ## Context
 
 wave è stato costruito e submitted a **ETHGlobal Lisboa 2026** (track Classic/from-scratch): social market per strategie on-chain in linguaggio naturale su 1inch SwapVM. **ETHOnline 2026 (4–16 settembre**, finestra da 12 giorni**)** ha pool **Continuity** dedicati che a luglio erano inaccessibili (Classic track). Il progetto è già qualificato su 1inch e The Graph; ENS qui vale solo $500 e richiederebbe un porting a ENSv2.
