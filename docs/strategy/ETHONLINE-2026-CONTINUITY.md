@@ -1,14 +1,15 @@
 # wave → ETHOnline 2026 (4–16 set) — Continuity Track
 
-> ## ⚠️ AGGIORNAMENTO 8 set sera (dopo il clone del repo reale)
-> Questo piano è stato scritto sulla copia ZIP del 26 luglio. Il `main` reale è **avanti** — riletture necessarie:
-> - **`f441287` (8 set, Pietro) "Remove ENS identity layer; World AgentKit to replace it"** — il team ha GIÀ rimosso l'intero layer ENS e scelto World AgentKit (stessa direzione di questo piano). **I follow sono stati eliminati del tutto** (pagine/azioni follow cancellate, `followerCount` e follow entities rimossi dal subgraph, ranking senza il termine follower) → la narrativa anti-sybil sui follow di Fase 1 è **obsoleta**: la storia si sposta su identity/publish. Nota: qui sotto, dove il piano dice "l'integrazione ENS resta nel codice", vale il contrario — rimossa.
-> - **`94cf0ef`** — ship-on-chain flow: UI ship action + agent `deployStrategy` arm (compile → announce → approve → ship).
-> - **`deea4f3`** — retune autonomo eseguito LIVE su Sepolia (G2): l'item "completare retune zero-click" di Fase 2 è **fatto**.
-> - **`d48f368` (8 set)** — faucet Sepolia in-app (agente `faucetDrip` + bottone Settings).
-> - **AgentKit NON è ancora integrato** (nessuna dipendenza `@worldcoin` nel repo): il seam è pronto in `ui/lib/identity.ts` con `{address, handle, verifiedHuman}` — *"AgentKit plugs in there"*. → **Fase 1 è il lavoro aperto**: gating AgentKit sui writes MCP + registrazione AgentBook + trust panel + feedback doc, da innestare su quel seam.
-> - Subgraph a 2 data source (router + Aqua), deploy **v0.0.5 pending** — da completare.
-> - **Siamo a giorno 4/12 dell'evento** (4–16 set): le azioni a lead time — form Sandbox World ID e email per il feature flag Selfie Check (`developers@toolsforhumanity.com`) — vanno fatte **oggi**.
+> ## ⚠️ AGGIORNAMENTO 9 set (post commit del 9 set + issue #61 — correzioni applicate)
+> Questo piano è nato sulla copia ZIP del 26 luglio. Stato del `main` reale:
+> - **Rimozione ENS + scelta World** (`f441287`, 8 set): layer ENS eliminato, **follow eliminati del tutto** (ranking senza termine follower, follow entities via dal subgraph). Nel corpo storico qui sotto, dove si legge "l'integrazione ENS resta nel codice", vale il contrario — rimossa.
+> - **Hardening 1inch** (`a35e480`+, 9 set): re-ship idempotente (deadline quantizzata → short-circuit `programHash`), oracle decimal fold (fix 1e12 su pair a decimali misti), guard curve-required — provati su fork mainnet con `quote==swap`. Sono fix, NON nuova superficie contrattuale → la Fase 3 resta obbligatoria.
+> - **Il post vive on-chain** (`9501b4a`): `StrategyDescribed(bytes32 indexed strategyId, string description)` in `EnsStrategyRouter.sol:42`, `strategyId = hash(order)` → **signal naturale e verificabile per le proof World ID**.
+> - **Stack locale completo** (`c1297e3`, `0b61061`): fork Sepolia chain-id 11155111 + rpc-shim + graph-node compose + login fake-Privy → tutto sviluppabile/demoabile in locale (istruzioni: issue #61 §5).
+> - **Retune autonomo G2 già eseguito live su Sepolia** (`deea4f3`) → primo bullet di Fase 2 fatto.
+> - **AgentKit NON integrato** (zero dipendenze `@worldcoin`): seam pronto in `ui/lib/identity.ts` (`{address, handle, verifiedHuman}`) → **Fase 1 = il lavoro aperto**, target il flusso compose→ship.
+> - Subgraph: v0.0.5 **deploy pending** (schema/mapping committed), Studio serve v0.0.4.
+> - **Giorno 6/13**: la form Sandbox World ID + l'email per il flag Selfie Check (`developers@toolsforhumanity.com`) sono **OVERDUE** — solo Flavio può farle (issue #61, item #1).
 
 ## Context
 
@@ -41,20 +42,21 @@ Regola: i bounty marcati `🆕 only Continuity` sono i nostri pool naturali; que
 
 | Premio | Perché wave è già forte / cosa manca |
 |---|---|
-| **1inch — Aqua App Continuity** (+ opt-in pool aperto $5k) | Già qualificato a luglio: SwapVM ufficiale + 2 opcodes custom, swap live su Sepolia (`quote()==swap()`). Manca: nuovo lavoro visibile + commit incrementali durante l'evento |
-| **The Graph — AI Use Case (Continuity)** (+ opt-in Composable se facciamo MCP) | $2,5k 1° — Subgraph live su Studio + agente che agisce sui dati. Manca: riverifica/redeploy, completare il retune zero-click end-to-end (rimasto ☐ a luglio) |
-| **World — AgentKit Continuity** | $3,5k — Lavoro NUOVO dell'evento: umani verificati nel social graph + agenti registrati. Manca tutto: sandbox, integrazione, feedback doc obbligatoria |
+| **1inch — Aqua App Continuity** (+ opt-in pool aperto $5k) | Già qualificato a luglio + hardening 9 set (idempotenza re-ship, decimal fold, curve-required — fork mainnet `quote==swap()`). Manca: **nuova superficie contrattuale** (Fase 3) + commit incrementali |
+| **The Graph — AI Use Case (Continuity)** (+ opt-in Composable se facciamo MCP) | $2,5k 1° — Subgraph live su Studio + agente che agisce sui dati; retune zero-click già live (`deea4f3`). Manca: deploy v0.0.5 + Subgraph MCP |
+| **World — AgentKit Continuity** | $3,5k — Lavoro NUOVO dell'evento: umani verificati sul publish + agenti registrati in AgentBook. Manca tutto: sandbox, integrazione, feedback doc obbligatoria |
 
 Requisiti d'occhio: 1inch = contratti ufficiali + transfer onchain nel demo (fork locali ok) + **proper git commit history, no commit singolo l'ultimo giorno** · Graph = dati live da provider (Studio API key) + reasoning/automazione + video 2–4 min + selezione pool Continuity · World = AgentKit significativo + AgentBook + test via World ID Sandbox App + **feedback document**.
 
-## Stato attuale (verificato in questa copia)
+## Stato attuale (allineato al `main` del 9 set — vedi issue #61)
 
-- **Contratti** (`srcs/requirements/swap-vm/`): `src/opcodes/StrategyOpcodes.sol` (Guard=33, Skew=34), `src/routers/EnsStrategyRouter.sol` deployato su Sepolia `0x698d798895a03c858aab493564e0795732da0c68` (block 11352568), Aqua self-deployed `0xdc8C…D1E`. Test wave: `test/EnsStrategyRouter.t.sol`, `test/StrategyOpcodesSlots.t.sol`, invariants OracleGuard/InventorySkew. `test/base/AquaStrategyBuilders.sol` **esiste** (il warning in CLAUDE.md è stale).
-- **Subgraph** (`srcs/requirements/subgraph/`): Studio account 1756983, progetto `wave` v0.0.4; endpoint hardcoded in `agent/src/clients/subgraph.ts:60` e `ui/lib/clients/subgraph.ts:60`. Schema Strategy/Swap/Follow/Follower/NodeFollows + capitale Aqua.
-- **Agente** (`srcs/requirements/agent/`): Mastra + z.ai, MCP server (`src/mcp/{reads,writes,server}.ts`), monitor `graphDelta`, policy R1–R4 autonome / S1–S4 HITL.
-- **UI** (`srcs/requirements/ui/`): Next.js 16, pagine chat/compose/explore/follow; `app/actions/follow.ts` scrive i text record `wave.following/`.
-- **ENS**: via viem (ENSIP-25/26, `agent/src/ens/`) — resta nel prodotto, esce dai premi.
-- **Debt noti**: `.env.example` punta al vecchio router `0xeb513fd…52c4` (buono: `0x698d…0c68`) · drift versione subgraph v0.0.1/v0.0.2/v0.0.4 · package ui ancora `my-project` · **questa copia è uno ZIP senza `.git` e senza `node_modules`** → non lavorarci sopra.
+- **Contratti** (`srcs/requirements/swap-vm/`): `src/opcodes/StrategyOpcodes.sol` (Guard=33, Skew=34), `src/routers/EnsStrategyRouter.sol` deployato su Sepolia `0x698d798895a03c858aab493564e0795732da0c68` (block 11352568), Aqua self-deployed `0xdc8C…D1E`. Evento nuovo: `StrategyDescribed(bytes32 indexed strategyId, string description)` (`EnsStrategyRouter.sol:42`) — il post vive on-chain, `strategyId = hash(order)`. Test wave: `test/EnsStrategyRouter.t.sol`, `test/StrategyOpcodesSlots.t.sol`, invariants OracleGuard/InventorySkew.
+- **Hardening 9 set** (provato su fork mainnet, `quote==swap`): re-ship idempotente (deadline quantizzata → short-circuit `programHash`), oracle decimal fold (fix 1e12 su pair a decimali misti), guard curve-required. NB: fix, non nuova superficie contrattuale → Fase 3 comunque necessaria.
+- **Subgraph** (`srcs/requirements/subgraph/`): Studio account 1756983, progetto `wave`; Studio serve v0.0.4, **v0.0.5 deploy pending** (schema/mapping committed in `9501b4a`; 2 data source router+Aqua, follow entities rimosse). Stack locale: rpc-shim + graph-node compose (`c1297e3`).
+- **Agente** (`srcs/requirements/agent/`): Mastra + z.ai, MCP server (8 tools), monitor `graphDelta`, policy R1–R4 autonome / S1–S4 HITL; faucet `faucetDrip`.
+- **UI** (`srcs/requirements/ui/`): Next.js 16, pagine chat/compose/explore/settings; actions = `emit`/`ship`/`faucet` (follow rimosso); seam identità `ui/lib/identity.ts` `{address, handle, verifiedHuman}`.
+- **ENS**: layer rimosso (`f441287`) — `ENS_STRATEGY_ROUTER` resta solo come alias storico dell'indirizzo router.
+- **Debt**: `.env.example` router vecchio → **sistemato in questo commit** · drift versione subgraph → si chiude col deploy v0.0.5 · package ui ancora `my-project`.
 
 ## Fase 0 — Prep (stasera / prima dell'apertura)
 
@@ -76,32 +78,32 @@ Requisiti d'occhio: 1inch = contratti ufficiali + transfer onchain nel demo (for
 - Runtime flow: l'agente firma un messaggio CAIP-122 (EIP-191, con chainId) → il server verifica firma + risolve il wallet in AgentBook → ottiene l'identificatore umano anonimo → applica la policy (free/trial/discount/rate-limit).
 
 **La mappatura su wave (il cuore del lavoro nuovo):**
-- Problema reale nel prodotto: `rank = returnPct × recencyDecay × (1 + log2(1+followers))` — social graph (follow via text record ENS) e pubblicazione sono superficie sybil: bot a costo zero gonfiano i follower e inondano il feed. E la superficie agent-facing **esiste già**: MCP server `agent/src/mcp/{reads,writes,server}.ts` su `http://agent:3002`.
+- Problema reale nel prodotto: la **pubblicazione** è la superficie sybil (i follow non esistono più, `f441287`): bot a costo zero possono inondare il feed di strategie-spazzatura e inquinare il ranking. Il post ora vive on-chain (`StrategyDescribed`, `strategyId = hash(order)`) → **signal naturale e verificabile per la proof World ID**. E la superficie agent-facing **esiste già**: MCP server `agent/src/mcp/{reads,writes,server}.ts` su `http://agent:3002`.
 - Mossa principale — **wave diventa un servizio AgentKit/x402-gated**:
   - **Reads MCP** (feed/strategia/ranking) → mode `free-trial` (es. 5 richieste, poi x402).
-  - **Writes MCP** (announce/publish, follow, retune) → solo agenti human-backed (risolti in AgentBook): gratuiti, rate limit più alti; agenti anonimi → x402 pay-per-write (World Chain/Base); wallet non registrati → 403.
+  - **Writes MCP** (publish/announce, retune) → solo agenti human-backed (risolti in AgentBook): gratuiti, rate limit più alti; agenti anonimi → x402 pay-per-write (World Chain/Base); wallet non registrati → 403.
   - Storage persistente `AgentKitStorage` (usage counter + anti-replay nonce) su **libsql** — riusiamo `@mastra/libsql` già nel progetto.
 - **Agenti wave in AgentBook**: wallet per ruolo (almeno compose/publish e retune autonomo) registrati con il World ID del team → il retune zero-click dimostra di agire per conto di un umano verificato = "durable human-backed authorization".
 - **Client**: chiamate outbound degli agenti wave via `createAgentkitClient({ signer: { address, chainId, type: 'eip191', signMessage } })` — demo end-to-end: l'agente wave chiama il proprio API gated, firma, viene risolto in AgentBook, accesso free.
 - **Livello utenti web — World ID via IDKit** (scope scelto: verifica anche per gli umani nel browser):
-  - IDKit widget nel flusso UI: chi pubblica una strategia o segue (`ui/app/actions/follow.ts` + flusso compose→ship) deve completare la verifica World ID (Sandbox App per i test).
-  - Server-side: verifica della proof (cloud verification World) con `signal` per-azione (es. strategyId/programHash per publish, ensNode per follow) → la prova è unica e non riutilizzabile (anti double-spend della proof).
-  - Serve registrare l'app nel Developer Portal (App ID + action `wave-publish`/`wave-follow`) — l'esperienza sul Portal finisce dritto nella feedback doc richiesta dal bounty.
+  - IDKit widget nel flusso compose→ship (`ui/app/actions/ship.ts`): chi pubblica una strategia completa la verifica World ID (Sandbox App per i test).
+  - Server-side: verifica della proof (cloud verification World) con `signal = strategyId = hash(order)` (emesso da `StrategyDescribed`, ricostruibile on-chain) → proof unica e non riutilizzabile su un'altra azione.
+  - Serve registrare l'app nel Developer Portal (App ID + action `wave-publish`) — l'esperienza sul Portal finisce dritto nella feedback doc richiesta dal bounty.
   - Badge *"verified human"* su profilo/autore; azioni non verificate rifiutate.
 - **UI — trust panel**: stato AgentBook dell'agente agente (human-backed ✓, identificatore anonimo, tier di rate limit), stato World ID dell'utente, badge "shipped by a human-backed agent" sulle card strategia, e il percorso negativo (bot bloccato / reindirizzato a x402).
 - **Gerarchia da rispettare nella submission**: il bounty è *AgentKit* Continuity → il pezzo load-bearing resta il gating agenti/AgentBook; il livello World ID utentiweb è il complemento che completa la storia anti-sybil ("ogni attore su wave prova la propria natura: gli umani via World ID, gli agenti via AgentKit"). Non il contrario.
 
 **Demo beat (atto 2 del video) — contrasto a tre vie:**
-1. 🟢 Umano nel browser verifica con World ID → pubblica/segue → badge *verified human*;
+1. 🟢 Umano nel browser verifica con World ID → pubblica (compose→ship) → badge *verified human*;
 2. 🟢 Agente wave registrato in AgentBook → pubblica/ritocca → badge *human-backed agent*;
-3. 🔴 Script anonimo tenta il mass-follow → la policy lo blocca o gli chiede x402.
+3. 🔴 Script anonimo tenta il mass-publish di spam → la policy lo blocca o gli chiede x402.
 Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano — in carne od ossa o dietro un agente verificato"*.
 
 **Task sequencing (finestra 4–16 set):**
-1. **Giorno 0 (4 set)**: form Sandbox World ID + World App sul telefono · `npm i @worldcoin/agentkit @worldcoin/agentkit-cli` (+ `@x402/hono` se serve) · `register` in sandbox · smoke-test risoluzione AgentBook (`status`) · registrazione app nel Developer Portal (App ID, actions).
+1. **[OVERDUE — giorno 6/13, issue #61 item #1]**: form Sandbox World ID + World App sul telefono · `npm i @worldcoin/agentkit @worldcoin/agentkit-cli` (+ `@x402/hono` se serve) · `register` in sandbox · smoke-test risoluzione AgentBook (`status`) · registrazione app nel Developer Portal (App ID, actions).
 2. **Giorni 1–4**: gating server sull'API agente — middleware x402/AgentKit davanti al server MCP di Mastra (verificare il transport; fallback: piccolo gateway Hono dedicato, `@x402/hono` è il reference) · storage libsql · policy reads/writes.
 3. **Giorni 4–6**: registrazione AgentBook dei wallet agente wave · client `createAgentkitClient` · trust panel in UI.
-4. **Giorni 6–9**: livello utenti web — IDKit nei flussi publish/follow (`ui/app/actions/follow.ts`, flusso compose) · verifica server delle proof con signal per-azione · badge verified human.
+4. **Giorni 6–9**: livello utenti web — IDKit nel flusso compose→ship (`ui/app/actions/ship.ts`) · verifica server delle proof con `signal = strategyId` · badge verified human.
 5. **Giorni 9–10**: end-to-end a tre vie (✓ umano / ✓ agente / ✗ bot) · edge case (nonce replay, wallet non registrato, proof riusata, verify fallita) · `FEEDBACK-WORLD.md` scritta in itinere.
 
 **Rischi specifici:**
@@ -117,7 +119,7 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 **La scala della fiducia a tre pioli di wave** (narrativa per submission e video):
 | Piolo | Domanda | Strumento | Dove |
 |---|---|---|---|
-| Account | "sei un umano unico?" | World ID | publish/follow (serve unicità: il ranking usa `followers`) |
+| Account | "sei un umano unico?" | World ID | publish (serve unicità per chi entra nel feed) |
 | Agente | "chi firma ha un umano dietro?" | AgentKit/AgentBook | API/MCP writes |
 | Azione | "c'è un umano vivo ADESSO?" | **Selfie Check** | cancelli HITL |
 
@@ -135,7 +137,7 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 
 ## Fase 2 — The Graph (approfondimento)
 
-- Completare il leg rimasto ☐ a luglio: **retune zero-click end-to-end** (delta subgraph → soglia → `dock()`+recompile+`ship()`), con evidence log che cita il `Swapped` entity ID — è la beating "data-caused, not time-triggered" che il pool AI premia.
+- ~~Retune zero-click end-to-end~~ **FATTO** — eseguito live su Sepolia (`deea4f3`, G2). Resta da curare la beating demo: evidence log che cita il `Swapped` entity ID (*"data-caused, not time-triggered"* — ciò che il pool AI premia).
 - Integrare il **Subgraph MCP ufficiale** nella toolbox dell'agente (composizione 2 prodotti → abilita anche l'opt-in al track Composable come upside).
 - Bump subgraph (v0.0.5) + redeploy Studio; allineare le tre versioni sparse (env/README/codice).
 
@@ -164,5 +166,5 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 1. `cd srcs/requirements/swap-vm && npm install && forge build && forge test` — suite verde.
 2. Query manuale all'endpoint Studio: entity Strategy/Swap (ID storici + nuovi della sessione).
 3. `docker compose up` in `srcs/`: UI raggiungibile, path chat → compile → ship su Sepolia funzionante.
-4. Flusso World end-to-end: verify → follow/publish consentito; non-verified → negato; AgentBook risolve l'agente.
+4. Flusso World end-to-end: verify → publish consentito; non-verified → negato; AgentBook risolve l'agente.
 5. `git log` pulito: commit incrementali, nessun commit singolo nell'ultimo giorno.
