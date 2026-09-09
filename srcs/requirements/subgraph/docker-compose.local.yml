@@ -1,0 +1,66 @@
+# Local graph-node indexing the anvil Sepolia fork (dev only — pairs with the
+# "LOCAL ANVIL FORK MODE" block in the repo-root .env).
+#   Up:    docker compose -f docker-compose.local.yml up -d
+#   Logs:  docker compose -f docker-compose.local.yml logs -f graph-node
+#   Down:  docker compose -f docker-compose.local.yml down -v   (wipes index state)
+# Then: npm run create-local && npx graph deploy --node http://localhost:8020/ \
+#         --ipfs http://localhost:5001 --version-label local wave subgraph.local.yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: graph-node
+      POSTGRES_PASSWORD: let-me-in
+      POSTGRES_DB: graph-node
+      # graph-node's own docker-compose pins these (docker/for-mac#6270 workaround)
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    # no host ports — internal to the compose network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U graph-node"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # One-shot: graph-node v0.45 no longer auto-migrates on --postgres-url boot,
+  # so prime the schema explicitly before the node starts.
+  #   docker compose -f docker-compose.local.yml run --rm migrate
+  migrate:
+    image: graphprotocol/graph-node:latest
+    profiles: ["tools"]
+    volumes:
+      - ./graph-node.local.toml:/etc/graph-node/config.toml:ro
+    entrypoint: ["graphman", "--config", "/etc/graph-node/config.toml", "database", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ipfs:
+    image: ipfs/go-ipfs:v0.9.1 # same image graph-node's own docker-compose uses
+    ports:
+      - "5001:5001" # graph deploy uploads the compiled wasm here
+
+  graph-node:
+    image: graphprotocol/graph-node:latest
+    ports:
+      - "8000:8000" # GraphQL query → WAVE_SUBGRAPH_URL=http://127.0.0.1:8000/subgraphs/name/wave
+      - "8020:8020" # admin JSON-RPC (graph create/deploy)
+      - "8030:8030" # indexing-status API
+    volumes:
+      - ./graph-node.local.toml:/etc/graph-node/config.toml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Config-file mode (env-mode no longer auto-migrates; schema primed via the
+      # `migrate` profile). Chain/provider/chain-id all live in the toml.
+      GRAPH_NODE_CONFIG: /etc/graph-node/config.toml
+      node_id: default # matches [chains].ingestor + [deployment] rules in the toml
+      ipfs: "ipfs:5001"
+      GRAPH_LOG: info
+      # Anvil automine = instant finality, no reorgs; don't sit on unconfirmed heads.
+      ETHEREUM_REORG_THRESHOLD: "1"
+      ETHEREUM_ANCESTOR_COUNT: "1"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ipfs:
+        condition: service_started

@@ -1,0 +1,95 @@
+specVersion: 1.3.0
+# LOCAL FORK variant — the switchable backup for anvil-fork testing ("switch when needed").
+# This is exactly what ran green on the local stack E2E (Sep 9 2026): ship from /compose →
+# described announce → StrategyDescribed indexed → /compose?fork= prefill byte-for-byte.
+# Deploy against LOCAL graph-node only (never Studio):
+#   ./node_modules/.bin/graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 \
+#     --version-label localN wave subgraph.local.yaml
+# Differences vs subgraph.yaml (the live/Studio one):
+#   - startBlocks cut near the fork head so a fresh graph-node syncs in seconds.
+#   - adds source (b): the V2 router (StrategyDescribed era) deployed on the anvil fork at
+#     block 11663842, address 0x6F1c…9664 (deterministic on a fresh fork: same deployer+nonce).
+# Pair with root .env.fork.backup (ROUTER_ADDRESS pointed at the fork router).
+schema:
+  file: ./schema.graphql
+dataSources:
+  # --- (a) StrategyRouter (live Sepolia address; events backfilled from the real chain) ---
+  - kind: ethereum/contract
+    name: EnsStrategyRouter
+    network: sepolia
+    source:
+      address: "0x698d798895a03c858aab493564e0795732da0c68"
+      abi: EnsStrategyRouter
+      startBlock: 11352568 # router DEPLOY block (redeploy per #49)
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+        - Swap
+      abis:
+        - name: EnsStrategyRouter
+          file: ./abis/EnsStrategyRouter.abi.json
+      eventHandlers:
+        - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
+          handler: handleStrategyDeployed
+        - event: StrategyDescribed(indexed bytes32,string)
+          handler: handleStrategyDescribed
+        - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
+          handler: handleSwapped
+      file: ./src/mapping.ts
+  # --- (b) EnsStrategyRouterV2 (LOCAL FORK TEST only — not for Studio) ---
+  # The V2 router (StrategyDescribed era) deployed on the anvil fork at block 11663842.
+  # Same handlers as (a). Its StrategyDeployed/StrategyDescribed pair is what the fork's
+  # described announce emits (one tx, logIndex 0 + 1).
+  - kind: ethereum/contract
+    name: EnsStrategyRouterV2
+    network: sepolia
+    source:
+      address: "0x6F1c3b4eC5e022250b5B8089d68bB9D27EB92664"
+      abi: EnsStrategyRouter
+      startBlock: 11663842
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+        - Swap
+      abis:
+        - name: EnsStrategyRouter
+          file: ./abis/EnsStrategyRouter.abi.json
+      eventHandlers:
+        - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
+          handler: handleStrategyDeployed
+        - event: StrategyDescribed(indexed bytes32,string)
+          handler: handleStrategyDescribed
+        - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
+          handler: handleSwapped
+      file: ./src/mapping.ts
+  # --- (c) Aqua (1inch balance-management protocol; committed capital + status source) ---
+  - kind: ethereum/contract
+    name: Aqua
+    network: sepolia
+    source:
+      address: "0xdc8C2b141CF705F12f6BB45af3830341daBB1D1E" # Sepolia Aqua (Flaviano, Jul 25 2026)
+      abi: Aqua
+      startBlock: 11350041 # Aqua deploy block (broadcast record + on-chain receipt)
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+      abis:
+        - name: Aqua
+          file: ./abis/Aqua.json
+      eventHandlers:
+        - event: Pushed(address,address,bytes32,address,uint256)
+          handler: handlePushed
+        - event: Pulled(address,address,bytes32,address,uint256)
+          handler: handlePulled
+        - event: Docked(address,address,bytes32)
+          handler: handleDocked
+      file: ./src/mapping.ts
