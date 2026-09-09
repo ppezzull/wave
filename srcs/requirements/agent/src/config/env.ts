@@ -144,5 +144,24 @@ export function faucetTunables(): { dripWei: bigint; cooldownMs: number; maxTota
   };
 }
 
+/**
+ * World AgentKit MCP gate (ETHOnline continuity, plan Fase 1). The MCP surface
+ * is the agent-facing programmatic boundary: POSTs must carry a valid
+ * `agentkit` header (CAIP-style message signed by the agent wallet and
+ * resolvable in AgentBook to a verified human). Kill switch, freshness window
+ * and per-human call cap are env-tunable so the demo can never be held
+ * hostage by a beta SDK hiccup. Storage shares the LIBSQL_URL family of the
+ * Mastra store (:memory: default → counters/nonces reset on restart; same
+ * tradeoff as storageConfig above).
+ */
+export function worldConfig() {
+  return {
+    enabled: process.env.WORLD_MCP_GATE !== "off", // anything but "off" = on
+    callLimit: Number(process.env.WORLD_MCP_CALL_LIMIT ?? 1000),
+    maxAgeSeconds: Number(process.env.WORLD_MAX_AGE_SECONDS ?? 300),
+    storageUrl: process.env.LIBSQL_URL ?? ":memory:",
+  };
+}
+
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
 // and defaulted to 3002 via ENV in the Dockerfile. (No serverConfig() helper — it was dead code.)

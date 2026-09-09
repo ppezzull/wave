@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^1.0.0",
     "@instructor-ai/instructor": "^1.7.0",
+    "@libsql/client": "^0.18.0",
     "@mastra/core": "^1.52.1",
     "@mastra/libsql": "^1.17.0",
     "@mastra/mcp": "^1.15.0",
