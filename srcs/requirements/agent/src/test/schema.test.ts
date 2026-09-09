@@ -32,13 +32,30 @@ describe("StrategySpec (frozen specVersion 1)", () => {
 
   it("accepts the two new feeds (LINK/USD, DAI/USD)", () => {
     expect(
-      StrategySpec.safeParse(spec([{ type: "oracleGuard", feed: "LINK/USD", maxDeviationBps: 100, mode: "revert" }]))
-        .success,
+      StrategySpec.safeParse(
+        spec([
+          { type: "oracleGuard", feed: "LINK/USD", maxDeviationBps: 100, mode: "revert" },
+          { type: "curve", kind: "xyc" },
+        ]),
+      ).success,
     ).toBe(true);
     expect(
-      StrategySpec.safeParse(spec([{ type: "oracleGuard", feed: "DAI/USD", maxDeviationBps: 100, mode: "revert" }]))
-        .success,
+      StrategySpec.safeParse(
+        spec([
+          { type: "oracleGuard", feed: "DAI/USD", maxDeviationBps: 100, mode: "revert" },
+          { type: "curve", kind: "xyc" },
+        ]),
+      ).success,
     ).toBe(true);
+  });
+
+  it("rejects a curve-less spec — it is inert (VM reverts amountOut=0 on every fill)", () => {
+    // Deadline-only: exactly the shape compose emitted once on the mainnet-fork
+    // E2E — ships fine, can never trade. The refine (mirrored by the compiler's
+    // NoPricingInstruction) refuses it at parse time so the LLM repairs instead.
+    const r = StrategySpec.safeParse(spec([{ type: "deadline", hours: 24 }]));
+    expect(r.success).toBe(false);
+    if (!r.success) expect(r.error.issues.some((i) => /curve/.test(i.message))).toBe(true);
   });
 
   it("rejects kebab-case block types (superseded by the freeze)", () => {
@@ -120,7 +137,10 @@ describe("StrategySpec (frozen specVersion 1)", () => {
 
   it("applies the maxStalenessSecs default (7200) when omitted", () => {
     const r = StrategySpec.safeParse(
-      spec([{ type: "oracleGuard", feed: "ETH/USD", maxDeviationBps: 100, mode: "revert" }]),
+      spec([
+        { type: "oracleGuard", feed: "ETH/USD", maxDeviationBps: 100, mode: "revert" },
+        { type: "curve", kind: "xyc" },
+      ]),
     );
     if (!r.success) throw new Error("expected parse success");
     const b = r.data.blocks[0];

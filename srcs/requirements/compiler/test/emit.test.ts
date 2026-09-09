@@ -35,6 +35,10 @@ const referenceOpts = {
   chainId: 11155111,
   now: 1_800_000_000,
   pairBase: "token0" as const,
+  // Uniform-decimal pair (the Sepolia mocks): the oracle fold is a no-op
+  // (8 + 18 − 18 = 8), so the frozen hex keeps its feed-decimals byte.
+  token0Decimals: 18,
+  token1Decimals: 18,
 };
 
 describe("byte-identical emit (the riga-19 bar)", () => {
@@ -74,8 +78,21 @@ describe("lowering guards", () => {
     expect(() => lower(spec, referenceOpts)).toThrowError(/reserved/);
   });
 
+  it("throws on a curve-less spec instead of emitting an inert program", () => {
+    // Deadline-only: ships fine but no instruction prices a fill — the VM's
+    // taker protection reverts amountOut=0 forever (seen live on the
+    // mainnet-fork E2E). Mirrors the agent-side schema refine.
+    const spec = StrategySpec.parse({
+      ...referenceSpec,
+      blocks: [{ type: "deadline", hours: 24 }],
+    });
+    expect(() => lower(spec, referenceOpts)).toThrowError(CompileError);
+    expect(() => lower(spec, referenceOpts)).toThrowError(/NoPricingInstruction|curve/);
+  });
+
   it("throws on an unknown chain instead of guessing a feed", () => {
-    expect(() => lower(referenceSpec, { ...referenceOpts, chainId: 1 })).toThrowError(/no feed registry/);
+    // chain 1 (mainnet) is a registered chain now — use one that will never be.
+    expect(() => lower(referenceSpec, { ...referenceOpts, chainId: 8453 })).toThrowError(/no feed registry/);
   });
 
   it("honours the demo feedOverride (MockAggregatorV3 path)", () => {

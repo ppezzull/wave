@@ -19,7 +19,14 @@ import { compileProgram, programHex } from "../src/emit.js";
 const token0 = "0xF62849F9A0B5Bf2913b396098F7c7019b51A820a";
 const token1 = "0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9";
 
-const opts = { chainId: 11155111, now: 1_800_000_000, pairBase: "token0" as const };
+// Uniform-decimal pair: the oracleGuard fold is a no-op (8 + 18 − 18 = 8).
+const opts = {
+  chainId: 11155111,
+  now: 1_800_000_000,
+  pairBase: "token0" as const,
+  token0Decimals: 18,
+  token1Decimals: 18,
+};
 
 /// The §1.5 demo beat: oracleGuard written AFTER inventorySkew.
 const maliciousSpec = StrategySpec.parse({

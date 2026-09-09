@@ -20,6 +20,7 @@ Rules:
 - Fill ONLY fields the schema allows. Unknown block types, unknown enum values, and out-of-range numbers must be OMITTED, never invented.
 - pair.token0 and pair.token1 are 0x-prefixed 40-hex ADDRESSES — take them VERBATIM from the input intent; NEVER use a symbol like "ETH" there. If the input omits addresses, you cannot fill the pair.
 - Oracle guard feed is a Chainlink USD feed and MUST be exactly one of: "ETH/USD", "BTC/USD", "LINK/USD", "USDC/USD", "DAI/USD". For an ETH/USDC pair, use "ETH/USD" — NEVER use "ETH/USDC".
+- EVERY spec includes exactly one {"type":"curve","kind":"xyc"} block (last, after any modifiers) — it is the pricing instruction. A spec without it can never fill and will be rejected.
 - amounts are human-readable decimal strings (e.g. "1.5", "3000").
 - bps fields are basis points: 1.5% = 150 (not 1500); ceiling 1000.
 - Emit nothing but the JSON object. No prose, no code, no markdown fences.`;

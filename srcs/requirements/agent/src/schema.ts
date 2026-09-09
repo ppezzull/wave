@@ -101,9 +101,11 @@ const InventorySkewBlock = z.object({
   targetRatio: z.number().min(0).max(1),
   slopeBps: Bps, // penalty bps per 10% post-trade deviation
   maxSkewBps: Bps, // hard cap on total penalty
-  /// Improvement leg (deviation-reducing) — optional (undecided if it ships).
-  /// If it ships, MUST stay inside the oracle band (two-leg caveat, PR #13).
-  maxImproveBps: Bps.optional(),
+  // NB: no maxImproveBps — the improvement leg was CUT (InventorySkew.sol
+  // decision record): the compiler's arg slot is RESERVED and ir.ts hard-rejects
+  // any nonzero value (ImproveLegReserved). Offering it as optional invited the
+  // LLM to fill it, killing every emitted spec at the UI's emit step. Zod strips
+  // unknown keys, so even a model that tries to add it can't reach the compiler.
 });
 
 const MakerFeeBlock = z.object({ type: z.literal("makerFee"), bps: Bps });
@@ -144,6 +146,14 @@ export const StrategySpec = z
   })
   .refine((s) => s.size.amount0 !== "0" && s.size.amount1 !== "0", {
     message: "size amounts must be strictly positive",
+  })
+  /// The curve is the ONLY pricing instruction — without it the program settles
+  /// no output and every taker fill reverts (VM taker protection, amountOut=0):
+  /// a deadline-only spec is inert capital. Caught live on the mainnet-fork E2E;
+  /// ir.ts mirrors this as NoPricingInstruction so no compile path can emit it.
+  .refine((s) => s.blocks.some((b) => b.type === "curve"), {
+    message:
+      'blocks must include a {"type":"curve","kind":"xyc"} block — it is the only pricing instruction; without it every fill reverts and the strategy is inert',
   });
 
 export type Block = z.infer<typeof Block>;

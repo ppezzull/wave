@@ -33,6 +33,13 @@ export interface LowerOptions {
   now: number;
   /// Which pair token is the feed's BASE asset (the app knows its pair).
   pairBase: "token0" | "token1";
+  /// ERC-20 decimals of the pair tokens. REQUIRED when an oracleGuard block is
+  /// present: the on-chain guard compares RAW amounts against `answer/10^dec`,
+  /// so the emitted decimals byte must fold the pair's decimal gap
+  /// (OracleGuard.sol: "the compiler folds the decimal gap into the feed").
+  /// Uniform-decimal pairs (the Sepolia mocks) fold to a no-op.
+  token0Decimals?: number;
+  token1Decimals?: number;
   /// Demo override (MockAggregatorV3) — replaces the registry feed.
   feedOverride?: FeedInfo;
 }
@@ -48,6 +55,18 @@ const FEE_BASE_SCALE = 100_000n;
 
 export function lower(spec: StrategySpec, opts: LowerOptions): IrInstruction[] {
   assertCanonicalOrder(spec);
+  // The curve is the ONLY pricing instruction in specVersion 1 — every other
+  // block wraps or funds it. Without one, exactIn leaves amountOut = 0 and the
+  // VM's taker protection reverts every fill (TakerTraitsAmountOutMustBeGreaterThanZero):
+  // the strategy ships capital that can never trade. Caught live on the
+  // mainnet-fork E2E (a deadline-only spec). Refuse instead of emitting inert
+  // bytes — same layer as NonCanonicalOrder, not a §1.5 rejection rule.
+  if (!spec.blocks.some((b) => b.type === "curve")) {
+    throw new CompileError(
+      "NoPricingInstruction",
+      `spec carries no curve block — without it no instruction prices a fill and the shipped strategy is inert (VM reverts amountOut=0); add {"type":"curve","kind":"xyc"}`,
+    );
+  }
   const token0IsLt = spec.pair.token0.toLowerCase() < spec.pair.token1.toLowerCase();
   return spec.blocks.map((block) => lowerBlock(block, spec, opts, token0IsLt));
 }
@@ -79,11 +98,25 @@ function lowerBlock(
     case "oracleGuard": {
       const feed = opts.feedOverride ?? resolveFeed(opts.chainId, block.feed);
       const baseIsLt = (opts.pairBase === "token0") === token0IsLt;
+      // Fold the pair's decimal gap into the emitted oracle decimals so that
+      // answer/10^dec prices raw-base in raw-quote units on-chain. Real pairs
+      // MIX decimals (WETH 18 / USDC 6): unfolding them once mis-scaled every
+      // guarded amount by 1e12 (caught by the mainnet-fork E2E — 10 USDC
+      // clamped to 4042 WEI of WETH instead of 0.004021e18).
+      const baseDecimals = opts.pairBase === "token0" ? opts.token0Decimals : opts.token1Decimals;
+      const quoteDecimals = opts.pairBase === "token0" ? opts.token1Decimals : opts.token0Decimals;
+      if (baseDecimals === undefined || quoteDecimals === undefined) {
+        throw new CompileError(
+          "MissingPairDecimals",
+          `oracleGuard needs token0Decimals/token1Decimals to fold the decimal gap (base=${baseDecimals ?? "?"}, quote=${quoteDecimals ?? "?"}) — pass them from on-chain decimals() reads`,
+        );
+      }
+      const oracleDecimals = feed.decimals + baseDecimals - quoteDecimals;
       return {
         op: "_oracleGuard2D",
         args: concat(
           addressBytes(feed.address),
-          uintBE(BigInt(feed.decimals), 1),
+          uintBE(BigInt(oracleDecimals), 1), // uintBE rejects negatives/overflow
           uintBE(BigInt(block.maxStalenessSecs), 2),
           uintBE(BigInt(block.maxDeviationBps), 2),
           uintBE(BigInt(MODE_BYTE[block.mode]), 1),
