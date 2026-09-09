@@ -70,6 +70,23 @@ human-approval gates for high-risk autonomous actions.
   support is not yet available" on the presets page) while World ID 4.0 is the
   headline migration path elsewhere. Not wrong — just a version matrix the
   integrator has to reconstruct.
+- **2026-09-09 — the client only signs after a 402.** Reading the SDK: the
+  client's fetch wrapper signs and retries ONLY when the server first answers
+  `402` with the x402 challenge declaring the AgentKit extension; any other
+  status (our plain 403) is passed through unsigned. The integrate page
+  presents client and server halves independently and never states this
+  ordering — we wired the server first and expected the client to attach the
+  header unconditionally. (Our e2e smoke builds the header manually via the
+  exported `formatSIWEMessage`; official-client interop needs the 402
+  advertisement, which is also where the x402 payment fallback naturally
+  lives.)
+- **2026-09-09 — SIWE constraints are enforced deep in the stack.** The
+  payload schema accepts any `nonce` string, but `formatSIWEMessage` (viem
+  SIWE under the hood) requires **alphanumeric, ≥8 chars** — a `crypto.randomUUID()`
+  (with dashes) throws at signing time. Same class of trap: `domain` must be
+  the **bare hostname** (`validateAgentkitMessage` compares against
+  `new URL(expected).hostname`), not the origin. Both are one-line fixes once
+  known; neither is stated on the integrate page.
 - (running list — appended as we go.)
 
 ---

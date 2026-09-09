@@ -22,9 +22,24 @@ export function buildWorldGate(env: WorldGateEnv): AgentkitMiddleware | undefine
   // of which chain the signature was produced on (per the SDK docs).
   const agentBook = createAgentBookVerifier();
 
+  // DEMO FIXTURE — until the agent wallets are actually registered via
+  // `npx @worldcoin/agentkit-cli register` (sandbox access pending), addresses
+  // listed in WORLD_AGENTBOOK_DEV_ALLOW resolve as human-backed so the whole
+  // flow (sign → verify → "registered" → allow) is demonstrable end-to-end.
+  // Same var the UI resolver reads; empty by default, off in production.
+  const devAllow = new Set(
+    (process.env.WORLD_AGENTBOOK_DEV_ALLOW ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
   const verifier = (headerValue: string | undefined, resourceUri: string) =>
     verifyAgentkit(headerValue, resourceUri, {
-      lookupHuman: (address) => agentBook.lookupHuman(address),
+      lookupHuman: async (address) => {
+        const key = address.toLowerCase();
+        return devAllow.has(key) ? `dev:${key}` : agentBook.lookupHuman(address);
+      },
       verifySignature: (payload) => verifyAgentkitSignature(payload),
       hasUsedNonce: (nonce) => storage.hasUsedNonce(nonce),
       recordNonce: (nonce) => storage.recordNonce(nonce),

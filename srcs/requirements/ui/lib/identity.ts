@@ -13,10 +13,12 @@
 
 export interface Identity {
   address: string
-  /** Display handle — truncated address "0x1234…abcd" until AgentKit lands. */
+  /** Display handle — truncated address "0x1234…abcd" (no name source yet). */
   handle: string
-  /** World ID "verified human" — false until AgentKit lands. */
+  /** World ID "verified human" — true when AgentBook resolves the address. */
   verifiedHuman: boolean
+  /** AgentBook anonymous human identifier (null when unverified/offline). */
+  humanId?: string | null
 }
 
 /** Derive the Identity for a wallet address (pure, offline, never throws). */
@@ -25,5 +27,5 @@ export function identityFromAddress(address: string): Identity {
     address.length >= 10
       ? `${address.slice(0, 6)}…${address.slice(-4)}`
       : address
-  return { address, handle, verifiedHuman: false }
+  return { address, handle, verifiedHuman: false, humanId: null }
 }
