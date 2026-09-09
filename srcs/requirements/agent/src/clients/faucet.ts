@@ -6,7 +6,9 @@
 // write → waitForTransactionReceipt → status-check idiom (aquaWrite.ts:104-109).
 import { createPublicClient, createWalletClient, http, type Hash } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { mainnet, sepolia } from "viem/chains";
+
+const chain = Number(process.env.WAVE_CHAIN_ID ?? "11155111") === 1 ? mainnet : sepolia;
 
 export interface FaucetClientConfig {
   faucetKey: `0x${string}`;
@@ -14,9 +16,9 @@ export interface FaucetClientConfig {
 }
 
 export function faucetClient(cfg: FaucetClientConfig) {
-  const pub = createPublicClient({ chain: sepolia, transport: http(cfg.rpcUrl) });
+  const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) });
   const account = privateKeyToAccount(cfg.faucetKey);
-  const wallet = createWalletClient({ account, chain: sepolia, transport: http(cfg.rpcUrl) });
+  const wallet = createWalletClient({ account, chain, transport: http(cfg.rpcUrl) });
 
   return {
     faucetAddress: account.address,

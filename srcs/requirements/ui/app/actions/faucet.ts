@@ -27,6 +27,8 @@ export interface FaucetResult {
   faucetAddress?: string
   /** Present on cooldown — seconds until the wallet may drip again. */
   retryInSec?: number
+  /** The agent-side failure message (mirrors its outputSchema), mapped into `reason`. */
+  error?: string
   reason?: string
 }
 

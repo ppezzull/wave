@@ -291,4 +291,8 @@ Built by a 3-dev team for ETHGlobal Lisboa 2026, Classic "from scratch" track.
 ---
 
 **Event:** ETHGlobal Lisboa — build starts Fri Jul 24, 2026 — submission Sun Jul 26, 09:00 WEST (~36h).
-**Goal:** top-10 finalist. *Finalist = best overall project* — optimize for finalist, not sponsor EV; the core work (opcodes, compiler, safety proof) double-counts toward both finalist and the 1inch/ENS prizes.
+**Goal:** top-10 finalist. *Finalist = best overall project* — optimize for finalist, not sponsor EV; the core work (opcodes, compiler, safety proof) double-counts toward both finalist and the 1inch/Graph prizes.
+
+---
+
+Powered by SwapVM — © Degensoft Ltd 2025. Custom opcodes and router changes are marked and dated in the source, under `LicenseRef-Degensoft-SwapVM-1.1`.
