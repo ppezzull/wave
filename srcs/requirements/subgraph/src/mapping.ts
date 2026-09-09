@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 // Production wave mapping. Two data sources:
-//   EnsStrategyRouter -> handleStrategyDeployed, handleSwapped
+//   EnsStrategyRouter -> handleStrategyDeployed, handleStrategyDescribed, handleSwapped
 //   Aqua              -> handlePushed, handlePulled, handleDocked (committed capital + status)
 // (The ENS resolver source and its follow handlers are REMOVED with the ENS layer — follows
 // were ENS text records; World AgentKit owns identity now and stores no follow edges.)
@@ -17,12 +17,13 @@
 // (The event's second indexed bytes32 was born the ENS namehash; the agent now passes the
 // strategyId itself — we receive it and deliberately don't persist it.)
 //
-// Only handleStrategyDeployed creates Strategy rows (F2). Swapped/Aqua events that arrive before
-// (or without) a deploy are dropped — no phantom strategies accumulate from non-wave SwapVM swaps.
-// A re-index after deploy picks them up.
+// Only handleStrategyDeployed (and its same-tx companion handleStrategyDescribed — see below)
+// create Strategy rows (F2). Swapped/Aqua events that arrive before (or without) a deploy are
+// dropped — no phantom strategies accumulate from non-wave SwapVM swaps. A re-index after deploy
+// picks them up.
 
 import { Bytes, BigInt } from "@graphprotocol/graph-ts";
-import { StrategyDeployed, Swapped } from "../generated/EnsStrategyRouter/EnsStrategyRouter";
+import { StrategyDeployed, StrategyDescribed, Swapped } from "../generated/EnsStrategyRouter/EnsStrategyRouter";
 import { Pushed as AquaPushed, Pulled as AquaPulled, Docked as AquaDocked } from "../generated/Aqua/Aqua";
 import { Strategy, Swap } from "../generated/schema";
 
@@ -39,6 +40,7 @@ function createStrategy(id: Bytes): Strategy {
   let s = new Strategy(id);
   s.programHash = zeroBytes32(); // tolerated until the compiler's programHash() lands
   s.status = ACTIVE;
+  s.description = ""; // set by StrategyDescribed; strategies shipped pre-event keep ""
   s.cumulativeVolumeIn = BigInt.zero();
   s.cumulativeVolumeOut = BigInt.zero();
   s.committedCapital = BigInt.zero(); // running balance; Aqua Pushed/Pulled maintain it
@@ -59,6 +61,22 @@ export function handleStrategyDeployed(event: StrategyDeployed): void {
   // namehash, and with ENS gone the announcer passes the strategyId itself (opaque to the
   // router). Strategy.id already carries the join key — there is nothing to index here.
   // status: left as-is on re-announce (no stopped/removed event in this ABI yet).
+  s.save();
+}
+
+// --- (a) StrategyDescribed — the post: description, stored byte-for-byte ---
+// The router's 3-arg announceStrategy emits StrategyDeployed and StrategyDescribed in the SAME
+// call, in that order — so by log order the Strategy row already exists here. The load-or-create
+// below is pure ordering defense (same shape as the deploy handler): creating with a zeroed
+// programHash is safe because a re-announce/upcoming deploy overwrites it. Description is the
+// ONLY human-written field and doubles as the compiler input ("the post is the prompt") — the
+// fork route round-trips it byte-for-byte, so no trimming, no reflow.
+export function handleStrategyDescribed(event: StrategyDescribed): void {
+  let s = Strategy.load(event.params.strategyId);
+  if (s == null) {
+    s = createStrategy(event.params.strategyId);
+  }
+  s.description = event.params.description;
   s.save();
 }
 

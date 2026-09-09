@@ -40,11 +40,15 @@ export const shipStrategy = createTool({
     }),
     label: z.string().optional(),
     decimals: z.number().int().min(0).max(36).optional(),
+    // The post — stored on-chain (StrategyDescribed) and round-tripped by the fork route.
+    // Byte-for-byte the compiler input; never trimmed or reflowed.
+    description: z.string().optional(),
   }),
   outputSchema: z.object({
-    strategyId: z.string(),
-    programHash: z.string(),
-    handle: z.string(),
+    // Absent when a pre-flight step (pair validation, decimals read) failed before compile.
+    strategyId: z.string().optional(),
+    programHash: z.string().optional(),
+    handle: z.string().optional(),
     announceTxHash: z.string().optional(),
     shipTxHash: z.string().optional(),
     approved: z.boolean(),

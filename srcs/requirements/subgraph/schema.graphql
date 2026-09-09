@@ -31,6 +31,8 @@ type Strategy @entity {
   programHash: Bytes! # bytes32(0) tolerated until the compiler lands (D3: UI hash-verify chip
                        # must gate on programHash != 0; see SUBGRAPH-CONTRACT-GAPS.md C3)
   status: StrategyStatus! # "active" on deploy; "stopped"/"removed" if the router emits them
+  description: String! # the post — StrategyDescribed payload, byte-for-byte compiler input
+                       # (fork prefill reads it back; "" for strategies shipped pre-event)
 
   # Ranking aggregates (Pietro.md 🔢 — the UI computes rank from these raw values):
   #   rank = returnPct × recencyDecay

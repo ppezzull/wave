@@ -32,7 +32,9 @@ async function hydrateStrategy(s: SubgraphStrategy): Promise<Strategy> {
     lastSwapTimestamp: s.lastSwapTimestamp,
     // identity-sourced (empty until the seam resolves authors)
     authorHandle: '',
-    description: '',
+    // The post, as shipped (StrategyDescribed) — "" for pre-event strategies. Fork
+    // prefill round-trips these exact bytes back into the composer.
+    description: s.description ?? '',
     ensProgramHash: s.programHash, // fall back to on-chain hash
     committedCapital: s.committedCapital || '',
     oracleBand: '',

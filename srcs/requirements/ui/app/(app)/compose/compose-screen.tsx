@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { CheckCircle2 } from 'lucide-react'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
+import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { emitProgram } from '@/app/actions/emit'
 import { BytecodePane } from '@/components/bytecode-pane'
 import { SafetyCardDetail } from '@/components/safety-card-detail'
 import type { BytecodeInstruction, Strategy } from '@/lib/mock-data'
@@ -112,8 +115,13 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   const compose = useComposeStream()
   const [emit, setEmit] = useState<EmitResult | null>(null)
   const [emitting, setEmitting] = useState(false)
+  // Ship flow (mirrors the drawer's HITL gate): idle → confirming → shipping → done|error.
+  const [shipPending, setShipPending] = useState(false)
+  const [shipConfirming, setShipConfirming] = useState(false)
+  const [shipResult, setShipResult] = useState<ShipResult | null>(null)
 
   const canSubmit = description.length > 0 && !compose.isStreaming
+  const canShip = !!compose.spec && !emitting && !shipPending && !shipResult?.ok
   const preview = draftStrategy(description, compose.partial ?? compose.spec, emit)
 
   // When the agent lands a StrategySpec, emit → disassemble for the bytecode pane.
@@ -124,23 +132,24 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
     setEmit(null)
     void (async () => {
       try {
-        const res = await fetch('/api/emit', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(compose.spec),
-        })
-        const json = (await res.json()) as EmitResult
+        const out = await emitProgram(compose.spec)
         if (cancelled) return
-        if (!res.ok) {
+        if (!out.ok || !out.programHash) {
           setEmit({
             programHex: '',
             programHash: ZERO_HASH,
             bytecode: [],
-            error: json.error ?? `emit HTTP ${res.status}`,
-            detail: json.detail,
+            error: out.error ?? 'emit failed',
+            detail: out.detail,
           })
         } else {
-          setEmit(json)
+          setEmit({
+            programHex: out.programHex ?? '',
+            programHash: out.programHash,
+            bytecode: out.bytecode ?? [],
+            rulesApplied: out.rulesApplied,
+            diff: typeof out.diff === 'string' ? out.diff : undefined,
+          })
         }
       } catch (err) {
         if (!cancelled) {
@@ -164,6 +173,49 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
     if (!canSubmit) return
     setEmit(null)
     void compose.compose(description)
+  }
+
+  // Destructive on-chain write — the explicit confirm step IS the HITL gate (same
+  // contract as the drawer's handleShip): first click arms, second click fires.
+  // The description ships with it: the agent's described announce stores the post
+  // on-chain (StrategyDescribed), so forks read these exact bytes back.
+  const handleShip = async () => {
+    const spec = compose.spec
+    if (!spec || !canShip) {
+      setShipConfirming(false)
+      return
+    }
+    if (!shipConfirming) {
+      setShipConfirming(true)
+      return
+    }
+    setShipConfirming(false)
+    setShipPending(true)
+    setShipResult(null)
+    try {
+      const result = await shipStrategy(
+        {
+          specVersion: Number(spec.specVersion ?? 1),
+          pair: {
+            token0: String(spec.pair?.token0 ?? ''),
+            token1: String(spec.pair?.token1 ?? ''),
+          },
+          size: {
+            amount0: String(spec.size?.amount0 ?? ''),
+            amount1: String(spec.size?.amount1 ?? ''),
+          },
+          blocks: Array.isArray(spec.blocks)
+            ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+            : [],
+        },
+        { description },
+      )
+      setShipResult(result)
+    } catch (err) {
+      setShipResult({ ok: false, reason: String(err).slice(0, 200) })
+    } finally {
+      setShipPending(false)
+    }
   }
 
   return (
@@ -229,6 +281,27 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
                 Cancel
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleShip}
+              disabled={!canShip}
+              className="px-5 py-3 rounded-[10px] font-sans text-[15px] font-semibold text-white transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110"
+              style={{
+                background: shipConfirming ? '#E5484D' : LISBOA,
+                minHeight: '48px',
+              }}
+              aria-label={
+                shipConfirming
+                  ? 'Confirm: ship strategy on-chain (destructive)'
+                  : 'Ship strategy on-chain'
+              }
+            >
+              {shipPending
+                ? 'Shipping…'
+                : shipConfirming
+                  ? 'Confirm — ship on-chain (cannot be undone)'
+                  : 'Ship on-chain'}
+            </button>
             <span className="font-mono text-[12px] text-wave-muted ml-auto">
               {description.length} bytes
             </span>
@@ -281,6 +354,81 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
               <p className="font-sans text-[14px] text-wave-muted">
                 Safety card renders after a successful compile.
               </p>
+            </div>
+          )}
+
+          {/* Post-ship evidence — real receipts from the agent, never fabricated. */}
+          {shipPending && (
+            <div
+              className="rounded-[14px] px-5 py-4 bg-wave-surface border border-wave-border"
+              role="status"
+              aria-label="Shipping strategy on-chain"
+            >
+              <p className="font-sans text-[14px] text-wave-muted">
+                Shipping on-chain — compile → announce (with the description) → approve →
+                ship…
+              </p>
+            </div>
+          )}
+          {shipResult && !shipResult.ok && (
+            <p
+              className="font-sans text-[13px]"
+              style={{ color: '#E5484D' }}
+              role="alert"
+            >
+              Ship failed: {shipResult.reason ?? 'unknown error'}
+            </p>
+          )}
+          {shipResult?.ok && (
+            <div
+              className="rounded-[14px] px-5 py-4 bg-wave-surface border border-wave-border"
+              role="status"
+              aria-label="Strategy shipped on-chain"
+            >
+              <p className="font-sans text-[13px] font-bold text-wave-text mb-2">
+                Live on-chain
+              </p>
+              <div className="flex flex-col gap-1">
+                {shipResult.shipTxHash && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={14} style={{ color: '#2A9D8F' }} aria-hidden="true" />
+                    <span className="font-mono text-[13px]" style={{ color: '#2A9D8F' }}>
+                      ship {shipResult.shipTxHash.slice(0, 10)}…
+                      {shipResult.shipTxHash.slice(-4)}
+                    </span>
+                  </div>
+                )}
+                {shipResult.announceTxHash && (
+                  <span className="font-mono text-[12px] text-wave-muted">
+                    announce {shipResult.announceTxHash.slice(0, 10)}…
+                    {shipResult.announceTxHash.slice(-4)}
+                  </span>
+                )}
+                {shipResult.handle && (
+                  <p className="font-sans text-[14px] text-wave-text">
+                    Shipped as {shipResult.handle}
+                  </p>
+                )}
+                {shipResult.programHash && (
+                  <p className="font-mono text-[11px] text-wave-muted break-all">
+                    program hash {shipResult.programHash.slice(0, 18)}…
+                  </p>
+                )}
+                {shipResult.alreadyDeployed && (
+                  <p className="font-sans text-[12px] text-wave-muted">
+                    (Already on-chain — no duplicate ship sent.)
+                  </p>
+                )}
+                {shipResult.strategyId && (
+                  <Link
+                    href={`/s/${shipResult.strategyId}`}
+                    className="font-sans text-[13px] font-semibold underline underline-offset-4 mt-1"
+                    style={{ color: '#2A9D8F' }}
+                  >
+                    View strategy →
+                  </Link>
+                )}
+              </div>
             </div>
           )}
         </section>

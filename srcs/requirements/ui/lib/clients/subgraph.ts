@@ -22,6 +22,8 @@ export interface SubgraphStrategy {
   id: string // bytes32 hex, lowercase 0x...
   programHash: string // bytes32
   status: StrategyStatus
+  /** The post — StrategyDescribed payload, byte-for-byte compiler input. "" pre-event. */
+  description: string
   cumulativeVolumeIn: string // BigInt wei string
   cumulativeVolumeOut: string // BigInt wei string
   /** Aqua Pushed − Pulled (C2 / PR #41). Present on v0.0.4+. */
@@ -71,6 +73,18 @@ function isEntityNotDeployed(error: unknown): boolean {
   )
 }
 
+// Studio v0.0.4 predates StrategyDescribed: selecting `description` against it fails the
+// whole query. That's a KNOWN old-deploy signature, not a bug — the callers retry once
+// with the legacy selection (no description) and map "" so behavior matches the old truth
+// until the description-bearing deploy lands.
+function isMissingDescriptionField(error: unknown): boolean {
+  if (!(error instanceof ClientError)) return false
+  const messages = (error.response?.errors ?? []).map((e) => e.message ?? '')
+  return messages.some(
+    (m) => /Cannot query field ["`]description["`] on type ["`]Strategy["`]/i.test(m),
+  )
+}
+
 function normalizeId(id: string): string {
   return id.startsWith('0x') ? id.toLowerCase() : `0x${id}`.toLowerCase()
 }
@@ -83,29 +97,48 @@ export const subgraph = {
   /** Production entity — empty while syncing / before any strategies seed. */
   async getStrategy(id: string): Promise<SubgraphStrategy | null> {
     const normalizedId = normalizeId(id)
-    try {
-      const data = await client.request<{
-        strategy?: Omit<SubgraphStrategy, 'status'> & { status?: string; committedCapital?: string }
+    // v0.0.4 (pre-StrategyDescribed) rejects the `description` field — on that exact
+    // error retry with the legacy selection and report "" (see isMissingDescriptionField).
+    const fetchOne = async (withDescription: boolean) =>
+      client.request<{
+        strategy?: Omit<SubgraphStrategy, 'status' | 'description'> & {
+          status?: string
+          committedCapital?: string
+          description?: string
+        }
       }>(
         `query($id: ID!) {
           strategy(id: $id) {
-            id programHash status
+            id programHash status${withDescription ? ' description' : ''}
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
             swapCount lastSwapTimestamp
           }
         }`,
         { id: normalizedId },
       )
-      if (!data?.strategy) return null
-      return {
-        id: data.strategy.id,
-        programHash: data.strategy.programHash,
-        status: coerceStatus(data.strategy.status),
-        cumulativeVolumeIn: data.strategy.cumulativeVolumeIn,
-        cumulativeVolumeOut: data.strategy.cumulativeVolumeOut,
-        committedCapital: data.strategy.committedCapital ?? '',
-        swapCount: Number(data.strategy.swapCount),
-        lastSwapTimestamp: Number(data.strategy.lastSwapTimestamp),
+    const mapRow = (
+      row: NonNullable<Awaited<ReturnType<typeof fetchOne>>['strategy']>,
+    ): SubgraphStrategy => ({
+      id: row.id,
+      programHash: row.programHash,
+      status: coerceStatus(row.status),
+      description: row.description ?? '',
+      cumulativeVolumeIn: row.cumulativeVolumeIn,
+      cumulativeVolumeOut: row.cumulativeVolumeOut,
+      committedCapital: row.committedCapital ?? '',
+      swapCount: Number(row.swapCount),
+      lastSwapTimestamp: Number(row.lastSwapTimestamp),
+    })
+    try {
+      try {
+        const data = await fetchOne(true)
+        if (!data?.strategy) return null
+        return mapRow(data.strategy)
+      } catch (error) {
+        if (!isMissingDescriptionField(error)) throw error
+        const data = await fetchOne(false)
+        if (!data?.strategy) return null
+        return mapRow(data.strategy)
       }
     } catch (error) {
       if (isEntityNotDeployed(error)) return null
@@ -115,39 +148,47 @@ export const subgraph = {
 
   /** Production entity — empty while syncing / before any strategies seed. Newest-first by activity. */
   async listStrategies(first = 1000): Promise<SubgraphStrategy[]> {
-    try {
-      const data = await client.request<{
-        strategies?: Array<
-          Omit<
-            SubgraphStrategy,
-            'swapCount' | 'lastSwapTimestamp' | 'status' | 'committedCapital'
-          > & {
-            committedCapital?: string
-            swapCount: string | number
-            lastSwapTimestamp: string | number
-            status?: string
-          }
-        >
-      }>(
+    type Row = Omit<
+      SubgraphStrategy,
+      'swapCount' | 'lastSwapTimestamp' | 'status' | 'committedCapital' | 'description'
+    > & {
+      committedCapital?: string
+      description?: string
+      swapCount: string | number
+      lastSwapTimestamp: string | number
+      status?: string
+    }
+    const fetchList = (withDescription: boolean) =>
+      client.request<{ strategies?: Row[] }>(
         `query($first: Int) {
           strategies(first: $first, orderBy: lastSwapTimestamp, orderDirection: desc) {
-            id programHash status
+            id programHash status${withDescription ? ' description' : ''}
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
             swapCount lastSwapTimestamp
           }
         }`,
         { first },
       )
-      return (data?.strategies ?? []).map((s) => ({
-        id: s.id,
-        programHash: s.programHash,
-        status: coerceStatus(s.status),
-        cumulativeVolumeIn: s.cumulativeVolumeIn,
-        cumulativeVolumeOut: s.cumulativeVolumeOut,
-        committedCapital: s.committedCapital ?? '',
-        swapCount: Number(s.swapCount),
-        lastSwapTimestamp: Number(s.lastSwapTimestamp),
-      }))
+    const toStrategy = (s: Row): SubgraphStrategy => ({
+      id: s.id,
+      programHash: s.programHash,
+      status: coerceStatus(s.status),
+      description: s.description ?? '',
+      cumulativeVolumeIn: s.cumulativeVolumeIn,
+      cumulativeVolumeOut: s.cumulativeVolumeOut,
+      committedCapital: s.committedCapital ?? '',
+      swapCount: Number(s.swapCount),
+      lastSwapTimestamp: Number(s.lastSwapTimestamp),
+    })
+    try {
+      try {
+        const data = await fetchList(true)
+        return (data?.strategies ?? []).map(toStrategy)
+      } catch (error) {
+        if (!isMissingDescriptionField(error)) throw error
+        const data = await fetchList(false)
+        return (data?.strategies ?? []).map(toStrategy)
+      }
     } catch (error) {
       if (isEntityNotDeployed(error)) return []
       // Build-time / transient network: empty is the truth, never crash the UI.

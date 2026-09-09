@@ -14,6 +14,7 @@ const spec = {
   blocks: [
     { type: "inventorySkew", targetRatio: 0.5, slopeBps: 80, maxSkewBps: 300 },
     { type: "oracleGuard", feed: "ETH/USD", maxDeviationBps: 200, maxStalenessSecs: 600, mode: "revert" },
+    { type: "curve", kind: "xyc" },
   ],
 } as const;
 
@@ -26,6 +27,9 @@ const result = await deployStrategy(
     }),
     announce: async () => `0x${"ab".repeat(32)}` as `0x${string}`,
     approve: async () => {},
+    // Offline: uniform 18dp stub (the real path reads decimals() on-chain and
+    // rides WAVE_TOKEN{0,1}_DECIMALS into the compile env for the oracle fold).
+    tokenDecimals: async () => 18,
     ship: async () => `0x${"cd".repeat(32)}` as `0x${string}`,
     getOnchainProgramHash: async () => null,
   },

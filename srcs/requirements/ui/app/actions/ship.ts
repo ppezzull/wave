@@ -48,7 +48,7 @@ export interface ShipResult {
  */
 export async function shipStrategy(
   spec: ShipStrategySpec,
-  opts?: { label?: string; decimals?: number },
+  opts?: { label?: string; decimals?: number; description?: string },
 ): Promise<ShipResult> {
   if (!spec || !spec.pair?.token0 || !spec.pair?.token1 || !spec.blocks?.length) {
     return { ok: false, reason: 'missing pair or blocks in spec' }
@@ -59,7 +59,7 @@ export async function shipStrategy(
     res = await fetch(`${AGENT_URL}/api/tools/shipStrategy/execute`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ data: { spec, ...opts } }),
+      body: JSON.stringify({ data: { spec, ...opts } }), // description rides in opts → the agent's described announce
       signal: AbortSignal.timeout(SHIP_TIMEOUT_MS),
     })
   } catch (err) {

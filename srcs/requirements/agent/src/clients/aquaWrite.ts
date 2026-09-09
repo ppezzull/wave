@@ -14,7 +14,12 @@
 // (announceStrategy is onlyOwner). In this deployment they are the same EOA.
 import { createPublicClient, createWalletClient, http, type Hash, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { mainnet, sepolia } from "viem/chains";
+
+/// WAVE_CHAIN_ID=1 flips every write client to mainnet (mainnet-fork testing); the
+/// default stays Sepolia (the live demo chain). viem serializes txs with the chain
+/// object's id, so a chain-1 fork with a sepolia client would fail EIP-155 validation.
+const chain = Number(process.env.WAVE_CHAIN_ID ?? "11155111") === 1 ? mainnet : sepolia;
 
 const AQUA_ABI = [
   {
@@ -44,6 +49,8 @@ const AQUA_ABI = [
 
 /// The frozen router surface this arm needs. `order` is the ABI-encoded maker Order;
 /// both event payloads are derived on-chain (C1a, #40) so nothing here can misreport them.
+/// Kept as two single-entry ABIs (not one two-overload array): viem's simulateContract
+/// can't infer `args` across an overloaded functionName, and the branches stay readable.
 const ROUTER_ABI = [
   {
     name: "announceStrategy",
@@ -65,6 +72,40 @@ const ROUTER_ABI = [
   },
 ] as const;
 
+/// The described overload: same call + the strategy's public description (the post),
+/// which the router emits as StrategyDescribed for the subgraph.
+const ROUTER_DESCRIBED_ABI = [
+  {
+    name: "announceStrategy",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "order",
+        type: "tuple",
+        components: [
+          { name: "maker", type: "address" },
+          { name: "traits", type: "uint256" },
+          { name: "data", type: "bytes" },
+        ],
+      },
+      { name: "ensNode", type: "bytes32" },
+      { name: "description", type: "string" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const ERC20_DECIMALS_ABI = [
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+] as const;
+
 export interface AquaWriteConfig {
   aqua: `0x${string}`;
   router: `0x${string}`;
@@ -80,11 +121,11 @@ export interface MakerOrder {
 }
 
 export function aquaWriteClient(cfg: AquaWriteConfig) {
-  const pub = createPublicClient({ chain: sepolia, transport: http(cfg.rpcUrl) });
+  const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) });
   const maker = privateKeyToAccount(cfg.makerKey);
   const owner = privateKeyToAccount(cfg.ownerKey ?? cfg.makerKey);
-  const makerWallet = createWalletClient({ account: maker, chain: sepolia, transport: http(cfg.rpcUrl) });
-  const ownerWallet = createWalletClient({ account: owner, chain: sepolia, transport: http(cfg.rpcUrl) });
+  const makerWallet = createWalletClient({ account: maker, chain, transport: http(cfg.rpcUrl) });
+  const ownerWallet = createWalletClient({ account: owner, chain, transport: http(cfg.rpcUrl) });
 
   // Minimal ERC-20 surface — only `approve` is needed before aqua.ship (the maker must
   // approve Aqua for both tokens so ship can register virtual balances; LiveSwapStock.s.sol:138).
@@ -112,6 +153,15 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
     makerAddress: maker.address,
     ownerAddress: owner.address,
 
+    /** Read an ERC-20's decimals() on-chain. Real pairs MIX decimals (WETH 18 / USDC 6);
+     * parsing amounts with a single client-side scale miscommits by 1e12 on the 6dp leg —
+     * the Sepolia mocks were uniform so this only bites on real tokens. */
+    async decimalsOf(token: `0x${string}`): Promise<number> {
+      return Number(
+        await pub.readContract({ address: token, abi: ERC20_DECIMALS_ABI, functionName: "decimals" }),
+      );
+    },
+
     /** Withdraw a strategy from Aqua. Emits Docked → subgraph sets status = stopped. */
     async dock(strategyHash: Hex, tokens: `0x${string}`[]): Promise<Hash> {
       const { request } = await pub.simulateContract({
@@ -126,8 +176,19 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
 
     /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. The
      * bytes32 id is OPAQUE to the router (born as an ENS namehash; we now pass the
-     * strategyId — the subgraph's Strategy.id — since ENS is gone). */
-    async announce(order: MakerOrder, strategyId: Hex): Promise<Hash> {
+     * strategyId — the subgraph's Strategy.id — since ENS is gone). With `description`,
+     * calls the described overload so the post ships in the same tx (StrategyDescribed). */
+    async announce(order: MakerOrder, strategyId: Hex, description?: string): Promise<Hash> {
+      if (description !== undefined) {
+        const { request } = await pub.simulateContract({
+          account: owner,
+          address: cfg.router,
+          abi: ROUTER_DESCRIBED_ABI,
+          functionName: "announceStrategy",
+          args: [order, strategyId, description],
+        });
+        return send(ownerWallet, request);
+      }
       const { request } = await pub.simulateContract({
         account: owner,
         address: cfg.router,

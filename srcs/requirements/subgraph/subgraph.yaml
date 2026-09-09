@@ -37,9 +37,15 @@ dataSources:
         # passes the strategyId itself. Still indexed, still bytes32 — the handler ignores it.
         - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
           handler: handleStrategyDeployed
+        # The post: description byte-for-byte (the compiler input). Emitted by the 3-arg
+        # announceStrategy overload, same tx as StrategyDeployed.
+        - event: StrategyDescribed(indexed bytes32,string)
+          handler: handleStrategyDescribed
         - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
           handler: handleSwapped
       file: ./src/mapping.ts
+  # NOTE: the local anvil-fork variant (adds the temporary V2 router source on the fork)
+  # lives in subgraph.local.yaml — deploy that one against local graph-node, never Studio.
   # --- (c) Aqua (1inch balance-management protocol; committed capital + status source) ---
   # Aqua is the AUTHORITATIVE source of committed capital: Pushed(amount)/Pulled(amount) maintain
   # Strategy.committedCapital (returnPct's denominator); Docked flips status. Join key:

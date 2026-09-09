@@ -62,6 +62,8 @@ function makeDeps(overrides: {
       approve: async () => {
         calls.push("approve");
       },
+      // Offline tests: uniform 18dp (the old client-side default) — prod reads on-chain.
+      tokenDecimals: async () => 18,
       ship: async () => {
         calls.push("ship");
         if (overrides.shipShouldThrow) throw new Error("ship reverted on-chain");
