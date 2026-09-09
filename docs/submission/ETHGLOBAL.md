@@ -36,7 +36,7 @@ We extended SwapVM with two first-class instructions (`_inventorySkew2D`, `_orac
 ## 4. Partner write-up — The Graph (AI Use Case)
 
 **Subgraph:** Studio project `wave`, deployment **v0.0.4** (issue #51)  
-**Endpoint:** `https://api.studio.thegraph.com/query/1756983/wave/v0.0.4`  
+**Endpoint:** `https://api.studio.thegraph.com/query/1756983/wave/v0.0.5`  
 **Alias:** `https://api.studio.thegraph.com/query/1756983/wave/version/latest`  
 **Indexed:** `EnsStrategyRouter` (`StrategyDeployed`, `Swapped`, …) + Sepolia ENS Public Resolver `TextChanged` → `Follow` / `Follower` + Aqua capital.
 

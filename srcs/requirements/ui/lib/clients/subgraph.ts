@@ -48,7 +48,7 @@ export interface SubgraphSwap {
 
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.4'
+  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.5'
 
 const headers: Record<string, string> | undefined = process.env.WAVE_SUBGRAPH_KEY
   ? { Authorization: `Bearer ${process.env.WAVE_SUBGRAPH_KEY}` }
