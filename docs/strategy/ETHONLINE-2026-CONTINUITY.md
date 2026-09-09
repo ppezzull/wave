@@ -35,8 +35,8 @@ Regola: i bounty marcati `🆕 only Continuity` sono i nostri pool naturali; que
 | Graph 🧩 Composable/Standardized | aperto | ✅ se composiamo 2+ prodotti (nostro subgraph + Subgraph MCP ufficiale) | $5k |
 | Graph 🤖 AI Use Case **From Scratch** | from-scratch | ❌ NO — esplicitamente per progetti net-new | $5k |
 | Graph 🤖 AI Use Case **Continuity** | continuity-only | ✅ pool naturale | $5k (1° $2,5k) |
-| World 🤖 AgentKit Continuity | continuity-only | ✅ la continuità è del PROGETTO, non dello sponsor: "extend an existing project with AgentKit" — l'integrazione World è il lavoro nuovo dell'evento | $3,5k |
-| World 🤳 Selfie Check | aperto | ✅ fast-follow opzionale (giorni 8–10): Selfie Check come **piolo "presenza viva all'azione"** sui cancelli HITL — vedi Fase 1bis. Pool aperto (competiamo anche coi from-scratch) | $3,5k |
+| World 🤖 AgentKit Continuity | continuity-only | ✅ la continuità è del PROGETTO, non dello sponsor: "extend an existing project with AgentKit" — l'integrazione World è il lavoro nuovo dell'evento | $3,5k (**fino a 3 squadre × $1.166**) |
+| World 🤳 Selfie Check | aperto | ✅ fast-follow opzionale (giorni 8–10): Selfie Check come **piolo "presenza viva all'azione"** sui cancelli HITL — vedi Fase 1bis. Pool aperto (competiamo anche coi from-scratch) | $3,5k (**fino a 3 squadre × $1.166**) |
 
 **Target core (3):** 1inch Continuity + Graph AI Continuity + World AgentKit Continuity, con opt-in gratuiti ai pool aperti 1inch $5k e Graph Composable $5k.
 
@@ -112,7 +112,7 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 - **Non toccare i flussi Sepolia (1inch)**: AgentBook/x402 vivono su World Chain/Base — rail ortogonale, nessun conflitto con router/Aqua/subgraph.
 - Il livello World ID utenti-web aggiunge ~2 giorni e non è richiesto dal bounty: **prima cosa da tagliare** se il tempo stringa. Scope floor invariato: gating AgentKit sui writes MCP + registrazione AgentBook + trust panel + feedback doc.
 
-## Fase 1bis — World Selfie Check ($3,500, pool aperto — fast-follow opzionale, giorni 8–10)
+## Fase 1bis — World Selfie Check ($3,500 pool: fino a 3 squadre × $1.166 — aperto, fast-follow opzionale giorni 8–10)
 
 **La tesi (ciò che il bounty chiede di dimostrare):** Selfie Check non è un'identità più debole — è lo strumento giusto quando la domanda non è *"chi sei"* ma *"ci sei, adesso?"*. Credenziale media-assurance (credito ID 11, Beta): prova **liveness** (persona viva, anti-spoof/anti-injection) e **continuity** (stessa persona che si è iscritta); NON prova unicità né dà un sybil score. Valida 90 giorni.
 
@@ -128,7 +128,8 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 - Le azioni che muovono capitale (classi di rischio più alte) richiedono il Selfie Check: finestra di approvazione con **QR cross-device** (desktop → telefono, la proof torna alla sessione web — è il percorso indicato dalle doc per i demo remoti), verifica server-side della proof con **signal per-cancello** (hash dell'azione → proof non riutilizzabile).
 - Trust panel: triplo stato account ✓ / agente ✓ / azione ✓ + timestamp.
 - Keywords del premio coperte: risk (capitale-moving), continuity (returning user = stessa persona), abuse prevention (approvazioni replayate muoiono), fairness (no Orb richiesto per un click: chiunque abbia una telecamera passa).
-- IDKit è già nel piano per il layer World ID → seconda credenziale, costo ~1–1,5 giorni.
+- IDKit è già nel piano per il layer World ID → seconda credenziale, costo ~1–1,5 giorni. Dettagli SDK verificati (`docs.world.org/world-id/idkit/credentials`): preset **`selfieCheckLegacy`** da `@worldcoin/idkit`, `{ signal }` + `app_id` + `action`; **`rp_context` pre-generato e firmato dal backend** prima di aprire il widget → si lega naturalmente al cancello HITL (contesto bindato all'hash dell'azione = anti-replay nativo); risultato inoltrato all'endpoint verify del Developer Portal; il backend deve far rispettare lo stesso `signal`. Il preset usa World ID 3.0 (4.0 non ancora supportato).
+- Il preset account-level per il publish (Step 5) va scelto tra i preset IDKit: serve **Proof of Human/World ID** (unicità), NON Selfie Check — la scala a tre pioli resta: publish = World ID (unicità) · agente = AgentKit · azione = Selfie Check (presenza).
 - **Seconda feedback doc separata** (`FEEDBACK-SELFIE.md`): doc SelfieCheck, Developer Portal, stati sandbox Hot/Cold/Semi-cold, limiti noti (es. semi-cold iOS rotto), cosa era confuso/mancante.
 
 **Demo beat (quarto atto):** retune rischioso → cancello → QR → selfie → verde → esecuzione on-chain. Contrario: script che tenta di auto-approvare → rifiutato, nessuna faccia viva.
