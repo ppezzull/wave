@@ -37,6 +37,9 @@ export interface ShipResult {
   /** Display handle the agent attributed the ship to, e.g. "s-fab534ee". */
   handle?: string
   announceTxHash?: string
+  /** On-chain attribution tx (factory attribute) — present when the author was
+   *  recorded. Best-effort: its absence never fails the ship. */
+  attributeTxHash?: string
   shipTxHash?: string
   alreadyDeployed?: boolean
   reason?: string
@@ -44,11 +47,13 @@ export interface ShipResult {
 
 /**
  * Ship a strategy live via the agent. Caller MUST hold explicit human approval first.
- * Returns the agent's result on success, or { ok:false, reason } — never fabricates a ship.
+ * `author` (the session wallet address) makes the agent attribute the ship on-chain
+ * after announce — best-effort, provenance is display-layer. Returns the agent's
+ * result on success, or { ok:false, reason } — never fabricates a ship.
  */
 export async function shipStrategy(
   spec: ShipStrategySpec,
-  opts?: { label?: string; decimals?: number; description?: string },
+  opts?: { label?: string; decimals?: number; description?: string; author?: string },
 ): Promise<ShipResult> {
   if (!spec || !spec.pair?.token0 || !spec.pair?.token1 || !spec.blocks?.length) {
     return { ok: false, reason: 'missing pair or blocks in spec' }
@@ -79,6 +84,7 @@ export async function shipStrategy(
     handle?: string
     shipTxHash?: string
     announceTxHash?: string
+    attributeTxHash?: string
     shipped?: boolean
     alreadyDeployed?: boolean
     error?: string
@@ -96,6 +102,7 @@ export async function shipStrategy(
     programHash: out.programHash,
     handle: out.handle,
     announceTxHash: out.announceTxHash,
+    attributeTxHash: out.attributeTxHash,
     shipTxHash: out.shipTxHash,
     alreadyDeployed: out.alreadyDeployed,
   }

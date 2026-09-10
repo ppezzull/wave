@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Send, CheckCircle2, Minus, GripHorizontal, MessageSquare } from 'lucide-react'
 import { useDrawer } from './drawer-context'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
+import { useSessionUser } from '@/hooks/use-session-user'
 import { StreamNotifications } from './stream-notifications'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
 import { emitProgram } from '@/app/actions/emit'
@@ -298,6 +299,10 @@ function lastUserText(messages: LiveMessage[]): string {
 export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const { state, close, minimize, restore } = useDrawer()
   const { open, minimized, agentStrategy } = state
+  // The session wallet rides the ship opts as `author` — the agent attributes the
+  // strategy on-chain (factory attribute) so it lands on the user's profile. No
+  // wallet → unattributed ship (ZERO sentinel), never fabricated.
+  const { sessionUser } = useSessionUser()
 
   const [inputValue, setInputValue] = useState('')
   // The last sent intent, kept for the ship step: it is the description (the post)
@@ -559,6 +564,11 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     // (localStorage) but `lastIntent` is in-memory only, so fall back to the persisted
     // user message — the same bytes, re-read.
     const description = lastIntent || lastUserText(liveMessages)
+    // Ship opts: the post (description) + the author (session wallet, if connected).
+    // Both are optional — the agent re-validates and degrades honestly without them.
+    const shipOpts: { description?: string; author?: string } = {}
+    if (description) shipOpts.description = description
+    if (sessionUser) shipOpts.author = sessionUser.address
     try {
       const result = await shipStrategy(
         {
@@ -575,7 +585,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
             ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
             : [],
         },
-        description ? { description } : undefined,
+        Object.keys(shipOpts).length > 0 ? shipOpts : undefined,
       )
       setShipResult(result)
       if (result.ok) {

@@ -46,6 +46,13 @@ export async function getRecentThreads(limit?: number): Promise<Strategy[]> {
   return USE_MOCK ? mock.getRecentThreads(limit) : server.getRecentThreads(limit)
 }
 
+/** Live /chat threads: the wallet's on-chain authorships. Mock data has no wallet
+ *  authorships (its users are named, not addressed) — the mock /chat path uses
+ *  getRecentThreads and never routes here. */
+export async function getThreadsByAuthor(address: string, limit?: number): Promise<Strategy[]> {
+  return USE_MOCK ? Promise.resolve([]) : server.getThreadsByAuthor(address, limit)
+}
+
 export async function getCurrentUser(): Promise<Profile & { walletAddress: string }> {
   return USE_MOCK ? mock.getCurrentUser() : server.getCurrentUser()
 }

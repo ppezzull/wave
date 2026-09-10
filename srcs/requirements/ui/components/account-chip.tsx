@@ -9,9 +9,9 @@
 //   2. The server `currentUser` fallback (mock = alice; live stub = empty).
 //   3. If neither (live + disconnected) → show ConnectButton.
 //
-// The profile link uses the identity handle (a live wallet has no profile page
-// yet — /u/[handle] renders the honest not-found state) or the server user's
-// handle.
+// The profile link: a live wallet HAS a profile — its address-keyed authorships
+// (/u/<address>, real since on-chain attribution). A server user (mock mode)
+// links to its named /u/[handle] profile.
 import Link from 'next/link'
 import { BadgeCheck } from 'lucide-react'
 import type { CurrentUser } from './app-wrapper'
@@ -50,12 +50,16 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
     ? identity.handle
     : currentUser.name || identity.handle
   const handle = sessionUser ? identity.handle : currentUser.handle
+  // The live wallet's profile is ADDRESS-keyed (/u/<address> — its authorships).
+  // The display handle is truncated, so route on the raw address, lowercase
+  // (getProfile lowercases before querying). Mock/server users keep /u/[handle].
+  const profileHref = sessionUser ? `/u/${address.toLowerCase()}` : `/u/${handle}`
   const avatarUrl = sessionUser ? '' : currentUser.avatarUrl
 
   return (
     <div className={collapsed ? 'flex flex-col items-center gap-2 px-2' : 'flex items-center gap-2 px-3'}>
       <Link
-        href={`/u/${handle}`}
+        href={profileHref}
         onClick={onNavClick}
         className={`flex items-center rounded-full hover:bg-wave-surface transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-wave-teal ${
           collapsed ? 'justify-center p-1.5' : 'gap-3 p-2.5'

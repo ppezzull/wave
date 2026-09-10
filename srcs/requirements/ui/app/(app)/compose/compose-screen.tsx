@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CheckCircle2 } from 'lucide-react'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
+import { useSessionUser } from '@/hooks/use-session-user'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
 import { emitProgram } from '@/app/actions/emit'
 import { BytecodePane } from '@/components/bytecode-pane'
@@ -113,6 +114,10 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   // Description IS the prompt — keep exact bytes; never trim/reflow.
   const [description, setDescription] = useState(initialDescription)
   const compose = useComposeStream()
+  // The session wallet rides the ship opts as `author` — the agent attributes the
+  // strategy on-chain (factory attribute) so it lands on the user's profile. No
+  // wallet → unattributed ship (ZERO sentinel), never fabricated.
+  const { sessionUser } = useSessionUser()
   const [emit, setEmit] = useState<EmitResult | null>(null)
   const [emitting, setEmitting] = useState(false)
   // Ship flow (mirrors the drawer's HITL gate): idle → confirming → shipping → done|error.
@@ -125,11 +130,14 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   const preview = draftStrategy(description, compose.partial ?? compose.spec, emit)
 
   // When the agent lands a StrategySpec, emit → disassemble for the bytecode pane.
+  // A NEW spec also voids any previous ship result — canShip gates on !shipResult.ok,
+  // so without this the second compose on the same page could never ship.
   useEffect(() => {
     if (!compose.spec) return
     let cancelled = false
     setEmitting(true)
     setEmit(null)
+    setShipResult(null)
     void (async () => {
       try {
         const out = await emitProgram(compose.spec)
@@ -192,6 +200,10 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
     setShipConfirming(false)
     setShipPending(true)
     setShipResult(null)
+    // Ship opts: the post (description) + the author (session wallet, if connected).
+    // Both are optional — the agent re-validates and degrades honestly without them.
+    const shipOpts: { description?: string; author?: string } = { description }
+    if (sessionUser) shipOpts.author = sessionUser.address
     try {
       const result = await shipStrategy(
         {
@@ -208,7 +220,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
             ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
             : [],
         },
-        { description },
+        shipOpts,
       )
       setShipResult(result)
     } catch (err) {

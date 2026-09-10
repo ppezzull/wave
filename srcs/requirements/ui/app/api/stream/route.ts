@@ -1,9 +1,9 @@
 // GET /api/stream — SSE seam for compose/retune/HITL events (frontend.md L31).
 //
-// Transparent pipe to the agent's retune/HITL stream once Flavio wires
-// graphDelta off the stub (srcs/requirements/agent/src/monitor/graphDelta.ts).
-// Until then: keep-alive empty stream — never fabricate retune events
-// (never-fabricate / Pietro G2).
+// Transparent pipe to the agent's retune/HITL stream (task #31: the Mastra
+// apiRoute in srcs/requirements/agent/src/mastra/routes/retune-stream.ts). If
+// the agent is unreachable, fall through to a keep-alive empty SSE — never
+// fabricate retune events (never-fabricate / Pietro G2).
 //
 // Browser hook: EventSource('/api/stream') (GET, so EventSource works here
 // unlike POST /api/compile).
@@ -13,18 +13,26 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 const AGENT_URL = process.env.AGENT_URL ?? 'http://agent:3002'
-// TBD once Flavio lands the monitor stream route on the agent.
+// Mastra mounts custom apiRoutes at route.path VERBATIM — /api is reserved for
+// its built-in routes — so the agent serves this at /stream/retune, no prefix.
 const AGENT_STREAM_PATH =
-  process.env.AGENT_STREAM_PATH ?? '/api/stream/retune'
+  process.env.AGENT_STREAM_PATH ?? '/stream/retune'
 
 export async function GET(_req: NextRequest) {
   // Try the live agent stream. If unreachable / not implemented, fall through
   // to a keep-alive empty SSE so the UI seam exists without fabricated events.
+  //
+  // ⚠️ CONNECT-ONLY timeout: AbortSignal.timeout() aborts the BODY too, which
+  // would kill every proxied stream 1.5s in. Abort manually and clear the timer
+  // once response headers arrive — after that the stream lives until either
+  // side closes it.
+  const connect = new AbortController()
+  const connectTimer = setTimeout(() => connect.abort(), 1500)
   try {
     const upstream = await fetch(`${AGENT_URL}${AGENT_STREAM_PATH}`, {
       method: 'GET',
       headers: { accept: 'text/event-stream' },
-      signal: AbortSignal.timeout(1500),
+      signal: connect.signal,
     })
     if (upstream.ok && upstream.body) {
       return new Response(upstream.body, {
@@ -39,6 +47,8 @@ export async function GET(_req: NextRequest) {
     }
   } catch {
     // Agent down or stream not shipped — empty keep-alive below.
+  } finally {
+    clearTimeout(connectTimer)
   }
 
   const encoder = new TextEncoder()
