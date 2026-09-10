@@ -21,6 +21,7 @@ export type Strategy = {
   id: string;
   programHash: string;
   status: StrategyStatus;
+  author: string; // 0x-address; ZERO_ADDRESS sentinel = unattributed (task #31)
   cumulativeVolumeIn: string; // wei string
   cumulativeVolumeOut: string; // wei string
   committedCapital: string; // wei string (Aqua Pushed − Pulled)
@@ -79,6 +80,10 @@ function isEntityNotDeployed(error: unknown): boolean {
   );
 }
 
+// The subgraph's "unattributed" sentinel — matches mapping.ts's ZERO_ADDRESS default for
+// strategies shipped before the factory's attribute() existed (or without a session wallet).
+const ZERO_AUTHOR = "0x0000000000000000000000000000000000000000";
+
 function coerceStatus(raw: string | null | undefined): StrategyStatus {
   // The on-chain enum may grow; anything unknown reads as "active" (the only
   // status the production contract emits at announce). Conservative, not silent.
@@ -92,6 +97,7 @@ type StrategyRow = {
   id: string;
   programHash: string;
   status?: string;
+  author?: string; // optional until every pinned deploy carries it (v0.0.6, task #29)
   cumulativeVolumeIn?: string;
   cumulativeVolumeOut?: string;
   committedCapital?: string;
@@ -104,6 +110,7 @@ function coerceStrategy(s: StrategyRow): Strategy {
     id: s.id,
     programHash: s.programHash,
     status: coerceStatus(s.status),
+    author: (s.author ?? ZERO_AUTHOR).toLowerCase(),
     cumulativeVolumeIn: s.cumulativeVolumeIn ?? "0",
     cumulativeVolumeOut: s.cumulativeVolumeOut ?? "0",
     committedCapital: s.committedCapital ?? "0",
@@ -116,8 +123,11 @@ function coerceStrategy(s: StrategyRow): Strategy {
 // no followerCount): works against v0.0.4 AND the ENS-free deploy that follows. On a spike
 // deploy the whole `strategies` entity is absent and isEntityNotDeployed catches it before
 // these field names matter.
+// ⚠️ `author` (task #31) requires the StrategyFactory-era schema — the fork/local deploy
+// (local31+) has it; live v0.0.5 does NOT and errors on this field until the #29 v0.0.6
+// deploy lands. Fork-first by design.
 const STRATEGY_FIELDS =
-  "id programHash status cumulativeVolumeIn cumulativeVolumeOut committedCapital swapCount lastSwapTimestamp";
+  "id programHash status author cumulativeVolumeIn cumulativeVolumeOut committedCapital swapCount lastSwapTimestamp";
 
 // The subgraph stores Strategy.id as Bytes! (a bytes32), which serializes to
 // lowercase 0x-hex. A caller passing UPPERCASE hex (0xABC…) or a no-0x prefix

@@ -8,7 +8,7 @@
 // the Next.js process.
 //
 // ⚠️ ORDER IS LOAD-BEARING (aquaWrite.ts:7-14, LiveSwapStock.s.sol:121-135):
-//   announce → approve → ship.
+//   announce → (attribute, best-effort) → approve → ship.
 // The subgraph's handlePushed/handleSwapped do `Strategy.load(); if null return`, so a ship
 // that lands before its announce is silently dropped and committedCapital sticks at 0
 // forever. announceStrategy (onlyOwner) MUST precede aqua.ship.
@@ -38,6 +38,7 @@ import {
   type Hex,
 } from "viem";
 import { aquaWriteClient, type AquaWriteConfig, type MakerOrder } from "../clients/aquaWrite.js";
+import { factoryWriteClient } from "../clients/factoryWrite.js";
 import { announcerConfig } from "../config/env.js";
 
 /** The StrategySpec the compose agent produced — forwarded verbatim by the UI. */
@@ -63,6 +64,11 @@ export interface DeployDeps {
   announce?: (order: MakerOrder, strategyId: Hex, description?: string) => Promise<Hash>;
   /** Approve both tokens to Aqua (max). Default uses the maker wallet. */
   approve?: (tokens: Address[]) => Promise<void>;
+  /** Attribute the strategy's author on the StrategyFactory (task #31) — emits
+   * StrategyAttributed for the subgraph's Strategy.author. Default: factoryWriteClient
+   * (FACTORY_ADDRESS env). Only called when input.author is present; failures are
+   * caught by the pipeline (best-effort — a failed attribution never fails the ship). */
+  attribute?: (strategyId: Hex, author: Address) => Promise<Hash>;
   /** Per-token decimals reader (default: on-chain decimals() via the write client). */
   tokenDecimals?: (token: Address) => Promise<number>;
   /** Ship the strategy to Aqua. */
@@ -90,6 +96,15 @@ export interface DeployInput {
    * for the subgraph. Omitted → the plain 2-arg announce (strategy rows default description "").
    */
   description?: string;
+  /**
+   * The author's wallet — the UI session user who shipped the post (Order.maker is always
+   * the announcer EOA, so without this record every strategy would "belong" to one profile).
+   * When present, the pipeline calls StrategyFactory.attribute(strategyId, author) right
+   * after announce; the subgraph lands it on Strategy.author (profiles/threads key on it).
+   * Pre-flight validated (bad hex fails before any write). Omitted → no attribution call
+   * (the strategy records as unattributed — never fabricated).
+   */
+  author?: Address;
 }
 
 export interface DeployResult {
@@ -101,6 +116,9 @@ export interface DeployResult {
    * the World AgentKit seam can later map this to a human-readable name. */
   handle?: string;
   announceTxHash?: Hash;
+  /** StrategyFactory.attribute tx — present only when an author was given AND attribution
+   * succeeded. Absent on failure (best-effort) or when no author was passed. */
+  attributeTxHash?: Hash;
   shipTxHash?: Hash;
   approved: boolean;
   shipped: boolean;
@@ -172,7 +190,7 @@ function compileViaCli(
  * The Aqua-mode maker Order, per LiveSwapStock.s.sol:
  *   traits = 1n << 254n  (USE_AQUA_INSTEAD_OF_SIGNATURE; no hooks, no receiver)
  *   data   = the SwapVM program bytes (no hooks → data IS the program)
- * strategyId (== the subgraph key == aqua.ship's strategyHash) = keccak256(abi.encode(order)).
+ * strategyId = keccak256(abi.encode(order)) = SwapVM.hash(order) — see strategyIdOf below.
  */
 const TRAITS_USE_AQUA = 1n << 254n;
 const ORDER_ABI = [
@@ -190,9 +208,28 @@ function buildOrder(maker: Address, programHex: Hex): MakerOrder {
   return { maker, traits: TRAITS_USE_AQUA, data: programHex };
 }
 
-/** strategyId = keccak256(abi.encode(Order)) — SwapVM.hash() in Aqua mode (SwapVM.sol:97). */
+/** Solidity's `abi.encode(order)` — the struct as a single dynamic argument: a 0x20
+ * offset word, then the tuple body (maker ‖ traits ‖ data head+tail). Verified against
+ * the fork router: `cast call router hash(...)` and `cast abi-encode "f((address,uint256,bytes))"`
+ * produce byte-identical bytes, and this viem form matches both. This ONE encoding is
+ * the join key of the whole stack — see strategyIdOf below. */
+function encodeOrderWrapped(order: MakerOrder): Hex {
+  return encodeAbiParameters(ORDER_ABI, [order]) as Hex;
+}
+
+/** strategyId = keccak(wrapped order) = SwapVM.hash(order) (SwapVM.sol:99 — Aqua mode
+ * hashes abi.encode(order), the wrapped form). ONE id everywhere:
+ *   - the announce's StrategyDeployed event id (the router emits hash(order), NOT the
+ *     bytes32 param it was passed) → the subgraph's Strategy.id
+ *   - Swapped.orderHash → handleSwapped joins the same row
+ *   - Aqua's dock hash — but ONLY if ship() is handed the SAME wrapped bytes (Aqua keys
+ *     on keccak of the bytes as passed), which is also how the router's swap execution
+ *     looks up the docked liquidity.
+ * Fork-proven both ways: docking under a differently-encoded copy of the order (e.g. the
+ * raw 160-byte tuple body) strands the liquidity — capital indexes to a hash no row has,
+ * and swaps can never spend it. */
 function strategyIdOf(order: MakerOrder): Hex {
-  return keccak256(encodeAbiParameters(ORDER_ABI, [order]));
+  return keccak256(encodeOrderWrapped(order));
 }
 
 function handleFrom(programHash: Hex): string {
@@ -249,6 +286,25 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     if (!cachedClient) cachedClient = aquaWriteClient((await writeConfig(ann)).aqua);
     return cachedClient;
   };
+
+  // Same lazy discipline for the factory (attribution). FACTORY_ADDRESS is validated HERE,
+  // not at boot: a missing address is only fatal for ships that carry an author — every
+  // other path (and every offline test) never builds this client.
+  let cachedFactory: ReturnType<typeof factoryWriteClient> | null = null;
+  const factory = async () => {
+    if (!cachedFactory) {
+      const factoryAddr = process.env.FACTORY_ADDRESS;
+      const rpcUrl = process.env.SEPOLIA_RPC_URL;
+      if (!factoryAddr || !/^0x[a-fA-F0-9]{40}$/.test(factoryAddr)) throw new Error("[deploy] FACTORY_ADDRESS missing/invalid in agent/.env");
+      if (!rpcUrl) throw new Error("[deploy] SEPOLIA_RPC_URL missing in agent/.env");
+      cachedFactory = factoryWriteClient({
+        factory: factoryAddr as Address,
+        ownerKey: ann.privateKey, // attribute is onlyOwner; the owner is the factory deployer (the announcer EOA in this deployment)
+        rpcUrl,
+      });
+    }
+    return cachedFactory;
+  };
   const tokenDecimals = deps.tokenDecimals ?? (async (token: Address) => (await client()).decimalsOf(token));
 
   // Resolve the pair and read each token's decimals on-chain BEFORE compiling — the
@@ -260,6 +316,11 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
   let token0: Address, token1: Address, a0: string, a1: string, decimals0: number, decimals1: number;
   try {
     ({ token0, token1, amount0: a0, amount1: a1 } = requirePair(input.spec));
+    // Author is validated pre-flight too: a malformed address would burn announce/approve
+    // gas on a strategy that can never be attributed. Fails before ANY write (like requirePair).
+    if (input.author !== undefined && !/^0x[a-fA-F0-9]{40}$/.test(input.author)) {
+      throw new Error("deploy: author must be a 0x…40-hex address");
+    }
     decimals0 = input.decimals ?? (await tokenDecimals(token0));
     decimals1 = input.decimals ?? (await tokenDecimals(token1));
   } catch (e) {
@@ -292,6 +353,7 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
   }
 
   let announceTxHash: Hash | undefined;
+  let attributeTxHash: Hash | undefined;
   let shipTxHash: Hash | undefined;
   let approved = false;
   let shipped = false;
@@ -314,11 +376,33 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     announceTxHash = await announce(order, strategyId, input.description);
     approved = true;
 
+    // 5.5. Attribute the author (best-effort, task #31) — StrategyFactory.attribute emits
+    // StrategyAttributed right after the announce that created the row, so the subgraph
+    // lands it atomically in indexing order. A failure here (FACTORY_ADDRESS missing,
+    // AlreadyAttributed on a re-announce, revert) NEVER fails the ship: the on-chain
+    // strategy is the product; provenance is display-layer. AlreadyDeployed short-circuits
+    // above without re-attributing (append-only on-chain — second call would revert anyway).
+    if (input.author) {
+      const attribute = deps.attribute ?? (async (id: Hex, a: Address) => (await factory()).attribute(id, a));
+      try {
+        attributeTxHash = await attribute(strategyId, input.author);
+      } catch (e) {
+        console.warn(`[deploy] attribute(${strategyId.slice(0, 12)}…, ${input.author}) failed — ship stands:`, (e as Error).message);
+      }
+    }
+
     // 6. approve both tokens to Aqua (max) — maker key (mirror LiveSwapStock.s.sol:138-139).
     await approve([token0, token1]);
 
-    // 7. ship — strategy arg is abi.encode(order) (its keccak is the strategyHash).
-    shipTxHash = await ship(encodeAbiParameters(ORDER_ABI, [order]) as Hex, [token0, token1], [amount0, amount1]);
+    // 7. ship — strategy arg is the SAME wrapped encoding strategyId hashes: Aqua docks
+    // under keccak of the bytes as passed, so the dock hash == Strategy.id == the hash
+    // the router's swap execution looks up. Any other encoding of the same order (e.g.
+    // the bare 160-byte tuple body) docks under a different hash — the capital indexes
+    // to a row that doesn't exist and no swap can ever spend it (fork-proven).
+    // Reverts 0x879f237b(app, hash) when this dock already exists: the program bytes,
+    // not the amounts, are the strategy's identity — same program + different sizes is
+    // the same dock (re-ship → idempotency path, not a new strategy).
+    shipTxHash = await ship(encodeOrderWrapped(order), [token0, token1], [amount0, amount1]);
     shipped = true;
   } catch (e) {
     error = (e as Error).message.slice(0, 300);
@@ -329,6 +413,7 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     programHash,
     handle,
     ...(announceTxHash ? { announceTxHash } : {}),
+    ...(attributeTxHash ? { attributeTxHash } : {}),
     ...(shipTxHash ? { shipTxHash } : {}),
     approved,
     shipped,

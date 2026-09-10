@@ -15,6 +15,7 @@ const strategy = (id = SID, status: Strategy["status"] = "active", over: Partial
   id,
   programHash: `0x${"ab".repeat(32)}`,
   status,
+  author: "0x0000000000000000000000000000000000000000", // unattributed sentinel — irrelevant to policy
   // The subgraph's rolled-up fields (v0.0.3); default to "no data yet" so the fallback chain
   // (→ Swap[]-derived → config) is exercised. Override via `over` to test real-field preference.
   cumulativeVolumeIn: "0",

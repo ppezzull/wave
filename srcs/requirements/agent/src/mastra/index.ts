@@ -15,6 +15,7 @@ import { strategyWorkflow } from "./workflows/strategy.workflow.js";
 import { monitorWorkflow } from "./workflows/monitor.workflow.js";
 import { waveMcpServer } from "../mcp/server.js";
 import { storageConfig } from "../config/env.js";
+import { retuneStreamRoute } from "./routes/retune-stream.js";
 
 export const mastra = new Mastra({
   agents: { composeAgent, monitorAgent, retuneAgent, gateAgent },
@@ -27,7 +28,9 @@ export const mastra = new Mastra({
   // The HTTP server (Hono) — `mastra build` extracts this statically into
   // .mastra/output/. Serves /health, /api/agents/*, /api/workflows/*, and
   // auto-mounts the MCP HTTP/SSE routes. Direct (not a factory) per the build.
-  server: { port: Number(process.env.PORT ?? 3002) },
+  // apiRoutes add the SSE feed the UI's /api/stream proxies (task #31) — auto-prefixed
+  // /api, open (the UI proxies server-side; events carry no secrets).
+  server: { port: Number(process.env.PORT ?? 3002), apiRoutes: [retuneStreamRoute] },
 });
 
 export { composeAgent, compose } from "./compose.agent.js";

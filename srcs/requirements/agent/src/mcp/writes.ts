@@ -4,7 +4,7 @@
 // testnet faucet.
 import { createTool } from "@mastra/core/tools";
 import { z } from "zod/v4";
-import { deployStrategy } from "../actions/deployStrategy.js";
+import { deployStrategy, type DeployInput } from "../actions/deployStrategy.js";
 import { faucetDrip as runFaucetDrip } from "../actions/faucet.js";
 
 const Address = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
@@ -30,7 +30,8 @@ export const shipStrategy = createTool({
   description:
     "Compile a StrategySpec to SwapVM bytecode and ship a live strategy on Aqua (Sepolia): " +
     "compile → announce → approve → ship → verify. Returns strategyId, programHash, handle, " +
-    "and tx hashes. Destructive — caller MUST hold explicit human approval.",
+    "and tx hashes. With `author`, records on-chain authorship right after announce " +
+    "(attributeTxHash). Destructive — caller MUST hold explicit human approval.",
   inputSchema: z.object({
     spec: z.object({
       specVersion: z.literal(1),
@@ -43,6 +44,9 @@ export const shipStrategy = createTool({
     // The post — stored on-chain (StrategyDescribed) and round-tripped by the fork route.
     // Byte-for-byte the compiler input; never trimmed or reflowed.
     description: z.string().optional(),
+    // The author's wallet (the UI session user). Triggers StrategyFactory.attribute right
+    // after announce — best-effort; failure leaves attributeTxHash absent, ship stands.
+    author: Address.optional(),
   }),
   outputSchema: z.object({
     // Absent when a pre-flight step (pair validation, decimals read) failed before compile.
@@ -50,13 +54,17 @@ export const shipStrategy = createTool({
     programHash: z.string().optional(),
     handle: z.string().optional(),
     announceTxHash: z.string().optional(),
+    // StrategyFactory.attribute tx (task #31) — only when author was given AND succeeded.
+    attributeTxHash: z.string().optional(),
     shipTxHash: z.string().optional(),
     approved: z.boolean(),
     shipped: z.boolean(),
     alreadyDeployed: z.boolean().optional(),
     error: z.string().optional(),
   }),
-  execute: async (input) => deployStrategy(input),
+  // `author` is zod-validated as 0x…40-hex here and re-validated pre-flight inside the
+  // pipeline; the cast only bridges zod's `string` to viem's `0x${string}` brand.
+  execute: async (input) => deployStrategy({ ...input, author: input.author as DeployInput["author"] }),
 });
 
 /**
