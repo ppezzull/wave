@@ -16,6 +16,15 @@
 // Mounted tool path verified: POST /api/tools/:id/execute (probed against the running
 // agent; /api/mcp/wave/:id returns 404 on the installed Mastra). The tool input is wrapped
 // under `data` per Mastra's tool-execute body shape.
+//
+// World ID publish gate (Step 5, ETHOnline World plan): publishing is wave's
+// sybil surface, so a ship requires a proof of unique human — enforced HERE,
+// server-side, never in the browser. The signal is re-derived from the exact
+// spec+description and the nullifier consumed one shot (see app/actions/world.ts).
+
+import { consumeVerifiedProof, worldPublishConfig } from '@/app/actions/world'
+import { publishSignal } from '@/lib/world/publish-signal'
+import type { WorldProofPayload } from '@/lib/world/publish-signal'
 
 const AGENT_URL = process.env.AGENT_URL ?? 'http://agent:3002'
 
@@ -39,7 +48,17 @@ export interface ShipResult {
   announceTxHash?: string
   shipTxHash?: string
   alreadyDeployed?: boolean
+  /** True when this ship passed the World ID human gate (absent when the gate is off). */
+  worldVerified?: boolean
   reason?: string
+}
+
+export interface ShipOptions {
+  label?: string
+  decimals?: number
+  description?: string
+  /** World ID proof from useWorldPublishGate — required when the gate is on. */
+  worldProof?: WorldProofPayload
 }
 
 /**
@@ -48,10 +67,32 @@ export interface ShipResult {
  */
 export async function shipStrategy(
   spec: ShipStrategySpec,
-  opts?: { label?: string; decimals?: number; description?: string },
+  opts: ShipOptions = {},
 ): Promise<ShipResult> {
   if (!spec || !spec.pair?.token0 || !spec.pair?.token1 || !spec.blocks?.length) {
     return { ok: false, reason: 'missing pair or blocks in spec' }
+  }
+
+  const cfg = await worldPublishConfig()
+  if (cfg.gateOn) {
+    const proof = opts.worldProof
+    if (!proof) {
+      return { ok: false, reason: 'World ID proof required to publish (verified humans only)' }
+    }
+    if (proof.kind === 'dev') {
+      if (!cfg.devAllow) {
+        return { ok: false, reason: 'dev proof fixture not accepted (WORLD_ID_DEV_ALLOW off)' }
+      }
+    } else {
+      if (!opts.description) {
+        return { ok: false, reason: 'description required to bind the World ID proof' }
+      }
+      const signal = await publishSignal(spec, opts.description)
+      const v = await consumeVerifiedProof(proof.result, signal)
+      if (!v.ok) {
+        return { ok: false, reason: `world proof rejected: ${v.reason}` }
+      }
+    }
   }
 
   let res: Response
@@ -98,5 +139,6 @@ export async function shipStrategy(
     announceTxHash: out.announceTxHash,
     shipTxHash: out.shipTxHash,
     alreadyDeployed: out.alreadyDeployed,
+    worldVerified: cfg.gateOn ? true : undefined,
   }
 }

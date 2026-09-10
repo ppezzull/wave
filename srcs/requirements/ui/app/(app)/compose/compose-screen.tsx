@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CheckCircle2 } from 'lucide-react'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { useWorldPublishGate } from '@/components/world-publish-gate'
 import { emitProgram } from '@/app/actions/emit'
 import { BytecodePane } from '@/components/bytecode-pane'
 import { SafetyCardDetail } from '@/components/safety-card-detail'
@@ -119,6 +120,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   const [shipPending, setShipPending] = useState(false)
   const [shipConfirming, setShipConfirming] = useState(false)
   const [shipResult, setShipResult] = useState<ShipResult | null>(null)
+  const worldGate = useWorldPublishGate()
 
   const canSubmit = description.length > 0 && !compose.isStreaming
   const canShip = !!compose.spec && !emitting && !shipPending && !shipResult?.ok
@@ -193,23 +195,28 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
     setShipPending(true)
     setShipResult(null)
     try {
-      const result = await shipStrategy(
-        {
-          specVersion: Number(spec.specVersion ?? 1),
-          pair: {
-            token0: String(spec.pair?.token0 ?? ''),
-            token1: String(spec.pair?.token1 ?? ''),
-          },
-          size: {
-            amount0: String(spec.size?.amount0 ?? ''),
-            amount1: String(spec.size?.amount1 ?? ''),
-          },
-          blocks: Array.isArray(spec.blocks)
-            ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
-            : [],
+      const specObj = {
+        specVersion: Number(spec.specVersion ?? 1),
+        pair: {
+          token0: String(spec.pair?.token0 ?? ''),
+          token1: String(spec.pair?.token1 ?? ''),
         },
-        { description },
-      )
+        size: {
+          amount0: String(spec.size?.amount0 ?? ''),
+          amount1: String(spec.size?.amount1 ?? ''),
+        },
+        blocks: Array.isArray(spec.blocks)
+          ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+          : [],
+      }
+      // World ID human gate — opens the verify dialog when a proof is needed;
+      // the proof then rides to shipStrategy, which re-checks it server-side.
+      const gate = await worldGate.require(specObj, description)
+      if (!gate.ok) {
+        setShipResult({ ok: false, reason: gate.reason ?? 'World ID verification did not complete' })
+        return
+      }
+      const result = await shipStrategy(specObj, { description, worldProof: gate.proof })
       setShipResult(result)
     } catch (err) {
       setShipResult({ ok: false, reason: String(err).slice(0, 200) })
@@ -433,6 +440,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
           )}
         </section>
       </div>
+      {worldGate.dialog}
     </div>
   )
 }

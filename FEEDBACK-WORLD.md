@@ -40,9 +40,9 @@ human-approval gates for high-risk autonomous actions.
 
 - **2026-09-09 — action creation is not where you'd look first.** "World ID
   Configuration" holds app_id / rp_id / signer / rotate — we expected actions
-  there. [Finding the action-creation UI under a different section — updating
-  this entry with exactly where once confirmed.] First-run navigation cost us
-  a real back-and-forth.
+  there. Confirmed 2026-09-10: actions live under the **Verification** section
+  of the sidebar, a separate home from the keys they bind to. First-run
+  navigation cost us a real back-and-forth.
 - **2026-09-09 — signing key shown exactly once** at "configure World ID".
   The one-shot rule is documented, but there is no "download .env snippet"
   option; you get one render of the private key in the browser. Rotate exists
@@ -50,6 +50,16 @@ human-approval gates for high-risk autonomous actions.
   first-timer who misses the copy loses the key on day one.
 - **2026-09-09 — "World ID Sandbox → Install the test build" is right in the
   sidebar**, which is good discoverability once you know it exists.
+- **2026-09-10 — the Changelog field silently rejects non-ASCII.** Submitting
+  for review failed on em dashes ("—") and ">" with only "can only contain
+  letters, numbers and certain special characters" — the allowed set is never
+  listed. Plain ASCII passed.
+- **2026-09-10 — App type decides whether the whole Store listing matters.**
+  Choosing "External integration" (our case: World ID added to an existing web
+  app) makes category/countries/localisations/showcase moot, but the form
+  surfaces them identically either way — we filled the entire store listing
+  before learning it was irrelevant. A hint at the top of the listing form
+  would save an hour.
 
 ## 3. Sandbox App states, proof flows, test users, errors, and edge cases
 
@@ -87,6 +97,28 @@ human-approval gates for high-risk autonomous actions.
   the **bare hostname** (`validateAgentkitMessage` compares against
   `new URL(expected).hostname`), not the origin. Both are one-line fixes once
   known; neither is stated on the integrate page.
+- **2026-09-10 — IDKit 4.x: `rp_context` is mandatory and server-signed.**
+  The widget requires `rp_context` (`{rp_id, nonce, created_at, expires_at,
+  signature}`) produced by `signRequest()` from `@worldcoin/idkit/signing`
+  with the Developer Portal signing key — the client cannot open a valid
+  request without a server round-trip first. v3-era snippets (app_id + action
+  only) still float around the docs and do not type-check against the 4.x
+  widget.
+- **2026-09-10 — verification is backend-only, and the anti-replay is DIY.**
+  You forward the IDKit result as-is to `POST /api/v4/verify/{rp_id}`; the
+  portal validates the ZK proof, the rp_context signature, and burns the
+  nullifier globally. But one-proof-one-action enforcement server-side is left
+  entirely to the integrator: we keep a nullifier→signal ledger and delete the
+  record when the gated action ships. No storage helper ships with the SDK.
+- **2026-09-10 — signal binding is also DIY.** The docs say "your backend
+  should enforce the same value" for the signal; the only tooling is
+  `hashSignal()` from `@worldcoin/idkit/hashing`, which you compare against
+  `responses[0].signal_hash` yourself. There is no verify-with-expected-signal
+  convenience endpoint or helper.
+- **2026-09-10 — `environment` accepts "sandbox" only in the types.** The
+  widget config union is `'production' | 'staging' | 'sandbox'`, but the docs
+  pages describe just staging/production; sandbox appears solely in the TS
+  definitions. We default to staging and flip at submission time.
 - (running list — appended as we go.)
 
 ---
