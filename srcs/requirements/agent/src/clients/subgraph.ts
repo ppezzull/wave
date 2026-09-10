@@ -52,7 +52,7 @@ export type Swap = {
 // per-env for self-hosted graph-node (path B) or to pin an older version.
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.4";
+  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.5";
 
 const client = new GraphQLClient(SUBGRAPH_URL);
 
