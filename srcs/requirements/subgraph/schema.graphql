@@ -33,6 +33,10 @@ type Strategy @entity {
   status: StrategyStatus! # "active" on deploy; "stopped"/"removed" if the router emits them
   description: String! # the post — StrategyDescribed payload, byte-for-byte compiler input
                        # (fork prefill reads it back; "" for strategies shipped pre-event)
+  author: Bytes! # on-chain authorship — StrategyFactory.StrategyAttributed (task #31).
+                 # ZERO_ADDRESS until attributed: the shipped order carries the announcer as
+                 # maker, so without this record every strategy would "belong" to one profile.
+                 # Filterable (where: {author: $addr}) — profiles/threads key on it.
 
   # Ranking aggregates (Pietro.md 🔢 — the UI computes rank from these raw values):
   #   rank = returnPct × recencyDecay

@@ -75,3 +75,29 @@ dataSources:
         - event: Docked(address,address,bytes32)
           handler: handleDocked
       file: ./src/mapping.ts
+  # --- (d) StrategyFactory (on-chain authorship — task #31) ---
+  # The factory's onlyOwner attribute(strategyId, author) emits StrategyAttributed right after
+  # announce, with the author being the UI session wallet the agent received on ship.
+  # ⚠️ PLACEHOLDER — the live factory address + deploy block land with the #29 router+factory
+  # redeploy (as that EOA). Until then this datasource indexes nothing live (startBlock 0 is
+  # replaced at deploy time); the schema/mapping/handler are already production-shaped.
+  - kind: ethereum/contract
+    name: StrategyFactory
+    network: sepolia
+    source:
+      address: "0x0000000000000000000000000000000000000000"
+      abi: StrategyFactory
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+      abis:
+        - name: StrategyFactory
+          file: ./abis/StrategyFactory.abi.json
+      eventHandlers:
+        - event: StrategyAttributed(indexed bytes32,indexed address)
+          handler: handleStrategyAttributed
+      file: ./src/mapping.ts

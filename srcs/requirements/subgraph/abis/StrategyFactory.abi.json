@@ -1,0 +1,829 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [
+      {
+        "name": "aqua",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "attribute",
+    "inputs": [
+      {
+        "name": "strategyId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "author",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "build",
+    "inputs": [
+      {
+        "name": "s",
+        "type": "tuple",
+        "internalType": "struct StrategyFactory.StrategySpecInput",
+        "components": [
+          {
+            "name": "token0",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "token1",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "baseIsToken0",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "token0Decimals",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "token1Decimals",
+            "type": "uint8",
+            "internalType": "uint8"
+          },
+          {
+            "name": "hasDeadline",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "deadlineAt",
+            "type": "uint40",
+            "internalType": "uint40"
+          },
+          {
+            "name": "concentration",
+            "type": "tuple",
+            "internalType": "struct StrategyFactory.Concentration",
+            "components": [
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "priceMinE12",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "priceMaxE12",
+                "type": "uint64",
+                "internalType": "uint64"
+              }
+            ]
+          },
+          {
+            "name": "decayPeriodSecs",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "oracleGuard",
+            "type": "tuple",
+            "internalType": "struct StrategyFactory.OracleGuardInput",
+            "components": [
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "feed",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "feedDecimals",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "maxStalenessSecs",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "maxDeviationBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "mode",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "skew",
+            "type": "tuple",
+            "internalType": "struct StrategyFactory.InventorySkewInput",
+            "components": [
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "targetRatioMicro",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "slopeBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "maxSkewBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          },
+          {
+            "name": "makerFeeBps",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "protocolFeeBps",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "protocolFeeReceiver",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "curve",
+            "type": "uint8",
+            "internalType": "enum StrategyFactory.CurveKind"
+          },
+          {
+            "name": "salt",
+            "type": "tuple",
+            "internalType": "struct StrategyFactory.Salt",
+            "components": [
+              {
+                "name": "enabled",
+                "type": "bool",
+                "internalType": "bool"
+              },
+              {
+                "name": "value",
+                "type": "uint64",
+                "internalType": "uint64"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "program",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hash",
+    "inputs": [
+      {
+        "name": "program",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "strategyAuthor",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "StrategyAttributed",
+    "inputs": [
+      {
+        "name": "strategyId",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "author",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AlreadyAttributed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ConcentrateInvalidPriceBounds",
+    "inputs": [
+      {
+        "name": "sqrtPriceMin",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "sqrtPriceMax",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ConcentrateRecomputeDetected",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ControlsMissingDeadlineArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ControlsMissingMinAmountArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ControlsMissingMinShareArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ControlsMissingTokenArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DeadlineReached",
+    "inputs": [
+      {
+        "name": "taker",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DecayShouldBeCalledBeforeSwapAmountsComputation",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ExtructionChoppedExceededLength",
+    "inputs": [
+      {
+        "name": "chopped",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "requested",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ExtructionMissingTargetArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "FeeBpsOutOfRange",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "FeeBpsOutOfRange",
+    "inputs": [
+      {
+        "name": "feeBps",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "FeeDynamicProtocolInvalidRecipient",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "FeeProtocolProviderFailedCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "FeeShouldBeAppliedBeforeSwapAmountsComputation",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewExpectedBeforeSwapAmountsComputed",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewImproveLegReserved",
+    "inputs": [
+      {
+        "name": "maxImproveBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewPenaltyCapNotBelowOneHundredPercent",
+    "inputs": [
+      {
+        "name": "maxSkewBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InventorySkewTargetRatioAboveOne",
+    "inputs": [
+      {
+        "name": "targetRatioE18",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "JumpMissingNextPCArg",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPricingInstruction",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotOwner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OpcodeNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OracleDecimalsOutOfRange",
+    "inputs": [
+      {
+        "name": "folded",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardExpectedBeforeSwapAmountsComputed",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidFlags",
+    "inputs": [
+      {
+        "name": "flags",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidMode",
+    "inputs": [
+      {
+        "name": "mode",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardInvalidOraclePrice",
+    "inputs": [
+      {
+        "name": "answer",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardPriceDeviationExceeded",
+    "inputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oracleNum",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "oracleDen",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxDeviationBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OracleGuardStaleOraclePrice",
+    "inputs": [
+      {
+        "name": "currentTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "updatedAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxStaleness",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapBothBalancesZero",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapInvalidArgsLength",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapInvalidInitialBalances",
+    "inputs": [
+      {
+        "name": "x0",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "y0",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapInvalidLinearWidth",
+    "inputs": [
+      {
+        "name": "linearWidth",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapInvalidRates",
+    "inputs": [
+      {
+        "name": "rateLt",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "rateGt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapMathInvalidInput",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapMathNoSolution",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PeggedSwapRecomputeDetected",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RunLoopExcessiveCall",
+    "inputs": [
+      {
+        "name": "pc",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "programLength",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SafeCastOverflowedUintDowncast",
+    "inputs": [
+      {
+        "name": "bits",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SafeTransferFromFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "StalenessOutOfRange",
+    "inputs": [
+      {
+        "name": "maxStalenessSecs",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TakerTokenBalanceIsLessThanRequired",
+    "inputs": [
+      {
+        "name": "taker",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "balance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TakerTokenBalanceIsZero",
+    "inputs": [
+      {
+        "name": "taker",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TakerTokenBalanceSupplyShareIsLessThanRequired",
+    "inputs": [
+      {
+        "name": "taker",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "balance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalSupply",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minShareE18",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "XYCSwapRecomputeDetected",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "XYCSwapRequiresBothBalancesNonZero",
+    "inputs": [
+      {
+        "name": "balanceIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "balanceOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  }
+]

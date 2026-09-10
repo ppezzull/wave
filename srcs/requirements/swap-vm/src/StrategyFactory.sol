@@ -124,7 +124,27 @@ contract StrategyFactory is StrategyOpcodes {
     /// @dev Mirror of the TS staleness UintOverflow guard (uintBE(_, 2)).
     error StalenessOutOfRange(uint32 maxStalenessSecs);
 
-    constructor(address aqua) StrategyOpcodes(aqua) { }
+    /// @notice Authorship recorded on-chain (the subgraph's Strategy.author source).
+    /// @dev Emitted by `attribute` — the only place a strategy's author exists
+    ///      on-chain: the shipped order carries the announcer as maker, so the
+    ///      social layer needs this explicit record.
+    event StrategyAttributed(bytes32 indexed strategyId, address indexed author);
+
+    /// @dev `attribute` called by anyone but the deployer.
+    error NotOwner();
+
+    /// @dev Authorship is append-only: a strategyId may be attributed once.
+    error AlreadyAttributed();
+
+    /// @dev The deployer (the announcer EOA) — the only address that may attribute.
+    address public immutable owner;
+
+    /// @dev strategyId → author. Zero address = unattributed.
+    mapping(bytes32 => address) public strategyAuthor;
+
+    constructor(address aqua) StrategyOpcodes(aqua) {
+        owner = msg.sender;
+    }
 
     /// @notice Assemble the canonical program for the spec
     /// @param s The structured, canonical spec
@@ -193,6 +213,19 @@ contract StrategyFactory is StrategyOpcodes {
     ///         `StrategyDeployed` event derives from the shipped order
     function hash(bytes calldata program) external pure returns (bytes32) {
         return keccak256(program);
+    }
+
+    /// @notice Record who authored a strategy — the social layer's authorship
+    ///         anchor (profiles, threads, feed attribution).
+    /// @dev Free-form bytes32 (same D1 posture as `announceStrategy`: no
+    ///      on-chain binding to a built program). Append-only: a second call
+    ///      for the same strategyId reverts, same author or not — the agent's
+    ///      best-effort call swallows the benign re-ship case.
+    function attribute(bytes32 strategyId, address author) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (strategyAuthor[strategyId] != address(0)) revert AlreadyAttributed();
+        strategyAuthor[strategyId] = author;
+        emit StrategyAttributed(strategyId, author);
     }
 
     /// @dev Band inversion mirrors ir.ts `lowerBlock("concentration")`: on the

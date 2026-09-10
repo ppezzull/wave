@@ -7,9 +7,10 @@ specVersion: 1.3.0
 #     --version-label localN wave subgraph.local.yaml
 # Differences vs subgraph.yaml (the live/Studio one):
 #   - startBlocks cut near the fork head so a fresh graph-node syncs in seconds.
-#   - adds source (b): the V2 router (StrategyDescribed era) deployed on the anvil fork at
-#     block 11663842, address 0x6F1c…9664 (deterministic on a fresh fork: same deployer+nonce).
-# Pair with root .env.fork.backup (ROUTER_ADDRESS pointed at the fork router).
+#   - adds source (b): the current fork's router (StrategyDescribed era), deployed from the
+#     throwaway owner 0x829F…24C7 (anvil#1's upstream state diverges on tenderly forks —
+#     executor sees 0 balance despite overrides, so dev keys can't deploy there).
+# Pair with the root .env fork-override block (ROUTER_ADDRESS pointed at the fork router).
 schema:
   file: ./schema.graphql
 dataSources:
@@ -40,16 +41,16 @@ dataSources:
           handler: handleSwapped
       file: ./src/mapping.ts
   # --- (b) EnsStrategyRouterV2 (LOCAL FORK TEST only — not for Studio) ---
-  # The V2 router (StrategyDescribed era) deployed on the anvil fork at block 11663842.
+  # The current fork's router (StrategyDescribed era), deployed at block 11669978.
   # Same handlers as (a). Its StrategyDeployed/StrategyDescribed pair is what the fork's
   # described announce emits (one tx, logIndex 0 + 1).
   - kind: ethereum/contract
     name: EnsStrategyRouterV2
     network: sepolia
     source:
-      address: "0x6F1c3b4eC5e022250b5B8089d68bB9D27EB92664"
+      address: "0x8186c7da04884801ae3a65f47f0222c724d8d382"
       abi: EnsStrategyRouter
-      startBlock: 11663842
+      startBlock: 11669978
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -92,4 +93,28 @@ dataSources:
           handler: handlePulled
         - event: Docked(address,address,bytes32)
           handler: handleDocked
+      file: ./src/mapping.ts
+  # --- (d) StrategyFactory (on-chain authorship — task #31) ---
+  # The fork's factory, redeployed from the throwaway owner at block 11669985 with the
+  # attribute(strategyId, author) surface. The agent calls it right after announce with the
+  # UI session wallet; handleStrategyAttributed lands it on the Strategy row.
+  - kind: ethereum/contract
+    name: StrategyFactory
+    network: sepolia
+    source:
+      address: "0x980f0d61d2c6ba29349dd63f39d418d9d891c6ff"
+      abi: StrategyFactory
+      startBlock: 11669985 # factory redeploy block (task #31)
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+      abis:
+        - name: StrategyFactory
+          file: ./abis/StrategyFactory.abi.json
+      eventHandlers:
+        - event: StrategyAttributed(indexed bytes32,indexed address)
+          handler: handleStrategyAttributed
       file: ./src/mapping.ts

@@ -166,6 +166,36 @@ contract StrategyFactoryTest is AquaSwapVMTest {
         assertLt(out2, 2 * out1, "quotes must be subadditive (concave curve + fees)");
     }
 
+    // ── authorship ──────────────────────────────────────────────────────────
+
+    /// @notice The deployer attributes a strategyId once, emitting the frozen
+    ///         event with both keys indexed (the subgraph's Strategy.author source)
+    function test_Attribute_EmitsFrozenEvent() public {
+        bytes32 id = keccak256("wave-attribution-test");
+        address author = 0xAB459eB72e55d8BCACf762165d96281e0996Cb95;
+
+        vm.expectEmit(true, true, true, true, address(factory));
+        emit StrategyFactory.StrategyAttributed(id, author);
+
+        factory.attribute(id, author);
+        assertEq(factory.strategyAuthor(id), author, "authorship must be recorded");
+        assertEq(factory.owner(), address(this), "setUp's deployer must own attribution");
+    }
+
+    /// @notice Attribution is owner-only
+    function test_Attribute_NonOwnerReverts() public {
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(StrategyFactory.NotOwner.selector);
+        factory.attribute(bytes32(uint256(1)), address(0xBEEF));
+    }
+
+    /// @notice Authorship is append-only — a second call reverts even for the owner
+    function test_Attribute_SecondCallReverts() public {
+        factory.attribute(bytes32(uint256(1)), address(0xA11CE));
+        vm.expectRevert(StrategyFactory.AlreadyAttributed.selector);
+        factory.attribute(bytes32(uint256(1)), address(0xA11CE));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /// @dev TakerTraits pack for a plain exactIn quote, maker-signed — same
