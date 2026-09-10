@@ -14,8 +14,12 @@ import { monitorAgent, retuneAgent, gateAgent } from "./agents.js";
 import { strategyWorkflow } from "./workflows/strategy.workflow.js";
 import { monitorWorkflow } from "./workflows/monitor.workflow.js";
 import { waveMcpServer } from "../mcp/server.js";
-import { storageConfig } from "../config/env.js";
+import { storageConfig, worldConfig } from "../config/env.js";
 import { retuneStreamRoute } from "./routes/retune-stream.js";
+import { buildWorldGate } from "../world/index.js";
+
+// World AgentKit gate on the MCP surface (undefined when WORLD_MCP_GATE=off).
+const worldGate = buildWorldGate(worldConfig());
 
 export const mastra = new Mastra({
   agents: { composeAgent, monitorAgent, retuneAgent, gateAgent },
@@ -28,9 +32,32 @@ export const mastra = new Mastra({
   // The HTTP server (Hono) — `mastra build` extracts this statically into
   // .mastra/output/. Serves /health, /api/agents/*, /api/workflows/*, and
   // auto-mounts the MCP HTTP/SSE routes. Direct (not a factory) per the build.
+  //
   // apiRoutes add the SSE feed the UI's /api/stream proxies (task #31) — auto-prefixed
   // /api, open (the UI proxies server-side; events carry no secrets).
-  server: { port: Number(process.env.PORT ?? 3002), apiRoutes: [retuneStreamRoute] },
+  //
+  // World AgentKit gate: POSTs on /mcp* must prove a human-backed agent
+  // (signature + AgentBook). Internal agents reach tools via the registry —
+  // in-process, never through this gate; the UI routes are the human surface
+  // (Step 5 adds World ID there). WORLD_MCP_GATE=off removes it entirely.
+  server: {
+    port: Number(process.env.PORT ?? 3002),
+    apiRoutes: [retuneStreamRoute],
+    ...(worldGate ? { middleware: [worldGate] } : {}),
+    // Mastra's CORS defaults + the agentkit header the gate reads, and the
+    // typed error headers it sets (trust panel reads x-agentkit-error).
+    cors: {
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "A2A-Version",
+        "x-mastra-client-type",
+        "x-mastra-dev-playground",
+        "agentkit",
+      ],
+      exposeHeaders: ["X-Requested-With", "x-agentkit-error", "x-agentkit-address", "x-agentkit-human"],
+    },
+  },
 });
 
 export { composeAgent, compose } from "./compose.agent.js";

@@ -7,6 +7,8 @@ import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { StreamNotifications } from './stream-notifications'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { useWorldPublishGate } from '@/components/world-publish-gate'
+import type { WorldProofPayload } from '@/lib/world/publish-signal'
 import { emitProgram } from '@/app/actions/emit'
 
 const LISBOA =
@@ -315,6 +317,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const [shipPending, setShipPending] = useState(false)
   const [shipConfirming, setShipConfirming] = useState(false)
   const [shipResult, setShipResult] = useState<ShipResult | null>(null)
+  const worldGate = useWorldPublishGate()
   // Real compiler output for the safety card — via the emitProgram action (spawns the wave-compiler
   // CLI: canonicalize → resolveRejections → lower → emit → disassemble). Replaces the prior
   // hardcoded "SAFE" verdict with the actual programHash + emitted-byte count + applied
@@ -566,26 +569,35 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     const description = lastIntent || lastUserText(liveMessages)
     // Ship opts: the post (description) + the author (session wallet, if connected).
     // Both are optional — the agent re-validates and degrades honestly without them.
-    const shipOpts: { description?: string; author?: string } = {}
+    const shipOpts: { description?: string; author?: string; worldProof?: WorldProofPayload } = {}
     if (description) shipOpts.description = description
     if (sessionUser) shipOpts.author = sessionUser.address
     try {
-      const result = await shipStrategy(
-        {
-          specVersion: Number(spec.specVersion ?? 1),
-          pair: {
-            token0: String(spec.pair?.token0 ?? ''),
-            token1: String(spec.pair?.token1 ?? ''),
-          },
-          size: {
-            amount0: String(spec.size?.amount0 ?? ''),
-            amount1: String(spec.size?.amount1 ?? ''),
-          },
-          blocks: Array.isArray(spec.blocks)
-            ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
-            : [],
+      const specObj = {
+        specVersion: Number(spec.specVersion ?? 1),
+        pair: {
+          token0: String(spec.pair?.token0 ?? ''),
+          token1: String(spec.pair?.token1 ?? ''),
         },
-        Object.keys(shipOpts).length > 0 ? shipOpts : undefined,
+        size: {
+          amount0: String(spec.size?.amount0 ?? ''),
+          amount1: String(spec.size?.amount1 ?? ''),
+        },
+        blocks: Array.isArray(spec.blocks)
+          ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+          : [],
+      }
+      // World ID human gate — opens the verify dialog when a proof is needed;
+      // the proof then rides to shipStrategy, which re-checks it server-side.
+      const gate = await worldGate.require(specObj, description ?? '')
+      if (!gate.ok) {
+        setShipResult({ ok: false, reason: gate.reason ?? 'World ID verification did not complete' })
+        return
+      }
+      shipOpts.worldProof = gate.proof
+      const result = await shipStrategy(
+        specObj,
+        shipOpts,
       )
       setShipResult(result)
       if (result.ok) {
@@ -979,6 +991,8 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
           />
         </svg>
       </div>
+
+      {worldGate.dialog}
     </div>
   )
 }

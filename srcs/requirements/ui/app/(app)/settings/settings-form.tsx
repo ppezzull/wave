@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Copy, Check } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Copy, Check, BadgeCheck } from 'lucide-react'
 import { Footer } from '@/components/footer'
 import { ConnectButton } from '@/components/connect-button'
 import { useSessionUser } from '@/hooks/use-session-user'
@@ -10,6 +10,7 @@ import type { CurrentUser } from '@/components/app-wrapper'
 import { usePrivy } from '@privy-io/react-auth'
 import { faucetDrip } from '@/app/actions/faucet'
 import type { FaucetResult } from '@/app/actions/faucet'
+import { getWorldTrustPanel } from '@/app/actions/identity'
 
 interface Props {
   user: CurrentUser
@@ -154,6 +155,10 @@ export function SettingsForm({ user }: Props) {
             </div>
           </section>
 
+          {/* World trust panel — the AgentBook side of the trust ladder (plan
+              Fase 1): your wallet + the wave agent wallets, human-backed or not. */}
+          <WorldTrustSection youVerified={!!sessionUser?.verifiedHuman} />
+
           {/* Identity section */}
           <section aria-labelledby="identity-heading">
             <h2
@@ -260,5 +265,83 @@ export function SettingsForm({ user }: Props) {
 
       <Footer />
     </>
+  )
+}
+
+// World trust panel — statuses come from the server-only AgentBook resolver
+// (app/actions/identity.ts). Never fabricated: unknown = "not in AgentBook".
+function WorldTrustSection({ youVerified }: { youVerified: boolean }) {
+  const [panel, setPanel] = useState<Awaited<ReturnType<typeof getWorldTrustPanel>> | null>(null)
+
+  useEffect(() => {
+    let live = true
+    getWorldTrustPanel()
+      .then((p) => {
+        if (live) setPanel(p)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
+
+  const short = (addr: string) =>
+    addr.length >= 10 ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : addr
+
+  return (
+    <section aria-labelledby="world-heading">
+      <h2
+        id="world-heading"
+        className="font-sans font-semibold text-[1rem] text-wave-text mb-3"
+      >
+        World trust
+      </h2>
+      <div className="h-px bg-wave-border mb-5" aria-hidden="true" />
+
+      <div className="flex flex-col gap-2">
+        {/* Your wallet */}
+        <div className="flex items-center justify-between gap-3 rounded-[10px] border border-wave-border bg-wave-surface px-3 py-2.5">
+          <span className="font-sans text-[14px] text-wave-text">Your wallet — human-backed</span>
+          {youVerified ? (
+            <span className="flex items-center gap-1 font-sans text-[13px]" style={{ color: '#2A9D8F' }}>
+              <BadgeCheck size={14} aria-label="Verified human" /> verified human
+            </span>
+          ) : (
+            <span className="font-sans text-[13px] text-wave-muted">not verified</span>
+          )}
+        </div>
+
+        {/* wave agent wallets (statuses load async) */}
+        {panel?.agents.map((a) => (
+          <div
+            key={a.role}
+            className="flex items-center justify-between gap-3 rounded-[10px] border border-wave-border bg-wave-surface px-3 py-2.5"
+          >
+            <span className="font-mono text-[13px] text-wave-muted truncate">
+              {a.role} agent · {short(a.address)}
+            </span>
+            {a.verifiedHuman ? (
+              <span className="flex items-center gap-1 font-sans text-[13px]" style={{ color: '#2A9D8F' }}>
+                <BadgeCheck size={14} aria-label="Human-backed agent" /> AgentBook
+              </span>
+            ) : (
+              <span className="font-sans text-[13px] text-wave-muted">not in AgentBook</span>
+            )}
+          </div>
+        ))}
+        {!panel && (
+          <div className="rounded-[10px] border border-wave-border bg-wave-surface px-3 py-2.5">
+            <span className="font-sans text-[13px] text-wave-muted">resolving agent wallets…</span>
+          </div>
+        )}
+
+        {panel?.devFixtures && (
+          <p className="font-sans text-[12px] text-wave-muted">
+            dev fixtures active (WORLD_AGENTBOOK_DEV_ALLOW) — AgentBook registration
+            via agentkit-cli pending
+          </p>
+        )}
+      </div>
+    </section>
   )
 }

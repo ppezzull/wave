@@ -6,6 +6,8 @@ import { CheckCircle2 } from 'lucide-react'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { useWorldPublishGate } from '@/components/world-publish-gate'
+import type { WorldProofPayload } from '@/lib/world/publish-signal'
 import { emitProgram } from '@/app/actions/emit'
 import { BytecodePane } from '@/components/bytecode-pane'
 import { SafetyCardDetail } from '@/components/safety-card-detail'
@@ -124,6 +126,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   const [shipPending, setShipPending] = useState(false)
   const [shipConfirming, setShipConfirming] = useState(false)
   const [shipResult, setShipResult] = useState<ShipResult | null>(null)
+  const worldGate = useWorldPublishGate()
 
   const canSubmit = description.length > 0 && !compose.isStreaming
   const canShip = !!compose.spec && !emitting && !shipPending && !shipResult?.ok
@@ -200,28 +203,37 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
     setShipConfirming(false)
     setShipPending(true)
     setShipResult(null)
-    // Ship opts: the post (description) + the author (session wallet, if connected).
-    // Both are optional — the agent re-validates and degrades honestly without them.
-    const shipOpts: { description?: string; author?: string } = { description }
-    if (sessionUser) shipOpts.author = sessionUser.address
     try {
-      const result = await shipStrategy(
-        {
-          specVersion: Number(spec.specVersion ?? 1),
-          pair: {
-            token0: String(spec.pair?.token0 ?? ''),
-            token1: String(spec.pair?.token1 ?? ''),
-          },
-          size: {
-            amount0: String(spec.size?.amount0 ?? ''),
-            amount1: String(spec.size?.amount1 ?? ''),
-          },
-          blocks: Array.isArray(spec.blocks)
-            ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
-            : [],
+      const specObj = {
+        specVersion: Number(spec.specVersion ?? 1),
+        pair: {
+          token0: String(spec.pair?.token0 ?? ''),
+          token1: String(spec.pair?.token1 ?? ''),
         },
-        shipOpts,
-      )
+        size: {
+          amount0: String(spec.size?.amount0 ?? ''),
+          amount1: String(spec.size?.amount1 ?? ''),
+        },
+        blocks: Array.isArray(spec.blocks)
+          ? (spec.blocks as Array<{ type: string; [k: string]: unknown }>)
+          : [],
+      }
+      // World ID human gate — opens the verify dialog when a proof is needed;
+      // the proof then rides to shipStrategy, which re-checks it server-side.
+      const gate = await worldGate.require(specObj, description)
+      if (!gate.ok) {
+        setShipResult({ ok: false, reason: gate.reason ?? 'World ID verification did not complete' })
+        return
+      }
+      // Ship opts: the post (description) + the author (session wallet, if
+      // connected) + the World ID proof — all optional, the agent re-validates
+      // and degrades honestly without them.
+      const shipOpts: { description?: string; author?: string; worldProof?: WorldProofPayload } = {
+        description,
+        worldProof: gate.proof,
+      }
+      if (sessionUser) shipOpts.author = sessionUser.address
+      const result = await shipStrategy(specObj, shipOpts)
       setShipResult(result)
     } catch (err) {
       setShipResult({ ok: false, reason: String(err).slice(0, 200) })
@@ -445,6 +457,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
           )}
         </section>
       </div>
+      {worldGate.dialog}
     </div>
   )
 }
