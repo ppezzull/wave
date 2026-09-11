@@ -2,7 +2,7 @@
 #   (a) EnsStrategyRouter  -> StrategyDeployed, Swapped
 #   (c) Aqua               -> Pushed, Pulled, Docked (committed capital + status)
 # (The ENS resolver source, and the Follow/Follower/NodeFollows entities it fed, are REMOVED —
-# follows were ENS text records and the ENS layer is gone. World AgentKit owns identity; it
+# follows were ENS text records and the ENS layer is gone. On-chain authorship owns identity; it
 # verifies humans but stores no follow edges. Capital IS the social signal now.)
 # Reorg safety comes from graph-node's NATIVE block-level revert (entity versions for a
 # reverted block are undone, then the block is re-indexed) — NOT from any id-overwrite trick.

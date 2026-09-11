@@ -21,7 +21,7 @@ on-chain 1inch SwapVM strategy, with human-in-the-loop approval. Built on
 | **deployStrategy** — compile → announce → **attribute** → approve → ship (one id) | ✅ fork-verified E2E |
 | **recompileAndShip** (retune arm) | ✅ exercised (autonomous retune ran live on Sepolia, `deea4f3`) |
 | **retune SSE stream** — `/api/stream/retune`, per-connection dedup | ✅ UI proxies it |
-| **World AgentKit gate** on `POST /mcp*` (AgentBook + libsql usage/nonce) | ✅ anonymous → 403; AgentBook registration pending (phone) |
+| **Ledger HITL approval** (`LEDGER_GATE`, hardware EIP-191 over the proposal hash) | ✅ backend seam; device pairing pending |
 | real clients (subgraph / aquaWrite / factoryWrite) | ✅ wired |
 | ENS layer (`register`/`resolveVerify`) | ❌ removed at continuity (`f441287`) — identity = wallet + on-chain authorship |
 
@@ -57,16 +57,16 @@ PORT=3002
 ```
 src/
 ├── schema.ts                       # StrategySpec — MIRRORS compiler/ast.ts (freeze)
-├── config/env.ts                   # ZAI_* + announcer validation + world/storage config
+├── config/env.ts                   # ZAI_* + announcer validation + ledger/storage config
 ├── mastra/
-│   ├── index.ts                    # registry: agents + workflows + storage + MCPServer + apiRoutes + AgentKit gate
+│   ├── index.ts                    # registry: agents + workflows + storage + MCPServer + apiRoutes
 │   ├── llm.ts                      # craftshost provider (auth + browser UA + think:false)
 │   ├── compose.agent.ts / agents.ts
 │   ├── routes/retune-stream.ts     # SSE feed the UI's /api/stream proxies
 │   └── workflows/                  # HITL: NL → compose → suspend → resume(approve)
 ├── mcp/{reads,writes,server}.ts    # read tools + shipStrategy (author + attribute)
 ├── policy/                         # pure retune/stop/remove policy — the most-tested module
-├── world/{gate,middleware,verify,storage}.ts   # AgentKit MCP gate (libsql usage + nonce)
+├── ledger/approval.ts                         # hardware HITL approval verification
 ├── actions/{deployStrategy,recompileAndShip}.ts
 ├── clients/{subgraph,aquaWrite,factoryWrite}.ts   # real viem write clients
 ├── monitor/graphDelta.ts           # subgraph delta source

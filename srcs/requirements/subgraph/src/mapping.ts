@@ -4,7 +4,7 @@
 //   Aqua              -> handlePushed, handlePulled, handleDocked (committed capital + status)
 //   StrategyFactory   -> handleStrategyAttributed (on-chain authorship — task #31)
 // (The ENS resolver source and its follow handlers are REMOVED with the ENS layer — follows
-// were ENS text records; World AgentKit owns identity now and stores no follow edges.)
+// were ENS text records; on-chain authorship owns identity now and stores no follow edges.)
 // Reorg safety = graph-node native block-level revert (entity versions for a reverted block
 // are undone, then re-indexed). Mutable aggregates (Strategy.*) are re-applied on re-index,
 // so cumulativeVolume* / lastSwapTimestamp stay exact.

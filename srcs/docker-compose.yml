@@ -38,7 +38,6 @@ services:
       # Also exposed at runtime for server components / route handlers.
       - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
       # Ledger Continuity: hardware approval env for the HITL gate
-      # verify proofs; the browser fetches all config via the worldPublishConfig
       # action, so no NEXT_PUBLIC_ vars are needed at build time.
       - LEDGER_GATE=${LEDGER_GATE:-}
       - LEDGER_APPROVER_ADDRESS=${LEDGER_APPROVER_ADDRESS:-}

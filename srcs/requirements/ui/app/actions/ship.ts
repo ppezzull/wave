@@ -17,7 +17,7 @@
 // agent; /api/mcp/wave/:id returns 404 on the installed Mastra). The tool input is wrapped
 // under `data` per Mastra's tool-execute body shape.
 //
-// REMOVED: World ID publish gate (the Orb requirement could not be met).
+// Hardware/wallet approval gate (Ledger Continuity): see ShipOptions.approval.
 // sybil surface, so a ship requires a proof of unique human — enforced HERE,
 // server-side, never in the browser. The signal is re-derived from the exact
 

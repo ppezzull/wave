@@ -1,6 +1,6 @@
 specVersion: 1.3.0
 # Production wave subgraph. Two data sources (the ENS resolver source is REMOVED with the ENS
-# layer — follows were ENS text records; identity is World AgentKit's job now, and it stores no
+# layer — follows were ENS text records; identity is on-chain authorship's job now, and it stores no
 # follow edges):
 #   (a) EnsStrategyRouter (Flaviano's deploy)   -> StrategyDeployed, Swapped
 #   (c) Aqua (1inch balance protocol, constant) -> Pushed, Pulled, Docked  (committed capital + status)
