@@ -2,9 +2,9 @@
 
 > **A social market for natural-language on-chain strategies, built on 1inch SwapVM.**
 
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.30-363636)](https://soliditylang.org/) [![Foundry](https://img.shields.io/badge/Foundry-SwapVM-5C4EC2)](https://book.getfoundry.sh/) [![1inch](https://img.shields.io/badge/1inch-Aqua-079FE0)](https://1inch.ai/) [![The Graph](https://img.shields.io/badge/The_Graph-subgraph-00D4C6)](https://thegraph.com/) [![World](https://img.shields.io/badge/World-AgentKit-1B54BC)](https://world.org/) [![Mastra](https://img.shields.io/badge/Mastra-agent-6D28D9)](https://mastra.ai/) [![z.ai](https://img.shields.io/badge/z.ai-LLM-1E88E5)](https://z.ai/) [![Next.js](https://img.shields.io/badge/Next.js-SSR-000000)](https://nextjs.org/) [![Privy](https://img.shields.io/badge/Privy-auth-5B8DEF)](https://www.privy.io/) [![Sepolia](https://img.shields.io/badge/Network-Sepolia-7B3FE4)](https://sepolia.dev/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.30-363636)](https://soliditylang.org/) [![Foundry](https://img.shields.io/badge/Foundry-SwapVM-5C4EC2)](https://book.getfoundry.sh/) [![1inch](https://img.shields.io/badge/1inch-Aqua-079FE0)](https://1inch.ai/) [![The Graph](https://img.shields.io/badge/The_Graph-subgraph-00D4C6)](https://thegraph.com/) [![Ledger](https://img.shields.io/badge/Ledger-DMK-1428A0)](https://www.ledger.com/) [![Mastra](https://img.shields.io/badge/Mastra-agent-6D28D9)](https://mastra.ai/) [![z.ai](https://img.shields.io/badge/z.ai-LLM-1E88E5)](https://z.ai/) [![Next.js](https://img.shields.io/badge/Next.js-SSR-000000)](https://nextjs.org/) [![Privy](https://img.shields.io/badge/Privy-auth-5B8DEF)](https://www.privy.io/) [![Sepolia](https://img.shields.io/badge/Network-Sepolia-7B3FE4)](https://sepolia.dev/)
 
-**Built for [ETHGlobal Lisboa 2026](https://ethglobal.com/events/lisbon2026) (Classic "from scratch" track) — continued at [ETHOnline 2026](https://ethglobal.com/events/ethonline) (Continuity track): on-chain authorship, real profiles/threads, a live retune stream, and the World AgentKit trust layer.**
+**Built for [ETHGlobal Lisboa 2026](https://ethglobal.com/events/lisbon2026) (Classic "from scratch" track) — continued at [ETHOnline 2026](https://ethglobal.com/events/ethonline) (Continuity track): on-chain authorship, real profiles/threads, a live retune stream, and a Ledger hardware trust layer.**
 
 ---
 
@@ -42,7 +42,7 @@ graph TB
     L4["L4 · EXECUTION — SwapVM bytecode · verified program op-len-args · custom opcodes: _inventorySkew2D, _oracleGuard2D"]
     L3["L3 · SETTLEMENT — 1inch Aqua on Sepolia · live order · liquidity stays in-wallet · pull/push"]
     L2["L2 · DATA — The Graph subgraph · indexes Swapped + Pushed + StrategyAttributed · retune signal + on-card stats + author"]
-    L1["L1 · IDENTITY/TRUST — on-chain authorship (StrategyFactory.attribute) + World AgentKit · verified humans publish · human-backed agents on MCP"
+    L1["L1 · IDENTITY/TRUST — on-chain authorship (StrategyFactory.attribute) + Ledger DMK · hardware- or wallet-signed approval on every ship"
 
     L7 --> L6
     L6 --> L5
@@ -62,7 +62,7 @@ graph TB
 | **L4** Execution | run the program | SwapVM + 2 custom opcodes | `quote()` equals `swap()`, by VM design |
 | **L3** Settlement | live order | 1inch Aqua on Sepolia | custody never leaves the maker wallet |
 | **L2** Data | retune signal + authorship | The Graph subgraph (decentralized network; graph-node fallback) | on-chain truth, pure event-indexing |
-| **L1** Identity/Trust | trust root | `StrategyFactory.attribute` (on-chain author) + World AgentKit (publish gate, MCP gate) | every strategy records who wrote it; publishing proves a human; agent calls prove a human-backed agent |
+| **L1** Identity/Trust | trust root | `StrategyFactory.attribute` (on-chain author) + Ledger DMK / session-wallet approval gate | every strategy records who wrote it; shipping proves a signature over the exact strategy — hardware when you have it, your wallet when you don't |
 
 ---
 
@@ -134,13 +134,13 @@ These are trust-free VM instructions, not `_extruction` external calls (which 1i
 
 ## Bounties Implementation
 
-ETHOnline 2026 prize picks (Continuity track): **1inch Aqua App + The Graph AI Use Case + World AgentKit**. (ENS was dropped from the prize pitch at continuity — the integration was removed with it; see [ETHONLINE-2026-CONTINUITY.md](./docs/strategy/ETHONLINE-2026-CONTINUITY.md).)
+ETHOnline 2026 prize picks (Continuity track): **1inch Aqua App + The Graph AI Use Case + Ledger Continuity**. (ENS was dropped at continuity; World AgentKit followed when the Orb requirement proved unmeetable — see [ETHONLINE-2026-CONTINUITY.md](./docs/strategy/ETHONLINE-2026-CONTINUITY.md).)
 
 | Sponsor | Priority | Why |
 |---|---|---|
 | [1inch](./docs/sponsors/1inch/OVERVIEW.md) | P0 | Chosen core — SwapVM/Aqua. Custom-opcode recipe in [SWAPVM-INTERNALS.md](./docs/sponsors/1inch/SWAPVM-INTERNALS.md) |
 | [The Graph](./docs/sponsors/the-graph/OVERVIEW.md) | P0 | Chosen data layer — subgraph indexing `Swapped`/`Pushed`/`StrategyAttributed` drives the live retune signal and the author-keyed social layer |
-| [World](https://world.org/) | P0 (new at ETHOnline) | Trust layer — AgentKit gates the agent MCP surface; World ID gates publishing |
+| [Ledger](https://www.ledger.com/) | P0 (new at ETHOnline) | Trust layer — hardware approval on the HITL gate; Key Ring custody for agent keys |
 
 ### 1inch — SwapVM + Aqua
 
@@ -150,9 +150,14 @@ The core VM and settlement layer, extended with 2 custom opcodes, settling live 
 
 A subgraph indexes the router (`StrategyDeployed`, `StrategyDescribed`, `Swapped`), Aqua (`Pushed`/`Pulled`/`Docked` — committed capital) and the factory (`StrategyAttributed` — authorship). Every card field comes from here: swaps, hashes, volume, fills, capital, author, and the retune signal. Deployed to **Studio** (v0.0.5 live; v0.0.6 with the author field lands with the live redeploy); self-hosted `graph-node` is the local-dev/fallback path.
 
-### World — every actor proves its nature
+### Ledger — the trust is in your pocket
 
-The anti-sybil story: **humans** verify with World ID at the compose→ship publish gate (signal bound to the exact payload, one-shot nullifier); **agents** prove a human backs them via AgentBook before touching the MCP surface (`POST /mcp*` requires a signed AgentKit request — anonymous callers get 403). The Settings trust panel shows both states live. Feedback log: [FEEDBACK-WORLD.md](./FEEDBACK-WORLD.md).
+A trust ladder on the destructive surface (ships and HITL approvals), keyed to the exact strategy (`sha256(canonicalJson(spec))` embedded in the signed message — a signature for one strategy never unlocks another):
+- **`device` mode** — the designated Ledger Clear-Signs the approval message (DMK + SignerEth in the browser); the agent refuses to run announce→attribute→approve→ship without it
+- **`session` mode** — no hardware? The session wallet signs the same message; the agent accepts only the declared author's signature. Still a cryptographic approval — never a button click
+- **Key Ring custody** (in progress) — the agent's announcer key moves off plaintext `.env` into `wallet-cli ring` (LKRP-backed, encrypted under the device)
+
+Autonomous R1–R4 retunes stay zero-click (the Graph invariant) — the gate protects only where funds first move. Feedback log: [LEDGER-FEEDBACK.md](./LEDGER-FEEDBACK.md).
 
 ---
 
@@ -163,7 +168,7 @@ The anti-sybil story: **humans** verify with World ID at the compose→ship publ
 - **TypeScript** — deterministic compiler (Zod to AST to IR to bytecode) + agent (viem, `@1inch/aqua-sdk`).
 - **Next.js** (App Router, SSR) + React — split-screen UI + safety card; `getFeed()` SSR from subgraph; profiles `/u/<address>`, threads `/chat`, `/api/compile` + `/api/stream` (SSE) — the `ui` package is named `frontend`.
 - **The Graph** — subgraph (AssemblyScript mapping, GraphQL) on Studio, with self-hosted `graph-node` fallback; author-keyed queries power profiles/threads.
-- **World AgentKit + IDKit** — publish gate (verified humans) and MCP gate (human-backed agents), with AgentBook resolution in the trust panel.
+- **Ledger DMK + session-wallet approval** — the device-signing half in the browser, the trust ladder panel in Settings, and the Key Ring seam for agent-key custody.
 - **Mastra** + **z.ai** + a **custom MCP server** — the agent runs in its own container; intent parsing, the autonomous retune loop, the retune SSE stream. See [AGENT.md](./docs/strategy/AGENT.md).
 - **Privy** — wallet auth on Sepolia (id = `0x...`; the wallet address is the profile key).
 
@@ -180,7 +185,7 @@ The anti-sybil story: **humans** verify with World ID at the compose→ship publ
 - **X-style social feed** — public descriptions (the literal compiler input, stored on-chain), trade-against. *Likes are capital* — the card already shows committed volume and fills.
 - **On-chain authorship + real profiles** — `StrategyFactory.attribute` records who shipped each strategy; `/u/<wallet>` is an address-keyed subgraph query with real stats, and `/chat` lists your shipped strategies as threads. Never a fabricated username.
 - **Live agent stream** — the monitor's autonomous actions (retune/stop/escalations) stream to the UI over SSE, deduped per connection.
-- **World trust layer** — verified humans publish (World ID proof bound to the exact payload, one-shot); human-backed agents call the MCP surface (AgentBook); anonymous bots get 403.
+- **Signature approval gate** — hardware (Ledger) or wallet-signed approval over the exact strategy hash before anything ships; refuses closed with zero writes.
 - **Program-hash tamper-check** — every card proves the on-chain program matches its recorded hash.
 
 ---
@@ -283,7 +288,7 @@ cd srcs && docker compose up --build
 - **The post lives on-chain** — `StrategyDescribed` carries the description (the literal compiler input) in the announce tx.
 - **One-id ship pipeline** — announce → attribute → approve → dock, all keyed on `keccak(wrapped abi.encode(order)) = SwapVM.hash = the Aqua dock hash`; a duplicate program re-ship reverts honestly instead of stranding liquidity.
 - **Live retune stream** — agent `/api/stream/retune` SSE + UI proxy with per-connection dedup.
-- **World AgentKit trust layer** — publish gate (World ID, signal-bound one-shot proofs) + MCP gate (AgentBook human-backed agents) + Settings trust panel + [FEEDBACK-WORLD.md](./FEEDBACK-WORLD.md).
+- **Ledger trust layer** — approval gate on both ship paths (device or session kind, hash-bound, fails closed) + Settings trust panel with tap-free pairing + [LEDGER-FEEDBACK.md](./LEDGER-FEEDBACK.md).
 - **Local-first dev stack** — anvil Sepolia fork + rpc-shim + graph-node + fake-Privy login: the entire product demos on a laptop. Runbook: [DEPLOY-LIVE-TESTNET.md](./docs/DEPLOY-LIVE-TESTNET.md) for the live redeploy.
 - **Test map** — swap-vm 755 · agent 115 · compiler 54 · frontend 24 · subgraph live invariants (`pnpm test:local`).
 
@@ -299,7 +304,7 @@ Built by a 3-dev team for ETHGlobal Lisboa 2026, Classic "from scratch" track.
 
 - [ppezzull](https://github.com/ppezzull/) — on-chain / SwapVM / deploy
 - [fcarlucc](https://github.com/fcarlucc/) — on-chain / SwapVM / opcodes
-- Flavio — compiler + agent + World AgentKit
+- Flavio — compiler + agent + Ledger seam
 
 ---
 

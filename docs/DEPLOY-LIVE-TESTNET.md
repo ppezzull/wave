@@ -23,9 +23,9 @@ contract bytecode the deploy scripts produce):
 - **Deploy scripts exist** — `DeployEnsStrategyRouter.s.sol`,
   `DeployStrategyFactory.s.sol` (+ `DeployAqua` if ever needed) in
   `swap-vm/script/`.
-- **World env plumbing** — `srcs/docker-compose.yml` passes
-  `WORLD_SIGNING_KEY/APP_ID/RP_ID` to the frontend container (no
-  NEXT_PUBLIC needed).
+- **Ledger env plumbing** — `srcs/docker-compose.yml` passes
+  `LEDGER_GATE/LEDGER_APPROVER_ADDRESS` to BOTH containers (runtime env via
+  the `approvalGateConfig` server action — no NEXT_PUBLIC rebuild coupling).
 - **RPC requirement** — the live RPC must support `eth_getLogs` (lesson G1:
   silent subgraph starvation otherwise). Use a real provider, not a restricted
   gateway.
@@ -67,39 +67,32 @@ the fork). First live ship can use small amounts.
    `agent/.env.example`, `docs/submission/ETHGLOBAL.md`.
 6. [host] Frontend + agent: either run locally against live RPC + Studio
    (zero hosting work), or revive the Dokploy deploy (portal URL was 522 —
-   also blocks the World app review re-submission) and set the World env on
-   the container + `WORLD_IDKIT_ENV=staging` for Sandbox verification.
-7. [E2E] One real ship: compose → World verify (phone) → on-chain → Studio
+   also blocks the Privy app review re-submission) and set
+   `LEDGER_GATE=device` + `LEDGER_APPROVER_ADDRESS` on both containers.
+   WebHID requires HTTPS — the Ledger browser transport dies on plain HTTP.
+7. [E2E] One real ship: compose → Ledger approval (device) → on-chain → Studio
    row with author + capital + description → profile renders it. Record it.
 
 Owner rule recap: new router/factory owner = funded deployer EOA; the agent's
 announcer key must derive to the SAME address or every onlyOwner call fails
 (the agent validates this at boot via `EXPECTED_ANNOUNCER_OWNER`).
 
-## World — remaining work (Flavio's handoff, as of 11 Sep)
+## Ledger — pairing + remaining work (device in hand)
 
-The code is merged and local-verified (gate 403s anonymous callers, publish
-gate passes via dev fixture, trust panel renders honest states). What is left
-is the phone-gated, non-local leg — in order:
+The approval gate is built and session-mode-verified on the fork (refuses
+without a signature, ships with the author's). What's left is the device leg:
 
-1. **AgentBook registration** of the two agent wallets — publisher
-   `0xf4AF4E8f4F49032257D9C1e3F1d9c5324a040620`, retuner
-   `0x92b4747d624253f1B7598A996bb44855d8008017` (keys already in `.env`,
-   perms 600): `npx @worldcoin/agentkit-cli register <address>` + World App
-   verify on a phone, once per wallet. Then `agentkit-cli status` + the
-   real-client e2e smoke the Step-2 notes deferred until registration.
-2. **One real Sandbox App verification** through the compose→ship publish
-   gate (World App on the phone, `WORLD_IDKIT_ENV=staging`) — this closes
-   the dev-fixture gap; until then local passes don't prove the real path.
-3. **`FEEDBACK-WORLD.md` §3** — fill in the CLI `register`/`status` and
-   Portal flow findings from that run (the bounty's mandatory feedback doc;
-   §1/§2/§4 already carry real findings).
-4. **Developer Portal re-submission** — the app review was withdrawn when
-   the hosted URL returned 522; re-submit once the deploy is revived
-   (app `app_d088…13e` / `rp_6d0…4de`, action `proofofhuman` — all live).
-5. *Above the bounty floor, if time:* reads/writes tiering + x402 fallback
-   on the MCP gate (remaining Step-2 scope) and the Selfie Check fast-follow
-   (Phase 1bis, separate pool).
+1. **Pair** — `npm i -g @ledgerhq/wallet-cli` → `wallet-cli account discover
+   ethereum` (or the Settings → "Pair device" button) → copy the device's ETH
+   address into `LEDGER_APPROVER_ADDRESS` → set `LEDGER_GATE=device`.
+2. **E2E** — ship from /compose: the panel walks connect → app-open → sign;
+   the device screen shows `wave HITL approval [<hash>] — <description>`.
+3. **Key Ring custody** — `wallet-cli ring init` → `ring encrypt` the
+   announcer key; agent boot seam via `LEDGER_RING_KEY` (device must be
+   present to decrypt).
+4. **≤5-min walkthrough video** (bounty requirement, deadline **Sep 13**):
+   bare click refused → device approves the exact strategy → session-mode
+   fallback → Key Ring decrypt at boot.
 
-Kill-switches while testing: `WORLD_MCP_GATE=off` (agent) and
-`WORLD_PUBLISH_GATE=off` / `WORLD_ID_DEV_ALLOW=on` (frontend).
+Kill-switch while testing: `LEDGER_GATE=off` on both services (ships behave
+exactly as pre-gate).

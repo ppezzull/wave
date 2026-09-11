@@ -47,7 +47,7 @@ One Mastra `Workflow` wires `monitor → {retune | gate}`. When `monitorAgent` d
 
 ## The MCP tool surface
 
-> **Status (ETHOnline, 11 Sep 2026):** implemented — `srcs/requirements/agent/src/mcp/{server,reads,writes}.ts` are live, plus the HTTP tools the UI calls (`/api/tools/<tool>/execute`). POSTs on `/mcp*` pass through the **World AgentKit gate** (`src/world/`): parse → validate → signature → AgentBook resolution; anonymous callers get `403 x-agentkit-error: agentkit-required` (kill-switch `WORLD_MCP_GATE=off`). The reads/writes tiering + x402 fallback is the remaining Step-2 work.
+> **Status (ETHOnline, 12 Sep 2026):** implemented — `srcs/requirements/agent/src/mcp/{server,reads,writes}.ts` are live, plus the HTTP tools the UI calls (`/api/tools/<tool>/execute`). The trust layer is the **approval gate** (`src/ledger/approval.ts`): ships under `LEDGER_GATE=session|device` need a fresh EIP-191 signature over the canonical action hash — device mode pins the Ledger, session mode pins the author. The MCP surface itself is open reads; R1–R4 retunes stay zero-click.
 
 Tools are registered in `srcs/requirements/agent/src/mcp/server.ts` via Mastra's `MCPServer`. **No business logic lives in the MCP layer** — policy lives in `src/policy/` as pure functions, testable without the LLM. Naming: tools are `mcp__wave__<tool>`.
 

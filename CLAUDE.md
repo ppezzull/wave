@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) working in this repository.
 
 **wave** — a social market for natural-language on-chain strategies, built on 1inch **SwapVM**. Built at **ETHGlobal Lisboa 2026** (Classic "from scratch" track), continued at **ETHOnline 2026** (Sep 4–16, Continuity track). The Solidity protocol lives in `srcs/requirements/swap-vm/`; `docs/` holds sponsor research; `docs/review/` holds AI-assisted prep analysis.
 
-- **Core stack:** 1inch SwapVM/Aqua (P0), The Graph (data), on-chain authorship via `StrategyFactory.attribute` + World AgentKit (trust — replaced ENS at continuity, `f441287`).
+- **Core stack:** 1inch SwapVM/Aqua (P0), The Graph (data), on-chain authorship via `StrategyFactory.attribute` + Ledger DMK approval gate (trust — ENS removed at continuity, World removed when the Orb requirement proved unmeetable).
 - **Events:** Lisboa build Jul 24–26 2026 · ETHOnline window Sep 4–16 2026 (submission as Continuity).
 
 ## ⚠️ Classic Track compliance — the sharpest risk

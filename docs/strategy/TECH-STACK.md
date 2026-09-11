@@ -15,7 +15,7 @@ block-beta
     L4["L4 · On-chain (P1)\nSolidity 0.8.30 / Foundry\nSwapVM + 2 custom opcodes + StrategyFactory"]
     L3["L3 · Settlement\nAqua (1inch) — ship/dock/pull/push\nliquidity stays in-wallet"]
     L2["L2 · Data (P2)\nThe Graph — first-party subgraph\n(decentralized network; graph-node on Sepolia RPC fb)"]
-    L1["L1 · Identity/Trust\nStrategyFactory.attribute (on-chain author)\nWorld AgentKit — verified humans · human-backed agents"]
+    L1["L1 · Identity/Trust\nStrategyFactory.attribute (on-chain author)\nLedger DMK — hardware/wallet approval on ships"]
     L7 --> L6 --> L5 --> L4 --> L3
     L2 -.-> L6
     L1 -.-> L3
@@ -58,7 +58,7 @@ All demo runs target **live Sepolia** — the chain does the real work; the UI i
 
 ### L1 — Identity/Trust · on-chain authorship + World (updated at ETHOnline)
 - **`StrategyFactory.attribute(strategyId, author)`** (onlyOwner, append-only, `StrategyAttributed`) — every shipped strategy records its author on-chain; the subgraph indexes it as `Strategy.author` and every profile/thread is an address-keyed query. Replaced the ENS identity layer (removed `f441287`).
-- **World AgentKit + IDKit** — World ID proof at the compose→ship publish gate (signal = sha256 of the canonical payload, one-shot nullifier), AgentBook-gated MCP surface, trust panel in Settings.
+- **Ledger DMK + approval gate** — `LEDGER_GATE` trust ladder on every ship: `device` = the pinned Ledger Clear-Signs the hash-bound message (DMK + SignerEth in the browser); `session` = the author's wallet signs the same message. Fails closed, zero writes. R1–R4 retunes stay zero-click (Graph invariant).
 
 ## Language mix
 
