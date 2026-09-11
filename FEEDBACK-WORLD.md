@@ -63,10 +63,17 @@ human-approval gates for high-risk autonomous actions.
 
 ## 3. Sandbox App states, proof flows, test users, errors, and edge cases
 
-- Access requested **2026-09-09** (form) — this section fills as soon as we
-  get in. Planned coverage per the docs: Hot / Cold / Semi-cold states,
-  cross-device QR with proof returning to the web session, test-user creation,
-  invite-code handling, and the documented iOS semi-cold limitation.
+- Access requested **2026-09-09** (form) — **arrived 2026-09-11** as a Firebase
+  App Distribution invitation for the Android sandbox build
+  (`org.world.id.sandbox`, developer contact murph.finnicum@toolsforhumanity.com,
+  valid 30 days). Our only phone is an iPhone: the Android invite can't install
+  there, and the iOS sandbox is a separate **TestFlight** invite the docs
+  mention only in passing — we had to discover the platform split by receiving
+  the wrong-platform invite first. (Ask your World contact for the TestFlight
+  link if you are iPhone-first.)
+- Coverage as we get in: Hot / Cold / Semi-cold states, cross-device QR with
+  proof returning to the web session, test-user creation, invite-code handling,
+  the documented iOS semi-cold limitation.
 
 ## 4. What was confusing, missing, broken, or hard to test
 
@@ -119,6 +126,18 @@ human-approval gates for high-risk autonomous actions.
   widget config union is `'production' | 'staging' | 'sandbox'`, but the docs
   pages describe just staging/production; sandbox appears solely in the TS
   definitions. We default to staging and flip at submission time.
+- **2026-09-11 — AgentBook human-backing hard-requires Orb.** The register
+  verification request (`world.org/verify?t=wld&…`) is refused by the World App
+  with "AgentKit requires the user to be Orb-verified" even for a
+  **passport-verified** account — the passport credential does not satisfy it,
+  and there is no fallback. For a fully-online hackathon with no Orb access in
+  our region this makes real registration geographically gated. (Registration
+  attempt itself worked fine up to that point: nonce lookup + verification
+  request + deep link all correct.)
+- **2026-09-11 — the verify deep-link is a silent no-op for unverified
+  accounts.** With a fresh, unverified World App the same link opens the app
+  and does… nothing: no confirm flow, no error, no onboarding hint. We only
+  understood why after checking verification status manually.
 - (running list — appended as we go.)
 
 ---
