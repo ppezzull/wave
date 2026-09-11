@@ -153,6 +153,16 @@ Riga per i judge: *"su wave la fiducia è gratis solo se chi agisce è un umano 
 
 **Vincoli/rischi:** feature flag da email day-0 (`developers@toolsforhumanity.com`) — se tarda, si taglia senza dolore e il ritardo va nella feedback doc · pool APERTO (si compete anche coi from-scratch) · secondo nella lista di taglio (prima il layer World ID utenti-web).
 
+## Fase 1ter — Ledger Continuity ($1.500: 1° $1.000 / 2° $500) — ⚠️ **submission chiude il 13 set** (non il 16!)
+
+Fit naturale di due esempi citati testualmente nel bounty: *"put a device confirmation in front of an action your product already performs"* (= il nostro cancello HITL: oggi `resume({approved: boolean})` senza firma) e *"make wallet-cli ring the key backend for the .env"* (= chiavi agenti fuori da `.env`, cifrate dal seed Ledger).
+
+- **Direzione A — device confirmation sul cancello HITL**: `approved:true` richiede firma EIP-191 fatta SUL device (DMK + SignerEth, Clear Signing col testo leggibile), verificata dal backend contro `LEDGER_APPROVER_ADDRESS`; messaggio bindato all'azione (hash strategy/retune) = anti-replay. **La verifica backend si scrive e testa senza device** (chiave software nei test; l'indirizzo vero arriva col device).
+- **Direzione B — Key Ring per i segreti**: `wallet-cli ring init` → `ring encrypt` per le chiavi agente; loader `.env` → ring con fallback.
+- Regola di conflitto con Selfie Check: se il flag World arriva → il beat del cancello va a Selfie e Ledger fa B (+A leggera); altrimenti Ledger prende A.
+- **Stato (11 set sera)**: skills DMK committate (`.agents/skills/`), `LEDGER-FEEDBACK.md` aperta, ⚠️ **dispositivo fisico a casa del collega — recuperarlo entro il 12** (senza device: niente demo, il video Ledger chiude il 13).
+- Requisiti submission: repo/PR + README, **video ≤5 min**, DX feedback doc ("vale quanto il codice").
+
 ## Fase 2 — The Graph (approfondimento)
 
 - ~~Retune zero-click end-to-end~~ **FATTO** — eseguito live su Sepolia (`deea4f3`, G2). Resta da curare la beating demo: evidence log che cita il `Swapped` entity ID (*"data-caused, not time-triggered"* — ciò che il pool AI premia).
