@@ -26,7 +26,7 @@ services:
         - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
     restart: unless-stopped
     ports:
-      - "3005:3000"
+      - "3009:3000"
     networks:
       - dokploy-network
     environment:
