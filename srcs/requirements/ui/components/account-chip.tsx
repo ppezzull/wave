@@ -5,7 +5,7 @@
 // Identity precedence (never fabricated):
 //   1. Privy connected wallet (real) — resolved through the identity seam
 //      (lib/identity.ts): truncated-address handle, verifiedHuman false until
-//      World AgentKit lands; logout via ConnectButton.
+//      a trust resolver lands; logout via ConnectButton.
 //   2. The server `currentUser` fallback (mock = alice; live stub = empty).
 //   3. If neither (live + disconnected) → show ConnectButton.
 //
@@ -84,8 +84,8 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
           <div className="flex flex-col min-w-0 leading-tight">
             <span className="font-mono text-[15px] font-semibold text-wave-text truncate flex items-center gap-1">
               {name}
-              {/* World "verified human" — renders nothing until AgentKit flips
-                  verifiedHuman (the client-visible World distinction). */}
+              {/* "Verified human" renders nothing until a trust resolver
+                  flips verifiedHuman (Ledger-backed, future). */}
               {sessionUser?.verifiedHuman && (
                 <BadgeCheck
                   size={14}

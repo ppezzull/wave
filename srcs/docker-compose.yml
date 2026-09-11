@@ -37,16 +37,11 @@ services:
       - WAVE_USE_MOCK=${WAVE_USE_MOCK:-false}
       # Also exposed at runtime for server components / route handlers.
       - NEXT_PUBLIC_PRIVY_APP_ID=${NEXT_PUBLIC_PRIVY_APP_ID:-}
-      # World ID publish gate (Step 5): server actions sign the RP context and
+      # Ledger Continuity: hardware approval env for the HITL gate
       # verify proofs; the browser fetches all config via the worldPublishConfig
       # action, so no NEXT_PUBLIC_ vars are needed at build time.
-      - WORLD_APP_ID=${WORLD_APP_ID:-}
-      - WORLD_RP_ID=${WORLD_RP_ID:-}
-      - WORLD_SIGNING_KEY=${WORLD_SIGNING_KEY:-}
-      - WORLD_PUBLISH_GATE=${WORLD_PUBLISH_GATE:-on}
-      - WORLD_PUBLISH_ACTION=${WORLD_PUBLISH_ACTION:-proofofhuman}
-      - WORLD_ID_DEV_ALLOW=${WORLD_ID_DEV_ALLOW:-}
-      - WORLD_IDKIT_ENV=${WORLD_IDKIT_ENV:-staging}
+      - LEDGER_GATE=${LEDGER_GATE:-}
+      - LEDGER_APPROVER_ADDRESS=${LEDGER_APPROVER_ADDRESS:-}
 
   agent:
     build:

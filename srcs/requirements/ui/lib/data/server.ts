@@ -9,7 +9,7 @@
 // Author identity is on-chain now (task #31): the factory's StrategyAttributed
 // event gives every strategy an author ADDRESS, which keys profiles (/u/<addr>),
 // threads (/chat) and the authorHandle on cards. Richer identity (name, bio,
-// verified-human) is the World AgentKit seam — lib/identity.ts is the plug-in
+// verified-human) is the trust seam — lib/identity.ts is the plug-in
 // point, empty here is the truth, never fabricated.
 import 'server-only'
 import { subgraph, type SubgraphStrategy } from '../clients/subgraph'

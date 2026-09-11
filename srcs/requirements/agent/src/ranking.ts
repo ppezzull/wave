@@ -3,8 +3,8 @@
 //   rank = returnPct × recencyDecay
 //
 // (Historical: the formula's third term, the (1 + log2(1 + followers)) follower
-// nudge, is GONE — follows were an ENS text-record write and ENS is removed; World
-// AgentKit verifies identity but stores no follow edges. Capital IS the social
+// nudge, is GONE — follows were an ENS text-record write and ENS is removed; the
+// trust layer verifies identity but stores no follow edges. Capital IS the social
 // signal now.)
 //
 // This is the CONSUMER layer (UI getFeed() + agent feed query), NOT the subgraph

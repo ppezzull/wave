@@ -8,14 +8,11 @@
 // account chip read this so identity comes from the actual connected wallet,
 // never a fabricated value.
 //
-// World AgentKit (Fase 1, Step 4): the seam's offline half (truncated handle)
-// is immediate; verifiedHuman/humanId resolve asynchronously through the
-// getWorldIdentity server action (AgentBook lookup, server-only). The badge
-// appears once resolution lands — graceful, no hydration flash.
-import { useEffect, useState } from 'react'
+// Trust layer: Ledger Continuity — hardware approval lives on the agent's HITL
+// gate (LEDGER_GATE), not on the session identity. The seam stays offline:
+// truncated handle, verifiedHuman false until a trust resolver returns.
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { identityFromAddress, type Identity } from '@/lib/identity'
-import { getWorldIdentity } from '@/app/actions/identity'
 
 /** The connected wallet's identity via the seam. */
 export type SessionUser = Identity
@@ -29,31 +26,11 @@ export function useSessionUser(): {
   const { wallets } = useWallets()
   const connected = wallets[0]?.address
 
-  const [world, setWorld] = useState<Pick<Identity, 'verifiedHuman' | 'humanId'> | null>(null)
-
-  useEffect(() => {
-    if (!connected) {
-      setWorld(null)
-      return
-    }
-    let live = true
-    getWorldIdentity(connected)
-      .then((r) => {
-        if (live) setWorld({ verifiedHuman: r.verifiedHuman, humanId: r.humanId })
-      })
-      .catch(() => {
-        /* resolver never throws in practice; a hard failure keeps offline identity */
-      })
-    return () => {
-      live = false
-    }
-  }, [connected])
-
   if (!ready || !authenticated || !connected) {
     return { sessionUser: null, ready, authenticated }
   }
   return {
-    sessionUser: { ...identityFromAddress(connected), ...(world ?? {}) },
+    sessionUser: identityFromAddress(connected),
     ready,
     authenticated,
   }

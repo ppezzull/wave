@@ -3,7 +3,7 @@
 // stop/remove), which land as teammates unblock. Registered so Studio shows the full
 // 4-agent roster (the "completo" story) and so the workflow can name them. Spec:
 // docs/strategy/AGENT.md (Subagent decomposition). The ENS agent is gone with the ENS
-// layer — identity is World AgentKit's job now.
+// layer — identity is the trust seam's job now (Ledger Continuity).
 import { Agent } from "@mastra/core/agent";
 import { gemmaModel } from "./llm.js";
 

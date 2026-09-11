@@ -14,7 +14,7 @@
 // forever. announceStrategy (onlyOwner) MUST precede aqua.ship.
 //
 // The router's announceStrategy(Order, bytes32) second arg was born as an ENS namehash;
-// ENS is gone (World AgentKit owns identity now) and we pass the strategyId itself as the
+// ENS is gone (identity lives in the trust seam now) and we pass the strategyId itself as the
 // opaque bytes32 id. The deployed contract is untouched — bytes32 is bytes32.
 //
 // ⚠️ SIGNING MODEL (event demo): the agent signs with server-side .env keys
@@ -113,7 +113,7 @@ export interface DeployResult {
   strategyId?: Hex;
   programHash?: Hex;
   /** Display handle derived from the program hash (e.g. "s-fab534ee"). Identity-agnostic:
-   * the World AgentKit seam can later map this to a human-readable name. */
+   * a trust resolver can later map this to a human-readable name. */
   handle?: string;
   announceTxHash?: Hash;
   /** StrategyFactory.attribute tx — present only when an author was given AND attribution
@@ -370,7 +370,7 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     const amount1 = parseUnits(a1, decimals1);
 
     // 5. announce (onlyOwner) — MUST precede ship. The bytes32 id is the strategyId itself
-    // (opaque to the router; born as an ENS namehash, identity now lives in World AgentKit).
+    // (opaque to the router; born as an ENS namehash, identity now lives in the trust seam).
     // With a description, the described overload carries the post (StrategyDescribed) in the
     // same tx — the subgraph upserts it onto the row this call just created.
     announceTxHash = await announce(order, strategyId, input.description);

@@ -5,7 +5,7 @@
 // resolver + Aqua). We query ONLY the identity-free fields (id, programHash,
 // volumes, capital) so this client works against BOTH v0.0.4 and the upcoming
 // ENS-free deploy (the Follow/Follower entities and Strategy.ensNode go away
-// with the ENS layer — World AgentKit owns identity now).
+// with the ENS layer — the trust seam owns identity now).
 //
 // NEVER return fabricated data. The empty/not-found paths are the truth.
 import { GraphQLClient, ClientError } from "graphql-request";

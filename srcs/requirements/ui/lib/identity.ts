@@ -5,8 +5,8 @@
 // seam is the stable surface every consumer codes against so the replacement
 // provider lands in ONE function, not across the components.
 //
-// AGENTKIT PLUG-IN POINT: swap identityFromAddress's body for a World
-// AgentBook lookup — resolve handle + World ID verification from the address
+// PLUG-IN POINT: swap identityFromAddress's body for a trust resolver
+// (e.g. a Ledger-backed attestation) when one exists
 // (server-side, cached) instead of the truncation fallback. Until then the
 // seam stays pure and offline: truncated address, verifiedHuman false — never
 // a fabricated name, never a fabricated verification.
@@ -15,9 +15,9 @@ export interface Identity {
   address: string
   /** Display handle — truncated address "0x1234…abcd" (no name source yet). */
   handle: string
-  /** World ID "verified human" — true when AgentBook resolves the address. */
+  /** Hardware-backed "verified human" — false until a trust resolver exists. */
   verifiedHuman: boolean
-  /** AgentBook anonymous human identifier (null when unverified/offline). */
+  /** Anonymous human identifier from a trust resolver (null when none). */
   humanId?: string | null
 }
 

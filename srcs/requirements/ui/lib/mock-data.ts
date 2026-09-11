@@ -4,7 +4,7 @@
 // swapping mock -> real later is a drop-in change:
 //   1. The Graph subgraph (Strategy, Swap entities)
 //   2. The identity seam (lib/identity.ts) — author handles are plain display
-//      strings here; live attribution returns when World AgentKit lands
+//      strings here; live attribution returns when a trust resolver lands
 //
 // Rule: store RAW values (wei strings, unix seconds, bytes32 hex). Never store
 // display strings as the source of truth — the format helpers below derive
@@ -88,8 +88,8 @@ export interface Strategy {
 }
 
 // Author profile — plain display data. The handles are just names in the mock
-// (kept verbatim); live profiles resolve through the identity seam once World
-// AgentKit lands.
+// (kept verbatim); live profiles resolve through the identity seam once a
+// trust resolver lands.
 export interface Profile {
   handle: string // 'alice' (profile slug)
   name: string // 'alice.eth' — display string

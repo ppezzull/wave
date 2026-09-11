@@ -1,5 +1,5 @@
 // mcp__wave__* WRITE tools. ENS writes (setText/registerSubname/claimHandle) are gone with
-// the ENS layer — identity is World AgentKit's job now (ETHOnline continuity: replaces ENS,
+// the ENS layer — identity is the trust seam's job now (ETHOnline continuity: replaces ENS,
 // client-visible "verified human" distinction). What remains is the live ship arm and the
 // testnet faucet.
 import { createTool } from "@mastra/core/tools";

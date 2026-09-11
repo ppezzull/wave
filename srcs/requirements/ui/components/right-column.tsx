@@ -3,7 +3,7 @@
 import { Search } from 'lucide-react'
 
 // Right discovery rail — search + attribution. The "Who to follow" section is
-// gone with the follow graph; a World-AgentKit-driven people panel can slot
+// gone with the follow graph; a trust-resolver-driven people panel can slot
 // back in here later.
 export function RightColumn() {
   return (
