@@ -70,7 +70,10 @@ export function useShipApproval() {
       if (!sessionAddress) {
         return { ok: false, reason: 'Connect your wallet to approve the ship.' }
       }
-      const provider = wallets[0]?.provider
+      // Privy's wrapped provider first; the raw injected provider as fallback
+      // (same EIP-1193 surface — some connectors expose it only via window.ethereum).
+      const provider =
+        wallets[0]?.provider ?? (typeof window !== 'undefined' ? window.ethereum : undefined)
       if (!provider) {
         return { ok: false, reason: 'No connected wallet available to sign the approval.' }
       }
