@@ -10,6 +10,7 @@ import type { CurrentUser } from '@/components/app-wrapper'
 import { usePrivy } from '@privy-io/react-auth'
 import { faucetDrip } from '@/app/actions/faucet'
 import type { FaucetResult } from '@/app/actions/faucet'
+import { LedgerTrustSection } from '@/components/ledger/ledger-trust-section'
 
 interface Props {
   user: CurrentUser
@@ -237,6 +238,10 @@ export function SettingsForm({ user }: Props) {
                 {saved ? 'Saved' : 'Save'}
               </button>
             </form>
+
+            {/* Ledger trust — hardware approval status + pairing */}
+            <div className="h-px bg-wave-border my-6" aria-hidden="true" />
+            <LedgerTrustSection />
 
             {/* Divider + Sign Out */}
             <div className="h-px bg-wave-border my-6" aria-hidden="true" />

@@ -6,6 +6,8 @@ import { CheckCircle2 } from 'lucide-react'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { useShipApproval, type ShipApproval } from '@/hooks/use-ship-approval'
+import { LedgerApprovalPanel } from '@/components/ledger/ledger-approval-panel'
 import { emitProgram } from '@/app/actions/emit'
 import { BytecodePane } from '@/components/bytecode-pane'
 import { SafetyCardDetail } from '@/components/safety-card-detail'
@@ -118,6 +120,7 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
   // strategy on-chain (factory attribute) so it lands on the user's profile. No
   // wallet → unattributed ship (ZERO sentinel), never fabricated.
   const { sessionUser } = useSessionUser()
+  const { obtainApproval, ledgerPhase, ledgerReason } = useShipApproval()
   const [emit, setEmit] = useState<EmitResult | null>(null)
   const [emitting, setEmitting] = useState(false)
   // Ship flow (mirrors the drawer's HITL gate): idle → confirming → shipping → done|error.
@@ -217,10 +220,19 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
       }
       // Ship opts: the post (description) + the author (session wallet, if
       // connected) — optional, the agent re-validates and degrades honestly.
-      const shipOpts: { description?: string; author?: string } = {
+      const shipOpts: { description?: string; author?: string; approval?: ShipApproval } = {
         description,
       }
       if (sessionUser) shipOpts.author = sessionUser.address
+      // Approval gate (Ledger Continuity): a device or session signature over
+      // the hash-bound message, obtained inside THIS click (WebHID gesture).
+      // Refusal/cancel → honest no-ship; nothing is sent to the agent.
+      const approval = await obtainApproval(specObj, description, sessionUser?.address)
+      if (!approval.ok) {
+        setShipResult({ ok: false, reason: approval.reason ?? 'Approval not granted — nothing was shipped.' })
+        return
+      }
+      shipOpts.approval = approval.approval
       const result = await shipStrategy(specObj, shipOpts)
       setShipResult(result)
     } catch (err) {
@@ -370,6 +382,9 @@ export function ComposeScreen({ initialDescription, forkAuthor, forkId }: Props)
           )}
 
           {/* Post-ship evidence — real receipts from the agent, never fabricated. */}
+          {(ledgerPhase !== 'idle' || ledgerReason) && (
+            <LedgerApprovalPanel phase={ledgerPhase} reason={ledgerReason} />
+          )}
           {shipPending && (
             <div
               className="rounded-[14px] px-5 py-4 bg-wave-surface border border-wave-border"

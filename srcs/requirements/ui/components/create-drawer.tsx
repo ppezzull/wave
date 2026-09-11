@@ -7,6 +7,7 @@ import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { StreamNotifications } from './stream-notifications'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
+import { useShipApproval, type ShipApproval } from '@/hooks/use-ship-approval'
 import { emitProgram } from '@/app/actions/emit'
 
 const LISBOA =
@@ -303,6 +304,7 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   // strategy on-chain (factory attribute) so it lands on the user's profile. No
   // wallet → unattributed ship (ZERO sentinel), never fabricated.
   const { sessionUser } = useSessionUser()
+  const { obtainApproval } = useShipApproval()
 
   const [inputValue, setInputValue] = useState('')
   // The last sent intent, kept for the ship step: it is the description (the post)
@@ -566,9 +568,30 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     const description = lastIntent || lastUserText(liveMessages)
     // Ship opts: the post (description) + the author (session wallet, if connected).
     // Both are optional — the agent re-validates and degrades honestly without them.
-    const shipOpts: { description?: string; author?: string } = {}
+    const shipOpts: { description?: string; author?: string; approval?: ShipApproval } = {}
     if (description) shipOpts.description = description
     if (sessionUser) shipOpts.author = sessionUser.address
+    // Approval gate (Ledger Continuity) — inside this click (WebHID gesture).
+    if (compose.spec) {
+      const approval = await obtainApproval(
+        {
+          specVersion: Number(compose.spec.specVersion ?? 1),
+          pair: { token0: String(compose.spec.pair?.token0 ?? ''), token1: String(compose.spec.pair?.token1 ?? '') },
+          size: {
+            amount0: String(compose.spec.size?.amount0 ?? ''),
+            amount1: String(compose.spec.size?.amount1 ?? ''),
+          },
+          blocks: Array.isArray(compose.spec.blocks) ? compose.spec.blocks : [],
+        },
+        description ?? '',
+        sessionUser?.address,
+      )
+      if (!approval.ok) {
+        setShipResult({ ok: false, reason: approval.reason ?? 'Approval not granted — nothing was shipped.' })
+        return
+      }
+      shipOpts.approval = approval.approval
+    }
     try {
       const specObj = {
         specVersion: Number(spec.specVersion ?? 1),

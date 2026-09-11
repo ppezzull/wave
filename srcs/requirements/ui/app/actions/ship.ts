@@ -57,6 +57,10 @@ export interface ShipOptions {
   /** The author's wallet — the agent attributes the ship to it on-chain
    *  (factory attribute) right after announce. Best-effort, display-layer. */
   author?: string
+  /** HITL approval (Ledger Continuity): kind 'device' = the pinned Ledger's
+   *  signature over the hash-bound message; kind 'session' = the author
+   *  wallet's. Required by the agent when LEDGER_GATE is session|device. */
+  approval?: { kind: 'device' | 'session'; address: string; message: string; signature: string }
 }
 
 /**
@@ -120,4 +124,19 @@ export async function shipStrategy(
     shipTxHash: out.shipTxHash,
     alreadyDeployed: out.alreadyDeployed
   }
+}
+
+/**
+ * The approval gate config for the client: which signer class may approve a
+ * ship right now (off | session | device) and, in device mode, the pinned
+ * approver address (public by nature — it's an address, not a secret).
+ * Runtime env via server action — no NEXT_PUBLIC rebuild coupling.
+ */
+export async function approvalGateConfig(): Promise<{
+  mode: 'off' | 'session' | 'device'
+  approverAddress: string
+}> {
+  const raw = process.env.LEDGER_GATE ?? 'off'
+  const mode = raw === 'on' ? 'device' : raw === 'session' || raw === 'device' ? raw : 'off'
+  return { mode, approverAddress: process.env.LEDGER_APPROVER_ADDRESS ?? '' }
 }
