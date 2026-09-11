@@ -10,6 +10,8 @@
 // Swapped.orderHash and the Aqua dock hash. ONE id everywhere.
 import { describe, it, expect } from "vitest";
 import { encodeAbiParameters, keccak256, type Address, type Hash, type Hex } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { actionHashOf, approvalMessage } from "../ledger/approval.js";
 import { deployStrategy, type StrategySpecInput } from "../actions/deployStrategy.js";
 
 const MAKER = "0x2058C253029bB0Cf1E1aD43DfAEF63D658A8dddf" as Address;
@@ -236,5 +238,142 @@ describe("deployStrategy authorship (task #31 — attribute after announce)", ()
     expect(r.shipped).toBe(false);
     expect(r.error).toMatch(/author/);
     expect(calls).toEqual([]); // failed before compile — no gas, no side effects
+  });
+});
+
+// ── Approval gate (Ledger Continuity) ──────────────────────────────────────
+// The ship pipeline refuses to write anything without a fresh signature over
+// the hash-bound message when LEDGER_GATE is on. Trust ladder:
+//   device  — only the pinned Ledger (LEDGER_APPROVER_ADDRESS) may sign
+//   session — only the ship's `author` wallet may sign (the no-hardware fallback)
+const DEVICE_KEY = "0x0000000000000000000000000000000000000000000000000000000000000002" as `0x${string}`;
+const DEVICE_ADDR = privateKeyToAccount(DEVICE_KEY).address;
+const SESSION_KEY = "0x0000000000000000000000000000000000000000000000000000000000000003" as `0x${string}`;
+const SESSION_ADDR = privateKeyToAccount(SESSION_KEY).address;
+
+async function signedBy(
+  key: `0x${string}`,
+  kind: "device" | "session",
+  spec: unknown = SPEC,
+  description = "test post",
+) {
+  const message = approvalMessage(actionHashOf(spec), description);
+  const signature = await privateKeyToAccount(key).signMessage({ message });
+  return { kind, address: privateKeyToAccount(key).address, message, signature };
+}
+
+/** Env-pinning wrapper: run fn with LEDGER_GATE/LEDGER_APPROVER_ADDRESS set, restore after. */
+async function withGate(env: Record<string, string>, fn: () => Promise<unknown>) {
+  const saved = { LEDGER_GATE: process.env.LEDGER_GATE, LEDGER_APPROVER_ADDRESS: process.env.LEDGER_APPROVER_ADDRESS };
+  Object.assign(process.env, env);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+describe("deployStrategy approval gate (LEDGER_GATE trust ladder)", () => {
+  it("cross-package parity vector — the same canonical hash the frontend pins", () => {
+    // If this literal changes, ui/test/ledger.test.ts MUST change with it.
+    const VECTOR = {
+      specVersion: 1,
+      pair: {
+        token0: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+        token1: "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+      },
+      size: { amount0: "1", amount1: "200" },
+      blocks: [{ type: "curve", kind: "xyc" }],
+    };
+    expect(actionHashOf(VECTOR)).toBe("042b8b2f3874563dd943ea50c712a14c");
+  });
+
+  it("device mode + no approval → pre-flight error, ZERO writes", async () => {
+    const { calls, deps } = makeDeps();
+    const r = await withGate(
+      { LEDGER_GATE: "device", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/approval required/);
+    expect(calls).toEqual([]); // not even compile ran
+  });
+
+  it("device mode + valid device signature → full pipeline ships", async () => {
+    const { calls, deps } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "device");
+    const r = await withGate(
+      { LEDGER_GATE: "device", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(true);
+    expect(calls).toContain("ship");
+  });
+
+  it("device mode REFUSES a session-kind approval (hardware or nothing)", async () => {
+    const { deps } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "session"); // even the right key, wrong kind
+    const r = await withGate(
+      { LEDGER_GATE: "device", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/approval rejected/);
+  });
+
+  it("device mode + signature from the WRONG device → rejected", async () => {
+    const { deps } = makeDeps();
+    const approval = await signedBy(SESSION_KEY, "device");
+    const r = await withGate(
+      { LEDGER_GATE: "device", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/approver mismatch/);
+  });
+
+  it("session mode + author's signature → ships (the no-hardware fallback)", async () => {
+    const { calls, deps } = makeDeps();
+    const approval = await signedBy(SESSION_KEY, "session");
+    const r = await withGate(
+      { LEDGER_GATE: "session" },
+      () => deployStrategy({ spec: SPEC, description: "test post", author: SESSION_ADDR, approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(true);
+    expect(calls).toContain("ship");
+  });
+
+  it("session mode + a signature from a wallet that is NOT the author → rejected", async () => {
+    const { deps } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "session"); // valid sig, wrong wallet
+    const r = await withGate(
+      { LEDGER_GATE: "session" },
+      () => deployStrategy({ spec: SPEC, description: "test post", author: SESSION_ADDR, approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/approver mismatch/);
+  });
+
+  it("any mode + a signature bound to a DIFFERENT spec (replay) → rejected", async () => {
+    const { deps } = makeDeps();
+    const otherSpec = { ...SPEC, size: { amount0: "2", amount1: "400" } };
+    const approval = await signedBy(DEVICE_KEY, "device", otherSpec); // signed for another strategy
+    const r = await withGate(
+      { LEDGER_GATE: "device", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/action hash missing|not bound/);
+  });
+
+  it("gate off → no approval needed, exactly the pre-gate behavior", async () => {
+    const { deps } = makeDeps();
+    const r = await withGate({ LEDGER_GATE: "off" }, () => deployStrategy({ spec: SPEC }, deps)) as Awaited<
+      ReturnType<typeof deployStrategy>
+    >;
+    expect(r.shipped).toBe(true);
   });
 });

@@ -71,7 +71,7 @@ const approveStep = createStep({
     if (!resumeData) return suspend({ spec: inputData.spec, actionHash }); // park for human review
     if (resumeData.approved) {
       const cfg = ledgerConfig();
-      if (cfg.gateOn) {
+      if (cfg.mode !== "off") {
         const blank: LedgerApproval = { address: "", message: "", signature: "" };
         const check = await verifyLedgerApproval(resumeData.ledger ?? blank, {
           approverAddress: cfg.approverAddress,

@@ -39,7 +39,8 @@ import {
 } from "viem";
 import { aquaWriteClient, type AquaWriteConfig, type MakerOrder } from "../clients/aquaWrite.js";
 import { factoryWriteClient } from "../clients/factoryWrite.js";
-import { announcerConfig } from "../config/env.js";
+import { announcerConfig, ledgerConfig } from "../config/env.js";
+import { actionHashOf, approvalMessage, verifyApproval, type ShipApproval } from "../ledger/approval.js";
 
 /** The StrategySpec the compose agent produced — forwarded verbatim by the UI. */
 export interface StrategySpecInput {
@@ -105,6 +106,15 @@ export interface DeployInput {
    * (the strategy records as unattributed — never fabricated).
    */
   author?: Address;
+  /**
+   * HITL approval for the ship (Ledger Continuity). Required when
+   * LEDGER_GATE is `session` or `device`:
+   *   - kind 'device'  — signature from the pinned Ledger (LEDGER_APPROVER_ADDRESS)
+   *   - kind 'session' — signature from `author` (the session wallet fallback)
+   * Both bind to actionHashOf(spec); verified BEFORE any write. Omitted when
+   * the gate is off.
+   */
+  approval?: ShipApproval;
 }
 
 export interface DeployResult {
@@ -320,6 +330,31 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     // gas on a strategy that can never be attributed. Fails before ANY write (like requirePair).
     if (input.author !== undefined && !/^0x[a-fA-F0-9]{40}$/.test(input.author)) {
       throw new Error("deploy: author must be a 0x…40-hex address");
+    }
+    // Approval gate (Ledger Continuity): when LEDGER_GATE is on, the ship needs a
+    // fresh signature over the hash-bound message BEFORE any write. device mode
+    // accepts only the pinned Ledger; session mode accepts only `author`'s wallet.
+    // A missing/invalid approval fails pre-flight — no gas, no side effects.
+    const gate = ledgerConfig();
+    if (gate.mode !== "off") {
+      if (!input.approval) {
+        throw new Error(
+          `deploy: approval required (LEDGER_GATE=${gate.mode}) — ${
+            gate.mode === "device" ? "confirm on the Ledger device" : "sign with your connected wallet"
+          }`,
+        );
+      }
+      const expected =
+        input.approval.kind === "device"
+          ? gate.approverAddress
+          : gate.mode === "device"
+            ? "" // device mode refuses session-kind outright — fails the address check below
+            : (input.author ?? "");
+      const check = await verifyApproval(input.approval, {
+        expectedAddress: expected,
+        actionHash: actionHashOf(input.spec),
+      });
+      if (!check.ok) throw new Error(`deploy: approval rejected — ${check.error}`);
     }
     decimals0 = input.decimals ?? (await tokenDecimals(token0));
     decimals1 = input.decimals ?? (await tokenDecimals(token1));

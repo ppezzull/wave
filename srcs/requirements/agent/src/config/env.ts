@@ -145,15 +145,21 @@ export function faucetTunables(): { dripWei: bigint; cooldownMs: number; maxTota
 }
 
 /**
- * Ledger Continuity (plan Fase 1ter): hardware confirmation on the HITL gate.
- * When LEDGER_GATE=on, approving a risky action requires an EIP-191 signature
- * made ON the physical device (DMK + SignerEth in the UI), verified against
- * LEDGER_APPROVER_ADDRESS (the Ledger's ETH account). Default off until the
- * device is paired — the gate must never hold the demo hostage.
+ * Ledger Continuity (plan Fase 1ter): signature confirmation on the HITL gate.
+ * LEDGER_GATE is a trust ladder:
+ *   off     — no approval required (pre-gate behavior)
+ *   session — the ship's AUTHOR wallet must personal_sign the hash-bound message
+ *             (the Privy fallback for users without hardware)
+ *   device  — only the pinned Ledger (LEDGER_APPROVER_ADDRESS) may sign
+ * Default off until the device is paired — the gate must never hold the demo
+ * hostage.
  */
 export function ledgerConfig() {
+  const raw = process.env.LEDGER_GATE ?? "off";
+  // off | session | device. Legacy "on" == device (the original seam's meaning).
+  const mode = raw === "on" ? "device" : raw === "session" || raw === "device" ? raw : "off";
   return {
-    gateOn: process.env.LEDGER_GATE === "on",
+    mode: mode as "off" | "session" | "device",
     approverAddress: process.env.LEDGER_APPROVER_ADDRESS ?? "",
   };
 }

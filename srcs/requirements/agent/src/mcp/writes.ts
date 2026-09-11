@@ -47,6 +47,15 @@ export const shipStrategy = createTool({
     // The author's wallet (the UI session user). Triggers StrategyFactory.attribute right
     // after announce — best-effort; failure leaves attributeTxHash absent, ship stands.
     author: Address.optional(),
+  // HITL approval (Ledger Continuity): required when LEDGER_GATE is session|device.
+  approval: z
+    .object({
+      kind: z.enum(["device", "session"]),
+      address: Address,
+      message: z.string().min(1),
+      signature: z.string().regex(/^0x[0-9a-fA-F]{130}$/),
+    })
+    .optional(),
   }),
   outputSchema: z.object({
     // Absent when a pre-flight step (pair validation, decimals read) failed before compile.

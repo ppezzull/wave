@@ -1,51 +1,84 @@
-// Hardware-backed approval verification for the HITL gate (Ledger Continuity,
-// plan Fase 1ter). This is the device-INDEPENDENT half: verify that an
-// "approved" resume carries a fresh EIP-191 signature from the DESIGNATED
-// hardware approver, bound to the specific proposal (anti-replay across
-// actions). The signing half happens on the Ledger in the UI (DMK +
-// SignerEth, Clear Signing shows the human-readable message); the device's
-// address is pinned via LEDGER_APPROVER_ADDRESS.
+// Hardware- or wallet-backed approval verification for the HITL gate (Ledger
+// Continuity, plan Fase 1ter). This is the signer-INDEPENDENT half: verify
+// that an "approved" action carries a fresh EIP-191 signature bound to the
+// specific proposal (anti-replay across actions), from an allowed signer:
+//   kind 'device'  — the DESIGNATED hardware approver (LEDGER_APPROVER_ADDRESS;
+//                    the Ledger's ETH account, Clear-Signed via DMK in the UI)
+//   kind 'session' — the ship's declared AUTHOR wallet (the Privy session
+//                    wallet signs the same message; the fallback for users
+//                    without hardware — still a signature, never a click)
+// The hash is computed over CANONICAL JSON (recursively key-sorted) so the
+// UI mirror and this side always agree regardless of key order across the
+// zod parse / JSON wire / durable storage round-trips.
 import { createHash } from "node:crypto";
 import { recoverMessageAddress } from "viem";
 
-export interface LedgerApproval {
-  /** Signer — must equal LEDGER_APPROVER_ADDRESS (the Ledger's ETH account). */
+export type ApprovalKind = "device" | "session";
+
+export interface ShipApproval {
+  /** Which signer class this approval claims to be. */
+  kind: ApprovalKind;
+  /** Claimed signer address (must match the recovered address). */
   address: string;
-  /** Human-readable action text Clear-Signed on device; MUST embed the actionHash. */
+  /** Human-readable action text shown on the device/wallet; MUST embed the actionHash. */
   message: string;
   /** EIP-191 personal_sign signature over message. */
   signature: string;
 }
 
+/** Legacy shape kept for the workflow resume schema (device-only path). */
+export interface LedgerApproval {
+  address: string;
+  message: string;
+  signature: string;
+}
+
 export interface ApprovalExpectation {
-  approverAddress: string;
+  /** The one address allowed to sign for this approval's kind. */
+  expectedAddress: string;
   /** Hash binding the approval to THIS proposal — a signature for another action never verifies. */
   actionHash: string;
 }
 
-/** Stable hash of the gated proposal. JSON round-trips through the durable
- *  workflow storage preserve key order, so suspend-time and resume-time
- *  hashes match across restarts. */
+/** Deterministic JSON: object keys sorted recursively — the same canonical
+ * form the UI mirror (ui/lib/ledger.ts) derives, so the hash is independent
+ * of key order on either side of the wire. */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const keys = Object.keys(value as Record<string, unknown>).sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`)
+    .join(",")}}`;
+}
+
+/** Stable hash of the gated proposal — canonical (key-sorted) JSON underneath,
+ * so suspend-time, resume-time and UI-side hashes always agree. */
 export function actionHashOf(payload: unknown): string {
-  return createHash("sha256").update(JSON.stringify(payload)).digest("hex").slice(0, 32);
+  return createHash("sha256").update(canonicalJson(payload)).digest("hex").slice(0, 32);
 }
 
-/** The exact text the device screen shows (Clear Signing) and signs. */
+/** The exact text the device screen / wallet prompt shows and signs. The
+ * description is capped: very long messages push the ETH app toward
+ * blind-signing; the verifier only requires the hash to be embedded. */
 export function approvalMessage(actionHash: string, description: string): string {
-  return `wave HITL approval [${actionHash}] — ${description}`;
+  const clipped = description.length > 200 ? `${description.slice(0, 200)}…` : description;
+  return `wave HITL approval [${actionHash}] — ${clipped}`;
 }
 
-export async function verifyLedgerApproval(
-  approval: LedgerApproval,
+/** Verify an approval: right claimed address, hash embedded in the message,
+ * and the signature actually recovers to that address. */
+export async function verifyApproval(
+  approval: ShipApproval,
   expectation: ApprovalExpectation,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!expectation.approverAddress) {
-    return { ok: false, error: "LEDGER_APPROVER_ADDRESS is not set" };
+  if (!expectation.expectedAddress) {
+    return { ok: false, error: "expected approver address is not set (LEDGER_APPROVER_ADDRESS / author)" };
   }
-  if (approval.address.toLowerCase() !== expectation.approverAddress.toLowerCase()) {
+  if (approval.address.toLowerCase() !== expectation.expectedAddress.toLowerCase()) {
     return {
       ok: false,
-      error: `approver mismatch: expected ${expectation.approverAddress}, got ${approval.address}`,
+      error: `approver mismatch: expected ${expectation.expectedAddress}, got ${approval.address}`,
     };
   }
   if (!approval.message.includes(expectation.actionHash)) {
@@ -61,7 +94,18 @@ export async function verifyLedgerApproval(
     return { ok: false, error: `malformed signature: ${err}` };
   }
   if (recovered.toLowerCase() !== approval.address.toLowerCase()) {
-    return { ok: false, error: `signature recovers to ${recovered}, not to the approver address` };
+    return { ok: false, error: `signature recovers to ${recovered}, not to the claimed address` };
   }
   return { ok: true };
+}
+
+/** Back-compat wrapper for the workflow seam (device-only, no kind field). */
+export async function verifyLedgerApproval(
+  approval: LedgerApproval | ShipApproval,
+  expectation: { approverAddress: string; actionHash: string },
+): Promise<{ ok: boolean; error?: string }> {
+  return verifyApproval(
+    "kind" in approval ? approval : { ...approval, kind: "device" as const },
+    { expectedAddress: expectation.approverAddress, actionHash: expectation.actionHash },
+  );
 }
