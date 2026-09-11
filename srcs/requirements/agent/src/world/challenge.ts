@@ -38,7 +38,7 @@ export function buildAgentkitChallenge(opts: ChallengeOptions): Response {
     version: "1",
     network: opts.supportedNetworks,
     mode: { type: "free-trial", uses: opts.trialUses },
-  }) as Record<string, { info: Record<string, unknown> }>;
+  });
 
   // SDK gap (feedback-doc'd): the client's isAgentkitExtension() rejects any
   // declaration whose info lacks `nonce` + `issuedAt`, yet the SDK's own
@@ -48,8 +48,11 @@ export function buildAgentkitChallenge(opts: ChallengeOptions): Response {
   // ledger covers it too.
   const declaration = extensions[AGENTKIT];
   if (!declaration) throw new Error("declareAgentkitExtension returned no agentkit record");
-  declaration.info.nonce = crypto.randomUUID().replace(/-/g, "");
-  declaration.info.issuedAt = new Date().toISOString();
+  // Intentional cast: the SDK's AgentkitExtensionInfo type predates the
+  // nonce/issuedAt requirement its own client enforces (see comment above).
+  const info = declaration.info as unknown as { nonce?: string; issuedAt?: string };
+  info.nonce = crypto.randomUUID().replace(/-/g, "");
+  info.issuedAt = new Date().toISOString();
 
   const body = {
     x402Version: 2 as const,
