@@ -23,6 +23,7 @@
     "@mastra/memory": "^1.23.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@worldcoin/agentkit": "^0.2.1",
+    "@x402/core": "^2.25.0",
     "ai": "^5.0.0",
     "dotenv": "^16.4.5",
     "graphql-request": "^7.4.0",

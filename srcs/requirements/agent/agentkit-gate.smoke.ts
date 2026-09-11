@@ -1,23 +1,19 @@
 // agentkit-gate.smoke.ts — e2e rehearsal of the MCP gate against a RUNNING
 // agent (`./node_modules/.bin/mastra dev`, WORLD_MCP_GATE=on).
 //
-// Three probes, matching the demo's three-way contrast:
-//   1. anonymous POST (no agentkit header)      → expect 403 agentkit-required
-//   2. signed POST (SIWE-style, SDK exports)    → expect the gate to PASS
+// Four probes, the full protocol dance of the demo:
+//   1. anonymous POST            → 402 carrying the x402 challenge with the
+//      agentkit extension declared (what makes official clients sign)
+//   2. OFFICIAL createAgentkitClient end-to-end → the client receives the 402,
+//      detects the extension, SIGNS and retries by itself → gate passes
 //      (needs the wallet in WORLD_AGENTBOOK_DEV_ALLOW until the real
 //      AgentBook registration lands)
-//   3. same header replayed (nonce reuse)       → expect 403 nonce-replayed
-//
-// NB on probe 2: createAgentkitClient only signs when the SERVER first answers
-// 402 with the x402 challenge declaring the agentkit extension — a plain 403
-// is ignored (found by reading the SDK; the integrate page doesn't say it).
-// Official-client interop lands with the 402 advertisement; until then this
-// smoke builds the header manually with the SDK's own formatSIWEMessage +
-// base64(JSON) wire format, which is byte-equivalent.
+//   3. manual header (SDK's own formatSIWEMessage + wire format) → passes
+//   4. same header replayed (nonce reuse) → 403 nonce-replayed
 //
 // Usage (agent dir): AGENT_URL=http://localhost:3002 npx tsx agentkit-gate.smoke.ts
 import "dotenv/config";
-import { formatSIWEMessage } from "@worldcoin/agentkit";
+import { createAgentkitClient, formatSIWEMessage, type AgentkitFetchEvent } from "@worldcoin/agentkit";
 import { privateKeyToAccount } from "viem/accounts";
 
 const BASE = process.env.AGENT_URL ?? process.env.AGENT_ENDPOINT_MCP ?? "http://localhost:3002";
@@ -90,25 +86,55 @@ async function main() {
   const endpoint = origin + mcpPath;
   console.log(`mcp mount:    ${mcpPath}\n`);
 
-  // 1 — anonymous
+  // 1 — anonymous: expect the 402 challenge WITH the agentkit extension
   const anon = await post(endpoint, {});
+  let extOk = false;
+  try {
+    const body = JSON.parse(await anon.text());
+    extOk = body?.extensions?.agentkit?.info?.uri === endpoint;
+  } catch {
+    extOk = false;
+  }
   check(
-    "anonymous POST refused",
-    anon.status === 403 && anon.headers.get("x-agentkit-error") === "agentkit-required",
-    `status=${anon.status} x-agentkit-error=${anon.headers.get("x-agentkit-error") ?? "—"}`,
+    "anonymous POST gets a 402 challenge declaring agentkit",
+    anon.status === 402 && extOk,
+    `status=${anon.status} extension.bound=${extOk}`,
   );
 
-  // 2 — signed by the publisher wallet
+  // 2 — OFFICIAL client: 402 → detect → sign → retry, all by itself
+  const events: AgentkitFetchEvent[] = [];
+  const client = createAgentkitClient({
+    signer: {
+      address: account.address,
+      chainId: "eip155:11155111",
+      type: "eip191",
+      signMessage: (message) => account.signMessage({ message }),
+    },
+    onEvent: (e) => events.push(e),
+  });
+  const clientRes = await client.fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: TOOLS_LIST,
+  });
+  const sawDetected = events.some((e) => e.type === "agentkit_detected");
+  const sawSigned = events.some((e) => e.type === "agentkit_signed");
+  check(
+    "official client signs-and-retries by itself and passes",
+    clientRes.status !== 402 && clientRes.status !== 403 && sawDetected && sawSigned,
+    `status=${clientRes.status} events=[${events.map((e) => e.type).join(",")}]`,
+  );
+
+  // 3 — manual header (same wire format the SDK produces) → passes
   const header = await buildHeader(account, endpoint);
   const signed = await post(endpoint, { agentkit: header });
-  const signedErr = signed.headers.get("x-agentkit-error");
   check(
-    "signed POST passes the gate",
-    signed.status !== 403 && signed.status !== 429,
-    `status=${signed.status} x-agentkit-error=${signedErr ?? "—"} x-agentkit-human=${signed.headers.get("x-agentkit-human") ?? "—"}`,
+    "manual signed POST passes the gate",
+    signed.status !== 402 && signed.status !== 403 && signed.status !== 429,
+    `status=${signed.status} x-agentkit-human=${signed.headers.get("x-agentkit-human") ?? "—"}`,
   );
 
-  // 3 — replay the exact same header (nonce already burned)
+  // 4 — replay the exact same header (nonce already burned)
   const replay = await post(endpoint, { agentkit: header });
   check(
     "replayed header refused",

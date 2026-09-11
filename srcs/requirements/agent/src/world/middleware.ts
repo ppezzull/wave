@@ -2,6 +2,7 @@
 // decideGate(). Structurally typed against the Hono context (no direct hono
 // dependency) so it drops into Mastra's `server.middleware` and stays
 // unit-testable with plain objects.
+import { buildAgentkitChallenge, type ChallengeOptions } from "./challenge.js";
 import { decideGate, type GateOptions, type GateRequest } from "./gate.js";
 
 export interface GateContext {
@@ -17,7 +18,9 @@ export type AgentkitMiddleware = (
   next: () => Promise<void>,
 ) => Promise<Response | void>;
 
-export function agentkitMcpGate(opts: GateOptions): AgentkitMiddleware {
+export function agentkitMcpGate(
+  opts: GateOptions & { challenge: Omit<ChallengeOptions, "resourceUri" | "hostname"> },
+): AgentkitMiddleware {
   return async (c, next) => {
     const decision = await decideGate(
       {
@@ -30,6 +33,13 @@ export function agentkitMcpGate(opts: GateOptions): AgentkitMiddleware {
     );
 
     if (decision.action === "pass") return next();
+    if (decision.action === "challenge") {
+      return buildAgentkitChallenge({
+        ...opts.challenge,
+        resourceUri: decision.resourceUri,
+        hostname: decision.hostname,
+      });
+    }
     if (decision.action === "allow") {
       c.res.headers.set("x-agentkit-human", decision.humanId);
       return next();

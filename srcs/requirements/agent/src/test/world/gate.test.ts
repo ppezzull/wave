@@ -4,6 +4,8 @@
 // by the smoke scripts against a live server.
 import { afterEach, describe, expect, it } from "vitest";
 import { parseAgentkitHeader, type AgentkitPayload } from "@worldcoin/agentkit";
+import { validatePaymentRequired } from "@x402/core/schemas";
+import { buildAgentkitChallenge } from "../../world/challenge.js";
 import { decideGate, isMcpSurface, type GateOptions } from "../../world/gate.js";
 import { LibSqlAgentKitStorage } from "../../world/storage.js";
 import { verifyAgentkit } from "../../world/verify.js";
@@ -167,9 +169,9 @@ describe("decideGate (policy)", () => {
     expect(isMcpSurface("/api/mcp")).toBe(false);
   });
 
-  it("denies a POST without an agentkit header with an instructive error", async () => {
+  it("answers a POST without an agentkit header with the x402 challenge", async () => {
     const d = await decideGate(base, gateOpts());
-    expect(d).toMatchObject({ action: "deny", status: 403, code: "agentkit-required" });
+    expect(d).toMatchObject({ action: "challenge", resourceUri: RESOURCE });
   });
 
   it("allows a verified human-backed agent and returns the humanId", async () => {
@@ -196,5 +198,41 @@ describe("decideGate (policy)", () => {
   it("is a no-op allow when the gate is disabled (kill switch)", async () => {
     const d = await decideGate(base, gateOpts({ enabled: false }));
     expect(d).toEqual({ action: "allow", humanId: "gate:disabled" });
+  });
+});
+
+describe("x402 challenge (the 402 the official client signs against)", () => {
+  const challenge = () =>
+    buildAgentkitChallenge({
+      resourceUri: RESOURCE,
+      hostname: "agent",
+      payTo: "0xpayTo",
+      network: "eip155:8453",
+      asset: "0xusdc",
+      amount: "1000",
+      trialUses: 5,
+      supportedNetworks: ["eip155:11155111", "eip155:8453"],
+    });
+
+  it("is a 402 whose body validates against the client's own PaymentRequired schema", async () => {
+    const res = challenge();
+    expect(res.status).toBe(402);
+    const body = JSON.parse(await res.text());
+    const parsed = validatePaymentRequired(body); // same zod schema the client parses with
+    expect(parsed.x402Version).toBe(2);
+    expect(body.accepts[0]).toMatchObject({ payTo: "0xpayTo", network: "eip155:8453" });
+  });
+
+  it("declares the agentkit extension bound to this endpoint", async () => {
+    const body = JSON.parse(await challenge().text());
+    const ext = body.extensions.agentkit;
+    expect(ext.info.uri).toBe(RESOURCE);
+    expect(ext.info.domain).toBe("agent"); // bare hostname — the SIWS rule
+    // nonce + issuedAt are what the official client's isAgentkitExtension
+    // requires (and the SDK's own declare helper never sets — see challenge.ts)
+    expect(ext.info.nonce).toMatch(/^[a-zA-Z0-9]{8,}$/);
+    expect(typeof ext.info.issuedAt).toBe("string");
+    expect(ext.supportedChains).toContainEqual({ chainId: "eip155:11155111", type: "eip191" });
+    expect(ext._options.mode).toEqual({ type: "free-trial", uses: 5 });
   });
 });

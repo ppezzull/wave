@@ -160,6 +160,15 @@ export function worldConfig() {
     callLimit: Number(process.env.WORLD_MCP_CALL_LIMIT ?? 1000),
     maxAgeSeconds: Number(process.env.WORLD_MAX_AGE_SECONDS ?? 300),
     storageUrl: process.env.LIBSQL_URL ?? ":memory:",
+    x402: {
+      // Advertised per-call payment tier on the 402 challenge. Settlement
+      // (verifying incoming x402 payments) is not wired yet — honest refuse.
+      payTo: process.env.WORLD_X402_PAY_TO ?? "0xf4AF4E8f4F49032257D9C1e3F1d9c5324a040620",
+      network: process.env.WORLD_X402_NETWORK ?? "eip155:8453", // Base
+      asset:
+        process.env.WORLD_X402_ASSET ?? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC (Base)
+      amount: process.env.WORLD_X402_AMOUNT ?? "1000", // 0.001 USDC, base units
+    },
   };
 }
 

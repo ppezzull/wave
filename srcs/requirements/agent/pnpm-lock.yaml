@@ -35,6 +35,9 @@ importers:
       '@worldcoin/agentkit':
         specifier: ^0.2.1
         version: 0.2.1(typescript@5.9.3)
+      '@x402/core':
+        specifier: ^2.25.0
+        version: 2.25.0
       ai:
         specifier: ^5.0.0
         version: 5.0.253(zod@3.25.76)

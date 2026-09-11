@@ -138,6 +138,17 @@ human-approval gates for high-risk autonomous actions.
   accounts.** With a fresh, unverified World App the same link opens the app
   and does… nothing: no confirm flow, no error, no onboarding hint. We only
   understood why after checking verification status manually.
+- **2026-09-11 — the SDK's own extension builder produces extensions its own
+  client rejects.** The official client's `isAgentkitExtension()` requires
+  `info.nonce` + `info.issuedAt` (server-issued freshness / anti-replay), but
+  the SDK's documented `declareAgentkitExtension()` never sets them — so a 402
+  built solely from the helper is **silently ignored** by the official client:
+  no event, no error, the caller just sees the 402 again. We enrich the
+  declaration with a fresh server nonce + timestamp before serving it. The
+  design intent is actually good once you see it (the server nonce flows into
+  the signed message, so the relying party's nonce ledger covers it) — but
+  nothing documents it, and the helper/client mismatch makes first
+  interop a coin flip.
 - (running list — appended as we go.)
 
 ---

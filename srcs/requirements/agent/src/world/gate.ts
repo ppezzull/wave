@@ -12,6 +12,10 @@ export type GateErrorCode =
 export type GateDecision =
   | { action: "pass" } // not our surface — hand through untouched
   | { action: "allow"; humanId: string }
+  // No agentkit header: instead of a bare 403, answer with the x402 challenge
+  // declaring the agentkit extension — the handshake the OFFICIAL client needs
+  // (it signs only after seeing this). See challenge.ts.
+  | { action: "challenge"; resourceUri: string; hostname: string }
   | { action: "deny"; status: 403 | 429; code: GateErrorCode; message: string; address?: string };
 
 export interface GateRequest {
@@ -44,16 +48,14 @@ export async function decideGate(req: GateRequest, opts: GateOptions): Promise<G
   if (req.method === "GET" || req.method === "OPTIONS") return { action: "pass" };
 
   const resourceUri = resourceUriOf(req.url, req.path);
+  if (!req.agentkitHeader) {
+    // The x402 challenge path: official AgentKit clients sign-and-retry on
+    // this, x402-paying clients see the advertised tier.
+    return { action: "challenge", resourceUri, hostname: hostnameOf(req.url) };
+  }
+
   const outcome = await opts.verifier(req.agentkitHeader, resourceUri);
   if (!outcome.ok) {
-    if (outcome.errorKind === "missing-header") {
-      return {
-        action: "deny",
-        status: 403,
-        code: "agentkit-required",
-        message: "wave's MCP surface requires AgentKit: register your agent wallet in AgentBook and sign with an agentkit header",
-      };
-    }
     return { action: "deny", status: 403, code: outcome.errorKind ?? "malformed", message: outcome.error ?? "verification failed", address: outcome.address };
   }
 
@@ -72,5 +74,13 @@ function resourceUriOf(url: string, path: string): string {
     return new URL(url).origin + path;
   } catch {
     return path;
+  }
+}
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "localhost";
   }
 }

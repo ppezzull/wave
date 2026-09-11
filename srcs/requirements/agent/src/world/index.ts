@@ -12,6 +12,13 @@ export interface WorldGateEnv {
   callLimit: number;
   maxAgeSeconds: number;
   storageUrl: string;
+  /** Advertised x402 tier for the 402 challenge (settlement not wired yet). */
+  x402: {
+    payTo: string;
+    network: string;
+    asset: string;
+    amount: string;
+  };
 }
 
 export function buildWorldGate(env: WorldGateEnv): AgentkitMiddleware | undefined {
@@ -52,5 +59,13 @@ export function buildWorldGate(env: WorldGateEnv): AgentkitMiddleware | undefine
     verifier,
     tryIncrementUsage: (endpoint, humanId, limit) =>
       storage.tryIncrementUsage(endpoint, humanId, limit),
+    challenge: {
+      payTo: env.x402.payTo,
+      network: env.x402.network,
+      asset: env.x402.asset,
+      amount: env.x402.amount,
+      trialUses: env.callLimit,
+      supportedNetworks: ["eip155:11155111", "eip155:8453", "eip155:480"],
+    },
   });
 }
