@@ -172,5 +172,19 @@ export function worldConfig() {
   };
 }
 
+/**
+ * Ledger Continuity (plan Fase 1ter): hardware confirmation on the HITL gate.
+ * When LEDGER_GATE=on, approving a risky action requires an EIP-191 signature
+ * made ON the physical device (DMK + SignerEth in the UI), verified against
+ * LEDGER_APPROVER_ADDRESS (the Ledger's ETH account). Default off until the
+ * device is paired — the gate must never hold the demo hostage.
+ */
+export function ledgerConfig() {
+  return {
+    gateOn: process.env.LEDGER_GATE === "on",
+    approverAddress: process.env.LEDGER_APPROVER_ADDRESS ?? "",
+  };
+}
+
 // PORT is read directly in mastra/index.ts (`server: { port: Number(process.env.PORT ?? 3002) }`)
 // and defaulted to 3002 via ENV in the Dockerfile. (No serverConfig() helper — it was dead code.)
