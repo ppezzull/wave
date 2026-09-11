@@ -13,7 +13,7 @@ block-beta
     columns 1
     subgraph container["Agent Container (srcs/requirements/agent/)"]
         direction TB
-        mastra["Mastra Runtime\nagents + workflows + MCPServer + AgentKit gate"]
+        mastra["Mastra Runtime\nagents + workflows + MCPServer + approval gate"]
         mcp["Custom MCP Server\nMCPServer + @modelcontextprotocol/sdk"]
         llm["z.ai LLM\nAI SDK OpenAI-compatible provider"]
         mastra --> mcp --> llm
@@ -21,12 +21,12 @@ block-beta
     subgraph outside["Outside Container"]
         graph["The Graph Subgraph (read)"]
         chain["Router + StrategyFactory + Aqua (write)\nviem — announce · attribute · approve · ship"]
-        world["World / AgentBook\nAgentKit verification"]
+        ledger["Ledger approval\ndevice signature verification"]
         ui["Next.js UI\nactions + /api/stream proxy"]
     end
     mcp --> graph
     mcp --> chain
-    mcp --> world
+    mcp --> ledger
     mcp -.-> ui
 ```
 
@@ -34,7 +34,7 @@ Next.js talks to the agent over internal HTTP/SSE (`AGENT_URL=http://agent:3002`
 
 ## Subagent decomposition
 
-Four subagents (the ENS agent was removed with the ENS layer at continuity — `f441287`; identity now comes from the wallet + on-chain authorship + World):
+Four subagents (the ENS agent was removed with the ENS layer at continuity — `f441287`; identity now comes from the wallet + on-chain authorship + the Ledger approval gate):
 
 | Subagent | Owner | Capability |
 |---|---|---|
@@ -56,7 +56,7 @@ Tools are registered in `srcs/requirements/agent/src/mcp/server.ts` via Mastra's
 | Group | Tools | Authz |
 |---|---|---|
 | **Reads (RO — all agents)** | `getStrategy`, `listStrategies`, `getSwapHistory`, `getFeed`, `getProgramHash`, `quote` (read-only `asView()` sim), `getOracleState`, … | All agents |
-| **Writes — ship path** | `shipStrategy` — the full first-deploy pipeline (see below); the UI's compose drawer + compose page call it via the tool-execute HTTP route with the session wallet as `author` | gated by the UI's own HITL confirm + World publish proof server-side |
+| **Writes — ship path** | `shipStrategy` — the full first-deploy pipeline (see below); the UI's compose drawer + compose page call it via the tool-execute HTTP route with the session wallet as `author` | gated by the UI's own HITL confirm + the approval signature server-side |
 | **Writes — autonomous (only retuneAgent)** | `retune` (dock→recompile→ship + evidence log), `recompileAndShip` | retuneAgent only |
 | **Writes — HITL-gated** | `stopStrategy`, `removeStrategy`, `changeOracleBand` | gateAgent executes post-approval |
 | **Escalation** | `askHuman` (genuine-question channel; `suspend({kind:"askHuman"})`) | Any agent → HITL queue |
@@ -79,7 +79,7 @@ Load-bearing invariant: `strategyId = keccak(wrapped abi.encode(order)) = SwapVM
 |---|---|---|---|---|
 | All reads + `quote` | ✓ | ✓ | ✓ | |
 | `retune` / `recompileAndShip` | | ✓(decides) | ✓(exec) | |
-| `shipStrategy` (HTTP tool path) | ✓ (via UI HITL + World proof) | | ✓ | |
+| `shipStrategy` (HTTP tool path) | ✓ (via UI HITL + approval signature) | | ✓ | |
 | `stop`/`remove`/`changeOracleBand` | | ✓(decides) | | ✓(exec post-approval) |
 | `askHuman` | ✓ | ✓ | | ✓ |
 
