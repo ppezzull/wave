@@ -2,10 +2,10 @@
 
 Guidance for Claude Code (claude.ai/code) working in this repository.
 
-**wave** — a social market for natural-language on-chain strategies, built on 1inch **SwapVM**. An **ETHGlobal Lisboa 2026** hackathon workspace (Classic "from scratch" track). The Solidity protocol lives in `srcs/requirements/swap-vm/`; `docs/` holds sponsor research; `docs/review/` holds AI-assisted prep analysis.
+**wave** — a social market for natural-language on-chain strategies, built on 1inch **SwapVM**. Built at **ETHGlobal Lisboa 2026** (Classic "from scratch" track), continued at **ETHOnline 2026** (Sep 4–16, Continuity track). The Solidity protocol lives in `srcs/requirements/swap-vm/`; `docs/` holds sponsor research; `docs/review/` holds AI-assisted prep analysis.
 
-- **Core stack chosen:** 1inch SwapVM/Aqua (P0), The Graph (data), ENS (identity).
-- **Event:** build starts Fri Jul 24 2026, submission Sun Jul 26 09:00 WEST.
+- **Core stack:** 1inch SwapVM/Aqua (P0), The Graph (data), on-chain authorship via `StrategyFactory.attribute` + World AgentKit (trust — replaced ENS at continuity, `f441287`).
+- **Events:** Lisboa build Jul 24–26 2026 · ETHOnline window Sep 4–16 2026 (submission as Continuity).
 
 ## ⚠️ Classic Track compliance — the sharpest risk
 
@@ -101,6 +101,8 @@ Every swap instruction must hold: round-trip (no A→B→A profit), pool-drain (
 | Doc | Job |
 |---|---|
 | [10-10-PLAYBOOK.md](./docs/strategy/10-10-PLAYBOOK.md) | **THE BUILD PLAN** — finalist reframe, opcode/compiler spec §1.5, 5 moves, 36h Gantt |
+| [ETHONLINE-2026-CONTINUITY.md](./docs/strategy/ETHONLINE-2026-CONTINUITY.md) | the ETHOnline continuity plan + dated status log (top block = latest) |
+| [DEPLOY-LIVE-TESTNET.md](./docs/DEPLOY-LIVE-TESTNET.md) | live Sepolia redeploy runbook + compatibility audit (funding, keys, Studio) |
 | [TECH-STACK.md](./docs/strategy/TECH-STACK.md) | the stack |
 | [PITCH.md](./docs/strategy/PITCH.md) | demo + Q&A + sponsor lenses |
 | [EVENT-RUNBOOK.md](./docs/strategy/EVENT-RUNBOOK.md) | 36h ops + submission checklist |

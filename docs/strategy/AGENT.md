@@ -13,20 +13,20 @@ block-beta
     columns 1
     subgraph container["Agent Container (srcs/requirements/agent/)"]
         direction TB
-        mastra["Mastra Runtime\nagents + workflows + MCPServer"]
+        mastra["Mastra Runtime\nagents + workflows + MCPServer + AgentKit gate"]
         mcp["Custom MCP Server\nMCPServer + @modelcontextprotocol/sdk"]
         llm["z.ai LLM\nAI SDK OpenAI-compatible provider"]
         mastra --> mcp --> llm
     end
     subgraph outside["Outside Container"]
         graph["The Graph Subgraph (read)"]
-        ens["ENS Resolver (read/write)"]
-        aqua["EnsStrategyRouter / Aqua (write)\nviem + @1inch/aqua-sdk"]
-        ui["Next.js /review (HITL)\nworkflow.suspend()/resume()"]
+        chain["Router + StrategyFactory + Aqua (write)\nviem — announce · attribute · approve · ship"]
+        world["World / AgentBook\nAgentKit verification"]
+        ui["Next.js UI\nactions + /api/stream proxy"]
     end
     mcp --> graph
-    mcp --> ens
-    mcp --> aqua
+    mcp --> chain
+    mcp --> world
     mcp -.-> ui
 ```
 
@@ -34,43 +34,54 @@ Next.js talks to the agent over internal HTTP/SSE (`AGENT_URL=http://agent:3002`
 
 ## Subagent decomposition
 
-Five subagents, each with a focused capability:
+Four subagents (the ENS agent was removed with the ENS layer at continuity — `f441287`; identity now comes from the wallet + on-chain authorship + World):
 
 | Subagent | Owner | Capability |
 |---|---|---|
 | **composeAgent** | P2 | NL → Zod spec (Beat A). Bounded DSL output only; writes no code. |
 | **monitorAgent** | P3 | Polls the subgraph for entity deltas; runs `policy.decide()` on each tick. |
 | **retuneAgent** | P2 | Autonomous dock → recompile → ship. **Never gated**; this is the Graph-track invariant. |
-| **ensAgent** | P2 | ENS resolve/verify/setText/register. Owns hash-verify before settle. |
 | **gateAgent** | P3 | Owns the HITL queue + `/review` contract. Executes only post-approval. |
 
 One Mastra `Workflow` wires `monitor → {retune | gate}`. When `monitorAgent` detects a threshold breach, it evaluates the pure policy (`decide()`). If the path is `retune`, it routes to `retuneAgent` directly (autonomous). If the path is stop/remove/escalation, it hits `workflow.suspend({kind:"stopStrategy"})` and parks the action at `/review` for human approval.
 
 ## The MCP tool surface
 
-> **Status:** this is the **spec** for the build — the directory layout and file paths below describe what gets implemented, not code present in the tree today. This PR ships the doc + the doc sweep only; the implementation lands in a follow-up.
+> **Status (ETHOnline, 11 Sep 2026):** implemented — `srcs/requirements/agent/src/mcp/{server,reads,writes}.ts` are live, plus the HTTP tools the UI calls (`/api/tools/<tool>/execute`). POSTs on `/mcp*` pass through the **World AgentKit gate** (`src/world/`): parse → validate → signature → AgentBook resolution; anonymous callers get `403 x-agentkit-error: agentkit-required` (kill-switch `WORLD_MCP_GATE=off`). The reads/writes tiering + x402 fallback is the remaining Step-2 work.
 
-Tools are registered in `srcs/requirements/agent/src/mcp/server.ts` via Mastra's `MCPServer`. **No business logic lives in the MCP layer** — policy lives in `src/policy/` as pure functions, testable without the LLM. Naming: tools are `mcp__wave__<tool>`. The authz matrix is enforced in the server, not prompts.
+Tools are registered in `srcs/requirements/agent/src/mcp/server.ts` via Mastra's `MCPServer`. **No business logic lives in the MCP layer** — policy lives in `src/policy/` as pure functions, testable without the LLM. Naming: tools are `mcp__wave__<tool>`.
 
 ### Tool groups
 
 | Group | Tools | Authz |
 |---|---|---|
-| **Reads (RO — all agents)** | `getStrategy`, `listStrategies` (with net-new `status` filter), `getSwapHistory`, `getFollowerCount`, `getRanking`, `getFeed`, `resolveENS`, `getTextRecord`, `getProgramHash`, `quote` (read-only `asView()` sim), `getOracleState`, `getStrategyStatus` | All agents |
-| **Writes — autonomous (only retuneAgent)** | `retune` (dock→recompile→ship + evidence log + update `v0.programhash`; wraps Flavio's existing `recompileAndShip()`), `shipStrategy` (raw `aqua.ship`), `setText` (ENS), `registerSubname` | retuneAgent only |
-| **Writes — HITL-gated** | `stopStrategy` (dock-and-don't-reship + `wave.status=stopped`), `removeStrategy` (stop + clear follows + `wave.status=removed`), `changeOracleBand` | gateAgent executes post-approval |
+| **Reads (RO — all agents)** | `getStrategy`, `listStrategies`, `getSwapHistory`, `getFeed`, `getProgramHash`, `quote` (read-only `asView()` sim), `getOracleState`, … | All agents |
+| **Writes — ship path** | `shipStrategy` — the full first-deploy pipeline (see below); the UI's compose drawer + compose page call it via the tool-execute HTTP route with the session wallet as `author` | gated by the UI's own HITL confirm + World publish proof server-side |
+| **Writes — autonomous (only retuneAgent)** | `retune` (dock→recompile→ship + evidence log), `recompileAndShip` | retuneAgent only |
+| **Writes — HITL-gated** | `stopStrategy`, `removeStrategy`, `changeOracleBand` | gateAgent executes post-approval |
 | **Escalation** | `askHuman` (genuine-question channel; `suspend({kind:"askHuman"})`) | Any agent → HITL queue |
+
+### The ship pipeline (`actions/deployStrategy.ts`) — one id everywhere
+
+```
+compile (wave-compiler CLI, on-chain decimals folded in)
+  → announce (router, onlyOwner; described overload → StrategyDescribed)
+  → attribute (factory.attribute(strategyId, author) — best-effort; StrategyAttributed)
+  → approve ×2 (max to Aqua)
+  → ship (aqua.ship(router, WRAPPED abi.encode(order), tokens, amounts))
+```
+
+Load-bearing invariant: `strategyId = keccak(wrapped abi.encode(order)) = SwapVM.hash(order) = the Aqua dock hash = the subgraph Strategy.id`. Solidity's `abi.encode` of a single struct argument is the **wrapped** form (`0x20` offset word + tuple body) — ship must hand Aqua those exact bytes or the dock lands under an unreachable hash (capital never indexes, swaps can never spend it; both failure modes fork-proven). A re-ship of the same program reverts `0x879f237b` — duplicate dock, by design. Ordering matters too: announce precedes ship or the subgraph drops the events (F2).
 
 ### Authz matrix
 
-| Tool | compose | monitor | retune | ens | gate |
-|---|---|---|---|---|---|
-| All reads + `quote` | ✓ | ✓ | ✓ | ✓ | |
-| `retune` | | ✓(decides) | ✓(exec) | | |
-| `shipStrategy` | ✓ | | ✓ | | |
-| `setText`/`registerSubname` | | | | ✓ | |
-| `stop`/`remove`/`changeOracleBand` | | ✓(decides) | | | ✓(exec post-approval) |
-| `askHuman` | ✓ | ✓ | | ✓ | |
+| Tool | compose | monitor | retune | gate |
+|---|---|---|---|---|
+| All reads + `quote` | ✓ | ✓ | ✓ | |
+| `retune` / `recompileAndShip` | | ✓(decides) | ✓(exec) | |
+| `shipStrategy` (HTTP tool path) | ✓ (via UI HITL + World proof) | | ✓ | |
+| `stop`/`remove`/`changeOracleBand` | | ✓(decides) | | ✓(exec post-approval) |
+| `askHuman` | ✓ | ✓ | | ✓ |
 
 ## The strategy-change/removal policy
 
@@ -147,27 +158,30 @@ From `docs/sponsors/the-graph/OVERVIEW.md` L40/L45: the retune must be data-caus
 
 Mastra is fast-moving. Exact symbols are resolved at build time via the installed `mastra-ai/skills` skill + `@mastra/mcp-docs-server` + `mastra.ai/llms.txt`. This doc fixes structure and behavior; the build fixes exact symbols.
 
-## Directory layout
+## The retune stream (ETHOnline) — `/api/stream/retune`
 
-_Target tree for the implementation PR. Not present in the tree yet._
+The monitor's decisions surface live: a Mastra `apiRoutes` Hono route (`src/mastra/routes/retune-stream.ts`) emits one SSE `data:` frame per action (`noop` suppressed), with **per-connection dedup** keyed `${strategyId}:${trigger ?? type}:${entityId}` — `poll()` is a snapshot, not a diff, so dedup is mandatory or every tick re-toasts the same entity. `: keepalive` comments keep the connection warm; the UI's `/api/stream` proxies it (connect-only timeout — never abort the body).
+
+## Directory layout (as built)
 
 ```
 srcs/requirements/agent/
-├── Dockerfile            # real node:20-alpine + npm ci
-├── package.json          # mastra, @modelcontextprotocol/sdk, @ai-sdk/openai-compatible, viem, @1inch/aqua-sdk, zod, graphql-request; dev: vitest
-├── instructions.md       # Mastra top-level instructions (refs AGENT.md)
-├── index.ts              # Mastra registry: agents + workflows + MCPServer boot
-└── src/
-    ├── mcp/{server,reads,writes,gated,escalation,schemas}.ts
-    ├── agents/{compose,monitor,retune,ens,gate}.agent.ts
-    ├── workflows/{monitor,hitl}.workflow.ts   # suspend()/resume() lives here
-    ├── policy/{triggers,decide,thresholds}.ts # pure fns, the most-tested module
-    ├── monitor/graphDelta.ts                  # subgraph poller (Flavio-owned, doc-named)
-    ├── ens/{register,resolveVerify,status}.ts # status.ts is net-new (wave.status)
-    ├── actions/{recompileAndShip,stop,remove}.ts
-    ├── evidence/log.ts                        # retune+stop evidence (entity ID, delta, tx hashes)
-    ├── clients/{subgraph,ens,aqua,router}.ts
-    ├── config/env.ts
-    ├── hitl/reviewContract.ts                 # suspend/resume wire format shared with Next.js /review
-    └── test/{policy,triggers,mcp}.test.ts     # falsifiable, RED-on-mutation
+├── package.json          # mastra, @modelcontextprotocol/sdk, @ai-sdk/openai-compatible, viem, @1inch/aqua-sdk, @worldcoin/agentkit, zod, graphql-request; dev: vitest
+├── src/
+│   ├── mastra/
+│   │   ├── index.ts                      # registry: agents + workflows + MCPServer + apiRoutes + AgentKit gate
+│   │   ├── agents.ts / compose.agent.ts  # compose, monitor, retune, gate (ens agent removed with ENS)
+│   │   └── routes/retune-stream.ts       # SSE feed the UI proxies
+│   ├── mcp/{server,reads,writes}.ts      # tool surface; writes carry author + attribute
+│   ├── workflows/                        # monitor + HITL suspend/resume
+│   ├── policy/                           # pure fns — the most-tested module
+│   ├── monitor/graphDelta.ts             # subgraph delta source (graph-node or stub)
+│   ├── world/{gate,middleware,verify,storage}.ts  # AgentKit MCP gate + libsql usage/nonce store
+│   ├── actions/
+│   │   ├── deployStrategy.ts             # first-deploy: compile→announce→attribute→approve→ship (one id)
+│   │   └── recompileAndShip.ts           # retune arm
+│   ├── clients/{subgraph,aquaWrite,factoryWrite}.ts  # viem write clients (attribute = factoryWrite)
+│   ├── config/env.ts                     # announcer validation, world config, storage
+│   └── test/                             # 115 tests: pipeline, gate, stream, policy, schema
+└── .mastra/output/                        # built bundle the container runs
 ```

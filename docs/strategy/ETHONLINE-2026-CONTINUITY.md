@@ -1,5 +1,13 @@
 # wave → ETHOnline 2026 (4–16 set) — Continuity Track
 
+> ## ⚠️ AGGIORNAMENTO 11 set (task #31 chiuso + merge World + audit)
+> - **Authorship on-chain DONE** (#31, `e709ea5`+`121c570`+`34576c1`): `StrategyFactory.attribute` + `Strategy.author` nel subgraph + agent attribute-after-announce + UI de-stubbata (profili `/u/<addr>` reali, `/chat` = thread per wallet, stream SSE con dedup). **Verificato E2E su fork**: ship → dock → capitale+autore+descrizione su UNA riga.
+> - **Root cause della ship riscritta**: `0x879f237b` = dock duplicato su Aqua, NON mismatch di announce. `strategyId = keccak(wrapped abi.encode(order)) = SwapVM.hash = dock hash = riga subgraph` — UN id ovunque; qualsiasi altra encoding delle stesse order molla la liquidità sotto un hash irraggiungibile (provato su fork in entrambi i versi). Test di regressione nel tool path.
+> - **Merge World su main** (`7bf7b85`): gate World ID su compose→ship (entrambi i caller) + gate AgentKit su `/mcp*` + trust panel; conflitti nei tre file di ship risolti integrando `author` + `worldProof` negli stessi opts. Suite 115/115.
+> - **Audit finale** (`ec784f2`..`cd07b47`): swap-vm 755 · agent 115 · compiler 54 · frontend 24 (suite in `ui/test/`, pacchetto rinominato `frontend`) · subgraph `pnpm test:local` (invarianti vive su graph-node) · eslint funzionante (0 errori).
+> - **Deploy live**: runbook + audit compatibilità in [`docs/DEPLOY-LIVE-TESTNET.md`](../DEPLOY-LIVE-TESTNET.md). **Trei blocchi**: funding `0x5F86…3eE2`, chiave announcer live VUOTA nel `.env` (solo l'override fork è valorizzato), `.studio-auth` assente → serve `graph auth`.
+> - Docs allineate all'implementazione: README, AGENT.md, TECH-STACK.md, ETHGLOBAL.md (riscritto per Continuity), README subgraph/agent.
+
 > ## ⚠️ AGGIORNAMENTO 9 set (post commit del 9 set + issue #61 — correzioni applicate)
 > Questo piano è nato sulla copia ZIP del 26 luglio. Stato del `main` reale:
 > - **Rimozione ENS + scelta World** (`f441287`, 8 set): layer ENS eliminato, **follow eliminati del tutto** (ranking senza termine follower, follow entities via dal subgraph). Nel corpo storico qui sotto, dove si legge "l'integrazione ENS resta nel codice", vale il contrario — rimossa.

@@ -8,23 +8,24 @@ on-chain 1inch SwapVM strategy, with human-in-the-loop approval. Built on
 - **Spec:** [`docs/strategy/AGENT.md`](../../../docs/strategy/AGENT.md) (canonical) · [`docs/tasks/Flavio.md`](../../../docs/tasks/Flavio.md)
 - **PR:** [#21](https://github.com/ppezzull/wave/pull/21) · **Compiler contract:** [`../compiler/src/ast.ts`](../compiler/src/ast.ts) (frozen, specVersion 1)
 
-## Status (post-PR #21)
+## Status (ETHOnline, 11 Sep 2026 — merged on `main`)
 
 | Piece | Status |
 |---|---|
 | **compose** — NL → StrategySpec (Zod) | ✅ live-validated |
-| **Memory** (recall — "l'agente impara") | ✅ |
-| **Streaming** (`composeStream`) | ✅ |
+| **Memory** (recall — "l'agente impara") + **Streaming** (`composeStream`) | ✅ |
 | **Workflow HITL** (propose → suspend → `/review` → resume) | ✅ live-validated |
-| **Policy** — pure `decide()` + triggers (R1–R4 / S1–S4 / M1 / E1,E3) | ✅ 11 tests |
-| **Schema** — `StrategySpec` mirroring the `ast.ts` freeze | ✅ 15 tests |
-| **MCP** — 9 read tools (`mcp__wave__*`) | ✅ |
-| monitor / retune / ens / gate **agent actions** | 🔒 blocked |
-| `register` / `resolveVerify` (ENS) | 🔒 blocked |
-| `recompileAndShip` | 🔒 blocked |
-| real clients (subgraph / aqua / router / ens) | 🔒 stubs (throw) |
+| **Policy** — pure `decide()` + triggers (R1–R4 / S1–S4 / M1 / E1,E3) | ✅ tested |
+| **Schema** — `StrategySpec` mirroring the `ast.ts` freeze | ✅ tested |
+| **MCP** — read tools + `shipStrategy` write (HTTP tool path) | ✅ |
+| **deployStrategy** — compile → announce → **attribute** → approve → ship (one id) | ✅ fork-verified E2E |
+| **recompileAndShip** (retune arm) | ✅ exercised (autonomous retune ran live on Sepolia, `deea4f3`) |
+| **retune SSE stream** — `/api/stream/retune`, per-connection dedup | ✅ UI proxies it |
+| **World AgentKit gate** on `POST /mcp*` (AgentBook + libsql usage/nonce) | ✅ anonymous → 403; AgentBook registration pending (phone) |
+| real clients (subgraph / aquaWrite / factoryWrite) | ✅ wired |
+| ENS layer (`register`/`resolveVerify`) | ❌ removed at continuity (`f441287`) — identity = wallet + on-chain authorship |
 
-Blocked on Pietro's subgraph + Flaviano's Solidity freezes — see [What I need](#what-i-need-from-the-team).
+Test suite: **115/115** (`npm test`, offline). The ENS-era "blocked on" list below is historical — kept for the freeze history.
 
 ## The LLM (important)
 
@@ -56,17 +57,20 @@ PORT=3002
 ```
 src/
 ├── schema.ts                       # StrategySpec — MIRRORS compiler/ast.ts (freeze)
-├── config/env.ts                   # ZAI_* env contract
+├── config/env.ts                   # ZAI_* + announcer validation + world/storage config
 ├── mastra/
-│   ├── index.ts                    # Mastra registry (agents + workflow + storage + MCPServer)
+│   ├── index.ts                    # registry: agents + workflows + storage + MCPServer + apiRoutes + AgentKit gate
 │   ├── llm.ts                      # craftshost provider (auth + browser UA + think:false)
-│   ├── compose.agent.ts            # composeAgent + compose() + composeStream() + Memory
-│   └── workflows/strategy.workflow.ts   # HITL: NL → compose → suspend → resume(approve)
-├── mcp/{reads,server}.ts           # 9 mcp__wave__* read tools (readOnlyHint)
-├── policy/{triggers,decide,thresholds,types,index}.ts   # pure retune/stop/remove policy
-├── clients/{subgraph,ens,aqua,router}.ts               # STUBS (throw until wired)
-├── compose.smoke.ts | hitl.smoke.ts | mastra.boots.ts  # live smokes
-└── test/{policy,schema,schema.fuzz}.test.ts            # 28 tests (no LLM)
+│   ├── compose.agent.ts / agents.ts
+│   ├── routes/retune-stream.ts     # SSE feed the UI's /api/stream proxies
+│   └── workflows/                  # HITL: NL → compose → suspend → resume(approve)
+├── mcp/{reads,writes,server}.ts    # read tools + shipStrategy (author + attribute)
+├── policy/                         # pure retune/stop/remove policy — the most-tested module
+├── world/{gate,middleware,verify,storage}.ts   # AgentKit MCP gate (libsql usage + nonce)
+├── actions/{deployStrategy,recompileAndShip}.ts
+├── clients/{subgraph,aquaWrite,factoryWrite}.ts   # real viem write clients
+├── monitor/graphDelta.ts           # subgraph delta source
+└── test/                           # 115 tests (offline): pipeline, gate, stream, policy, schema
 ```
 
 ## Run / test (from this dir: `srcs/requirements/agent/`)
@@ -74,7 +78,7 @@ src/
 ```bash
 npm install
 npm run typecheck          # tsc --noEmit
-npm run test               # vitest — 28 tests, no LLM, no network
+npm run test               # vitest — 115 tests, no LLM, no network
 npm run spike              # deepseek-coder-v2 structured-output check (live, needs .env)
 npx tsx src/mastra.boots.ts    # Mastra registry + storage + MCPServer construct (no LLM)
 npx tsx src/compose.smoke.ts   # compose() NL → StrategySpec (live)

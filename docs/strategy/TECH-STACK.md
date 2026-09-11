@@ -15,7 +15,7 @@ block-beta
     L4["L4 · On-chain (P1)\nSolidity 0.8.30 / Foundry\nSwapVM + 2 custom opcodes + StrategyFactory"]
     L3["L3 · Settlement\nAqua (1inch) — ship/dock/pull/push\nliquidity stays in-wallet"]
     L2["L2 · Data (P2)\nThe Graph — first-party subgraph\n(decentralized network; graph-node on Sepolia RPC fb)"]
-    L1["L1 · Identity (P2)\nENS — ENSIP-25/26 text records\nprogram-hash verify · subnames"]
+    L1["L1 · Identity/Trust\nStrategyFactory.attribute (on-chain author)\nWorld AgentKit — verified humans · human-backed agents"]
     L7 --> L6 --> L5 --> L4 --> L3
     L2 -.-> L6
     L1 -.-> L3
@@ -40,12 +40,13 @@ All demo runs target **live Sepolia** — the chain does the real work; the UI i
 ### L6 — Agent / off-chain (P2) · TypeScript · **own container**
 - **Mastra** (Apache-2.0, self-hosted) runtime + **z.ai** LLM (AI SDK OpenAI-compatible provider) + a **custom MCP server** (`MCPServer` + `@modelcontextprotocol/sdk`). The `composeAgent` parses NL intent into the bounded Zod form (writes no code); `monitorAgent` + `graphDelta` drive the autonomous retune. HITL gates only stop/remove + escalations. Full spec: [AGENT.md](./AGENT.md).
 - The agent runs in **its own container** (`srcs/docker-compose.yml`), reachable from Next.js over internal HTTP/SSE (`AGENT_URL=http://agent:3002`) — LLM + wallet keys never live in the UI process.
-- **viem** for RPC + wallet + ENS actions (universal resolver, text records, subnames).
+- **viem** for RPC + wallet + on-chain writes (router announce, factory attribute, Aqua ship).
 - **@1inch/aqua-sdk** for `ship`/`dock`/`monitor`, `calculateStrategyHash`, event decoding.
-- `resolveVerify.ts` reads ENS records and verifies the on-chain program hash matches before settling.
+- **World AgentKit gate** on `POST /mcp*` (signature → AgentBook; anonymous → 403) and the **retune SSE stream** (`/api/stream/retune`, per-connection dedup) surfaced by the UI.
 
-### L7 — UI (P3) · Next.js (App Router) + React, SSR
-- Three panes: intent (NL sentence) / bytecode (hex, tokenized into `[op][len][args]`) / safety card (green/red verdict from the `quote()` battery). Plus an ENS-discovery pane.
+### L7 — UI (P3) · Next.js (App Router) + React, SSR — package `frontend`
+- Three panes: intent (NL sentence) / bytecode (hex, tokenized into `[op][len][args]`) / safety card (green/red verdict from the `quote()` battery).
+- **Profiles and threads are real** (ETHOnline): `/u/<address>` renders author-keyed stats from the subgraph, `/chat` lists the session wallet's shipped strategies as threads, `/api/stream` proxies the agent SSE. World publish gate on both ship paths.
 - **Why SSR / server components:** keeps the **LLM call, API keys (Studio/x402), and the compile invocation server-side** — no secrets or heavy logic shipped to the browser, and the first paint can render a cached/canned safety card before the live compile returns (the latency-fallback mechanism).
 - **Server actions / route handlers** bridge to the compiler (`/compile`) + simulator (`/simulate`). The 1500ms watchdog retries the live SSE stream on timeout (disclosed); there is no canned `replay.json` to fall back to — a persistent failure is narrated honestly against the on-screen state.
 - Runs against **live Sepolia** (RPC via Alchemy/Infura); the chain does the real work, the UI is a view layer. No anvil fork, no mock data.
@@ -55,9 +56,9 @@ All demo runs target **live Sepolia** — the chain does the real work; the UI i
 - **Fallback if `graph-node` won't sync our Sepolia deployment:** poll `Swapped` via **`eth_getLogs`** directly (same threshold math; label "subgraph syncing"). Never cuts the retune.
 - **x402** pay-per-query is the agent-native demo beat (optional, mainnet gateway, ~$5 Base USDC); **Studio API key** as one-env-var fallback.
 
-### L1 — Identity (P2) · ENS
-- **ENSIP-25** (agent registry) + **ENSIP-26** (`agent-context` / `agent-endpoint[mcp]`) text records, plus a custom `v0.programhash` record (= keccak256 of shipped bytecode).
-- Universal resolver; both ENSIPs are **Draft** standards (always say "draft standard").
+### L1 — Identity/Trust · on-chain authorship + World (updated at ETHOnline)
+- **`StrategyFactory.attribute(strategyId, author)`** (onlyOwner, append-only, `StrategyAttributed`) — every shipped strategy records its author on-chain; the subgraph indexes it as `Strategy.author` and every profile/thread is an address-keyed query. Replaced the ENS identity layer (removed `f441287`).
+- **World AgentKit + IDKit** — World ID proof at the compose→ship publish gate (signal = sha256 of the canonical payload, one-shot nullifier), AgentBook-gated MCP surface, trust panel in Settings.
 
 ## Language mix
 
