@@ -75,3 +75,31 @@ the fork). First live ship can use small amounts.
 Owner rule recap: new router/factory owner = funded deployer EOA; the agent's
 announcer key must derive to the SAME address or every onlyOwner call fails
 (the agent validates this at boot via `EXPECTED_ANNOUNCER_OWNER`).
+
+## World — remaining work (Flavio's handoff, as of 11 Sep)
+
+The code is merged and local-verified (gate 403s anonymous callers, publish
+gate passes via dev fixture, trust panel renders honest states). What is left
+is the phone-gated, non-local leg — in order:
+
+1. **AgentBook registration** of the two agent wallets — publisher
+   `0xf4AF4E8f4F49032257D9C1e3F1d9c5324a040620`, retuner
+   `0x92b4747d624253f1B7598A996bb44855d8008017` (keys already in `.env`,
+   perms 600): `npx @worldcoin/agentkit-cli register <address>` + World App
+   verify on a phone, once per wallet. Then `agentkit-cli status` + the
+   real-client e2e smoke the Step-2 notes deferred until registration.
+2. **One real Sandbox App verification** through the compose→ship publish
+   gate (World App on the phone, `WORLD_IDKIT_ENV=staging`) — this closes
+   the dev-fixture gap; until then local passes don't prove the real path.
+3. **`FEEDBACK-WORLD.md` §3** — fill in the CLI `register`/`status` and
+   Portal flow findings from that run (the bounty's mandatory feedback doc;
+   §1/§2/§4 already carry real findings).
+4. **Developer Portal re-submission** — the app review was withdrawn when
+   the hosted URL returned 522; re-submit once the deploy is revived
+   (app `app_d088…13e` / `rp_6d0…4de`, action `proofofhuman` — all live).
+5. *Above the bounty floor, if time:* reads/writes tiering + x402 fallback
+   on the MCP gate (remaining Step-2 scope) and the Selfie Check fast-follow
+   (Phase 1bis, separate pool).
+
+Kill-switches while testing: `WORLD_MCP_GATE=off` (agent) and
+`WORLD_PUBLISH_GATE=off` / `WORLD_ID_DEV_ALLOW=on` (frontend).
