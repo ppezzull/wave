@@ -17,24 +17,41 @@ const LABELS: Record<LedgerPhase, { text: string; color: string; pulse?: boolean
   error: { text: '', color: '#E5484D' }, // filled from reason
 }
 
-export function LedgerApprovalPanel({ phase, reason }: { phase: LedgerPhase; reason?: string }) {
+export function LedgerApprovalPanel({
+  phase,
+  reason,
+  debug,
+}: {
+  phase: LedgerPhase
+  reason?: string
+  debug?: string
+}) {
   if (phase === 'idle') return null
   const l = LABELS[phase]
   const text = phase === 'error' ? (reason ?? 'Unexpected Ledger error.') : l.text
   return (
     <div
-      className="flex items-center gap-2 font-sans text-[13px]"
-      style={{ color: l.color }}
+      className="flex flex-col gap-1"
       role="status"
       aria-live="polite"
       aria-label={`Ledger approval: ${text}`}
     >
-      <span
-        className={`inline-block h-2 w-2 rounded-full ${l.pulse ? 'animate-pulse' : ''}`}
-        style={{ background: l.color }}
-        aria-hidden="true"
-      />
-      <span>{text}</span>
+      <div className="flex items-center gap-2 font-sans text-[13px]" style={{ color: l.color }}>
+        <span
+          className={`inline-block h-2 w-2 rounded-full ${l.pulse ? 'animate-pulse' : ''}`}
+          style={{ background: l.color }}
+          aria-hidden="true"
+        />
+        <span>{text}</span>
+      </div>
+      {debug && (phase === 'error' || phase === 'rejected') && (
+        <pre
+          className="font-mono text-[11px] text-wave-muted whitespace-pre-wrap break-all rounded-[8px] p-2 bg-wave-surface border border-wave-border"
+          data-testid="ledger-debug"
+        >
+          {debug}
+        </pre>
+      )}
     </div>
   )
 }

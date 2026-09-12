@@ -38,12 +38,13 @@ export type StrategyStatus = 'active' | 'stopped' | 'removed'
 // Safety verdict — 4 numbers computed off-chain from the bytecode (compiler output).
 export interface SafetyReport {
   verdict: 'SAFE' | 'UNSAFE'
-  monotonicity: number // 0..1, e.g. 0.97
-  symmetry: string // '12 bps'
-  guardTriggers: number // count
-  skewVsCap: number // 0..1
-  // Live path: the safety report isn't computed until the compiler/safety
-  // tooling ships. Render "pending", never fabricate SAFE. (mock ignores this.)
+  /** The compiler's rejection-rule pass — the NAMES of the rules that ran
+   * (data from the deterministic emit, not an invented score). */
+  rulesApplied?: string[]
+  /** Whether the canonical pass reordered/rewrote the as-written spec. */
+  canonicalized?: boolean
+  // Live path: not derived until the compiler runs (no description / derive
+  // failed). Render "pending", never fabricate SAFE.
   pending?: boolean
 }
 
@@ -135,10 +136,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.97,
-      symmetry: '12 bps',
-      guardTriggers: 3,
-      skewVsCap: 0.04,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -194,10 +193,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.94,
-      symmetry: '8 bps',
-      guardTriggers: 2,
-      skewVsCap: 0.02,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -246,10 +243,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'UNSAFE',
-      monotonicity: 0.61,
-      symmetry: '140 bps',
-      guardTriggers: 9,
-      skewVsCap: 0.38,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -292,10 +287,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.91,
-      symmetry: '18 bps',
-      guardTriggers: 4,
-      skewVsCap: 0.06,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -342,10 +335,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.88,
-      symmetry: '22 bps',
-      guardTriggers: 1,
-      skewVsCap: 0.03,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [],
   },
@@ -379,10 +370,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.95,
-      symmetry: '10 bps',
-      guardTriggers: 2,
-      skewVsCap: 0.05,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -425,10 +414,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.96,
-      symmetry: '9 bps',
-      guardTriggers: 2,
-      skewVsCap: 0.03,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -477,10 +464,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.93,
-      symmetry: '14 bps',
-      guardTriggers: 3,
-      skewVsCap: 0.07,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -523,10 +508,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.9,
-      symmetry: '16 bps',
-      guardTriggers: 3,
-      skewVsCap: 0.05,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -573,10 +556,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'UNSAFE',
-      monotonicity: 0.72,
-      symmetry: '96 bps',
-      guardTriggers: 7,
-      skewVsCap: 0.29,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [
       {
@@ -616,10 +597,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.86,
-      symmetry: '24 bps',
-      guardTriggers: 1,
-      skewVsCap: 0.04,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [],
   },
@@ -650,10 +629,8 @@ export const strategies: Strategy[] = [
     ],
     safety: {
       verdict: 'SAFE',
-      monotonicity: 0.92,
-      symmetry: '11 bps',
-      guardTriggers: 0,
-      skewVsCap: 0.02,
+      rulesApplied: ['OracleGuardMustPrecedeSkew', 'ProtocolFeeLeMakerFee'],
+      canonicalized: true,
     },
     retunes: [],
   },

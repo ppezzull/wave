@@ -38,12 +38,17 @@ export async function actionHashOf(payload: unknown): Promise<string> {
     .slice(0, 32)
 }
 
-/** The exact text the Ledger screen / wallet prompt shows and signs. The
- * description is capped at 200 chars — longer messages push the ETH app
- * toward blind-signing; the verifier only needs the hash embedded. */
+/**
+ * The exact text the Ledger screen / wallet prompt shows and signs. STRICTLY
+ * ASCII: the DMK signer kit writes a 4-byte length taken from the JS string
+ * `.length` but encodes the payload with TextEncoder (UTF-8) — every non-ASCII
+ * char desyncs the frame by its UTF-8 size and the ETH app returns 6980 / an
+ * empty response ("no signature returned"). Fork-proven with the em-dash.
+ * Keep byte-identical with agent/src/ledger/approval.ts.
+ */
 export function approvalMessage(actionHash: string, description: string): string {
-  const clipped = description.length > 200 ? `${description.slice(0, 200)}…` : description
-  return `wave HITL approval [${actionHash}] — ${clipped}`
+  const ascii = (description.match(/[\x20-\x7e]+/g) ?? []).join(" ").slice(0, 200)
+  return `wave HITL approval [${actionHash}] -- ${ascii}`
 }
 
 /** Ledger's {r,s,v} → a 0x-prefixed 65-byte EIP-191 signature (r ‖ s ‖ yParity).

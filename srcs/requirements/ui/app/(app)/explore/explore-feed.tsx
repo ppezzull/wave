@@ -1,9 +1,11 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Strategy } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
+import { useSessionUser } from '@/hooks/use-session-user'
+import { similarFeed, type SimilarMatch } from '@/app/actions/feed'
 
 type Tab = 'foryou' | 'new'
 
@@ -13,15 +15,62 @@ interface Props {
 }
 
 // Tab toggle is pure client state; the strategy arrays are server-resolved.
-// "For you": unranked (new / low-fill) float to the top, then ranked.
+// "For you" = REAL similarity: once the session wallet resolves, the server
+// ranks every described strategy by TF-IDF-cosine against the wallet's OWN
+// deployed descriptions (lib/similarity.ts) — matches (with a % badge) come
+// first, then the leaderboard tail. No wallet / nothing deployed yet → the
+// honest fallback (unranked then ranked) with a hint, never a fake ranking.
 // "New": only the unranked strategies, newest activity first.
 export function ExploreFeed({ ranked, unranked }: Props) {
   const [tab, setTab] = useState<Tab>('foryou')
+  const { sessionUser } = useSessionUser()
+  const [matches, setMatches] = useState<SimilarMatch[] | null>(null)
+  const [matchFailed, setMatchFailed] = useState(false)
+  const address = sessionUser?.address
+
+  useEffect(() => {
+    if (!address) return
+    let cancelled = false
+    setMatches(null)
+    setMatchFailed(false)
+    void similarFeed(address)
+      .then((m) => {
+        if (!cancelled) setMatches(m)
+      })
+      .catch(() => {
+        if (!cancelled) setMatchFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [address])
+
+  const matchedIds = useMemo(
+    () => new Set((matches ?? []).map((m) => m.strategy.id)),
+    [matches],
+  )
+  const matchPctById = useMemo(
+    () => new Map((matches ?? []).map((m) => [m.strategy.id, m.matchPct])),
+    [matches],
+  )
+  const tail = useMemo(
+    () =>
+      [...unranked, ...ranked].filter((s) => !matchedIds.has(s.id)),
+    [unranked, ranked, matchedIds],
+  )
+
+  const showMatched = tab === 'foryou' && matches !== null && matches.length > 0
+  const showHint =
+    tab === 'foryou' &&
+    !matchFailed &&
+    (matches === null || matches.length === 0) &&
+    !!address
 
   const feed = useMemo<Strategy[]>(() => {
+    if (showMatched) return [...(matches ?? []).map((m) => m.strategy), ...tail]
     if (tab === 'foryou') return [...unranked, ...ranked]
     return [...unranked].sort((a, b) => b.lastSwapTimestamp - a.lastSwapTimestamp)
-  }, [tab, ranked, unranked])
+  }, [showMatched, matches, tail, tab, ranked, unranked])
 
   return (
     <>
@@ -72,8 +121,16 @@ export function ExploreFeed({ ranked, unranked }: Props) {
 
       {/* Feed */}
       <section className="flex-1" aria-label="Strategy feed">
+        {showHint && (
+          <p className="px-4 py-3 font-sans text-[13px] text-wave-muted border-b border-wave-border">
+            For you ranks the feed by similarity to the strategies you deploy —
+            ship one and matches appear here.
+          </p>
+        )}
         {feed.length > 0 ? (
-          feed.map((s) => <StrategyCard key={s.id} strategy={s} />)
+          feed.map((s) => (
+            <StrategyCard key={s.id} strategy={s} matchPct={matchPctById.get(s.id)} />
+          ))
         ) : (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center gap-3">
             <p className="font-sans text-[15px] text-wave-muted">

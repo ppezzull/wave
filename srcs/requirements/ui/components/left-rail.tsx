@@ -24,7 +24,6 @@ const LISBOA =
 function navItems(handle: string) {
   return [
     { label: 'Explore', href: '/explore', icon: Compass, id: 'explore' },
-    { label: 'Compose', href: '/compose', icon: Feather, id: 'compose' },
     { label: 'Chat', href: '/chat', icon: MessageSquare, id: 'chat' },
     { label: 'Profile', href: `/u/${handle}`, icon: User, id: 'profile' },
     { label: 'Settings', href: '/settings', icon: Settings, id: 'settings' },
@@ -129,11 +128,11 @@ function RailContent({
         ))}
       </nav>
 
-      {/* Create button */}
+      {/* Create button — opens the chat widget (the one chat surface). */}
       <div className={`mt-4 ${collapsed ? 'flex justify-center px-2' : 'px-3'}`}>
         {collapsed ? (
           <button
-            onClick={openCreate}
+            onClick={() => openCreate()}
             className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]"
             style={{ background: LISBOA }}
             aria-label="Create new strategy"
@@ -142,7 +141,7 @@ function RailContent({
           </button>
         ) : (
           <button
-            onClick={openCreate}
+            onClick={() => openCreate()}
             className="w-full py-3.5 font-sans text-[16px] font-bold text-white rounded-full shadow-sm transition-all duration-[220ms] hover:brightness-110 active:scale-[0.99]"
             style={{ background: LISBOA }}
             aria-label="Create new strategy"

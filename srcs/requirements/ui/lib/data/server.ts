@@ -14,6 +14,8 @@
 import 'server-only'
 import { subgraph, type SubgraphStrategy } from '../clients/subgraph'
 import { identityFromAddress } from '../identity'
+import { deriveProgramFromDescription } from '../derive-program'
+import { matchFeed } from '../similarity'
 import type { Strategy, Profile, ProfileStats } from '../mock-data'
 
 // Subgraph `now` is real time (seconds). Pages that need determinism pass a
@@ -43,13 +45,44 @@ async function hydrateStrategy(s: SubgraphStrategy): Promise<Strategy> {
     // The post, as shipped (StrategyDescribed) — "" for pre-event strategies. Fork
     // prefill round-trips these exact bytes back into the composer.
     description: s.description ?? '',
-    ensProgramHash: s.programHash, // fall back to on-chain hash
+    ensProgramHash: s.programHash, // recomputed from the post in getStrategy (detail only)
     committedCapital: s.committedCapital || '',
     oracleBand: '',
     bytecode: [],
-    safety: { pending: true, verdict: 'UNSAFE', monotonicity: 0, symmetry: '', guardTriggers: 0, skewVsCap: 0 },
+    safety: { pending: true, verdict: 'SAFE' },
     retunes: [],
   }
+}
+
+// ── similarity feed (the real "For you") ────────────────────────────────────
+// The wallet's OWN deployed descriptions are the taste profile; every other
+// described strategy is ranked by TF-IDF cosine similarity to it (pure math
+// over real subgraph data — lib/similarity.ts). Returns null when the wallet
+// has nothing described yet: the client falls back to the leaderboard with an
+// honest hint, never a fabricated ranking.
+export async function getSimilarFeed(
+  address: string,
+): Promise<Array<{ strategy: Strategy; matchPct: number }> | null> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null
+  const [own, all] = await Promise.all([
+    subgraph.listStrategiesByAuthor(address.toLowerCase()),
+    subgraph.listStrategies(),
+  ])
+  const described = own.filter((s) => s.description.trim().length > 0)
+  if (described.length === 0) return null
+  const matches = matchFeed({ own, pool: all })
+  if (matches.length === 0) return null
+  const byId = new Map(all.map((s) => [s.id, s]))
+  const hydrated: Array<{ strategy: Strategy; matchPct: number }> = []
+  for (const m of matches) {
+    const raw = byId.get(m.id)
+    if (!raw) continue
+    hydrated.push({
+      strategy: await hydrateStrategy(raw),
+      matchPct: Math.round(m.score * 100),
+    })
+  }
+  return hydrated
 }
 
 // ── feed ────────────────────────────────────────────────────────────────────
@@ -66,10 +99,39 @@ export async function getFeed(now = nowSecs()): Promise<{ ranked: Strategy[]; un
   return { ranked, unranked }
 }
 
+/** Base strategy — subgraph only, fast. Feeds cards/lists and the detail
+ *  page's above-the-fold content; the derive (below) streams in separately. */
 export async function getStrategy(id: string): Promise<Strategy | null> {
   const raw = await subgraph.getStrategy(id)
   if (!raw) return null
   return hydrateStrategy(raw)
+}
+
+/** Detail-page derivation: recompile the POST through the same parser +
+ *  deterministic compiler the ship used. Real bytecode for the pane, and the
+ *  RECOMPUTED hash as ensProgramHash — HashVerify becomes on-chain vs post
+ *  instead of a tautology. Safety = the compiler's rule pass, not a score.
+ *  No description / derivation failure → fields stay pending/empty (honest).
+ *  Called inside its own Suspense boundary: the base card renders instantly,
+ *  these panels stream when the compile lands (cached per description). */
+export async function getDerivedStrategy(id: string): Promise<Strategy | null> {
+  const raw = await subgraph.getStrategy(id)
+  if (!raw) return null
+  const hydrated = await hydrateStrategy(raw)
+  if (hydrated.description) {
+    const derived = await deriveProgramFromDescription(hydrated.description)
+    if (derived) {
+      hydrated.bytecode = derived.bytecode
+      if (derived.programHash) hydrated.ensProgramHash = derived.programHash
+      hydrated.safety = {
+        verdict: 'SAFE',
+        rulesApplied: derived.rulesApplied,
+        canonicalized: derived.canonicalized,
+        pending: false,
+      }
+    }
+  }
+  return hydrated
 }
 
 export async function getSwapHistory(strategyId: string, limit = 50) {

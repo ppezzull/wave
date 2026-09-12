@@ -17,6 +17,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      // /compose was removed — the agent chat (/chat) is the one create surface.
+      // Old links (incl. ?fork=<id>, which /chat understands) keep working.
+      { source: '/compose', destination: '/chat', permanent: false },
+    ]
+  },
 }
 
 export default nextConfig

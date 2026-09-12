@@ -13,7 +13,7 @@ import type { Strategy, Profile, ProfileStats } from '../mock-data'
 
 export type { Strategy, Profile, ProfileStats }
 
-const USE_MOCK = process.env.WAVE_USE_MOCK !== 'false' // default true
+const USE_MOCK = process.env.WAVE_USE_MOCK === 'true' // prod default: REAL subgraph data — mock is explicit opt-in only
 
 /** Resolved data mode — server-only. The layout passes this to the client shell
  * so the create-drawer can pick the live compose stream vs the canned mock demo
@@ -28,6 +28,21 @@ export async function getFeed(now?: number): Promise<{ ranked: Strategy[]; unran
 
 export async function getStrategy(id: string): Promise<Strategy | null> {
   return USE_MOCK ? mock.getStrategy(id) : server.getStrategy(id)
+}
+
+/** Slow derived fields (recompiled bytecode/safety/hash) for the detail page —
+ *  awaited inside its own Suspense boundary, not by the base card. */
+export async function getDerivedStrategy(id: string): Promise<Strategy | null> {
+  return USE_MOCK ? mock.getStrategy(id) : server.getDerivedStrategy(id)
+}
+
+/** The real "For you": similarity of the feed to the wallet's OWN deployed
+ *  descriptions (TF-IDF cosine, lib/similarity.ts). null = nothing to match
+ *  from yet — the client falls back to the leaderboard, never fabricates. */
+export async function getSimilarFeed(
+  address: string,
+): Promise<Array<{ strategy: Strategy; matchPct: number }> | null> {
+  return USE_MOCK ? Promise.resolve(null) : server.getSimilarFeed(address)
 }
 
 export async function getSwapHistory(strategyId: string, limit?: number) {

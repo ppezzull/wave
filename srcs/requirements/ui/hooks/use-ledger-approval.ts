@@ -3,18 +3,14 @@
 // useLedgerApproval — the device half of the HITL gate.
 //
 // requestApproval() MUST be called from inside a click handler (WebHID's
-// browser picker requires a user gesture). The walk follows the DMK skill:
-// discover (15s) → connect → session Ready (locked → PIN hint) →
-// signerEth.signMessage (auto-opens the Ethereum app; its interaction states
-// drive the phases) → 60s timeout cancels. User rejection is a NEUTRAL
-// outcome ("cancelled on device"), never a red error.
-//
-// Enum values verified at runtime against device-management-kit@1.9.0 /
-// device-signer-kit-ethereum@1.18.0.
+// browser picker requires a user gesture). Dead sessions are dropped before
+// rediscovery — unplug/replug must never reuse a stale sessionId.
 import { useCallback, useRef, useState } from 'react'
-import { firstValueFrom, filter, take, timeout as rxTimeout } from 'rxjs'
+import { firstValueFrom, filter, take, throwError, timeout as rxTimeout } from 'rxjs'
 import { recoverMessageAddress } from 'viem'
 import { useDmkLoader } from '@/components/ledger/ledger-provider'
+import { classifyLedgerFailure } from '@/lib/ledger-errors'
+import { ledgerLog, ledgerLogError, summarizeSession } from '@/lib/ledger-log'
 import { toEip191Signature } from '@/lib/ledger'
 
 export type LedgerPhase =
@@ -31,61 +27,79 @@ export interface LedgerApprovalResult {
   status: 'approved' | 'rejected' | 'error'
   address?: string
   signature?: string
-  reason?: string // user-facing
-  debug?: string // raw detail — never shown to users
+  reason?: string
+  debug?: string
 }
 
-const DERIVATION = "44'/60'/0'/0/0" // developer-set constant — never user input
+const DERIVATION = "44'/60'/0'/0/0"
 
-/** User rejection: neutral, per the DMK skill's taxonomy. */
-function isDeviceRejection(err: unknown): boolean {
-  const e = err as { name?: string; _tag?: string; errorCode?: string; originalError?: { errorCode?: string } }
-  const code = e?.errorCode ?? e?.originalError?.errorCode
-  return (
-    e?._tag === 'RefusedByUserDAError' ||
-    e?.name === 'NoAccessibleDeviceError' || // picker closed by the user
-    code === '5501' ||
-    code === '6985' ||
-    code === '6982'
-  )
-}
-
-function classifyDeviceError(err: unknown): { reason: string; debug: string } {
-  const e = err as { errorCode?: string; originalError?: { errorCode?: string }; message?: string }
-  const code = e?.errorCode ?? e?.originalError?.errorCode
-  const debug = String((err as Error)?.message ?? err)
-  if (code === '5515' || /lock/i.test(debug)) {
-    return { reason: 'The Ledger is locked. Enter your PIN on the device, then try again.', debug }
-  }
-  if (code === '6807' || /not installed/i.test(debug)) {
-    return { reason: 'The Ethereum app is not installed. Install it via Ledger Live and try again.', debug }
-  }
-  if (code === '6a80' || /blind/i.test(debug)) {
-    return { reason: 'Blind signing is disabled. Enable it in the Ethereum app settings on the device.', debug }
-  }
-  if (/disconnected|timeout|connection/i.test(debug)) {
-    return { reason: 'Lost connection to the Ledger. Reconnect the device and try again.', debug }
-  }
-  return { reason: 'Unexpected Ledger error. Reconnect the device and start again.', debug }
+function tagged(tag: string, message: string) {
+  return Object.assign(new Error(message), { _tag: tag })
 }
 
 export function useLedgerApproval() {
   const loadDmk = useDmkLoader()
   const [phase, setPhase] = useState<LedgerPhase>('idle')
   const [reason, setReason] = useState<string>()
+  const [debug, setDebug] = useState<string>()
   const sessionIdRef = useRef<string>()
+
+  const dropSession = useCallback(async (dmk?: { disconnect: (a: { sessionId: string }) => Promise<void> }) => {
+    const id = sessionIdRef.current
+    sessionIdRef.current = undefined
+    if (id) ledgerLog('session.drop', { sessionId: id })
+    if (id && dmk) {
+      try {
+        await dmk.disconnect({ sessionId: id })
+      } catch {
+        // already gone
+      }
+    }
+  }, [])
+
+  const fail = useCallback(
+    async (
+      err: unknown,
+      dmk?: { disconnect: (a: { sessionId: string }) => Promise<void> },
+    ): Promise<LedgerApprovalResult> => {
+      const classified = classifyLedgerFailure(err)
+      ledgerLogError('fail', err, {
+        kind: classified.kind,
+        reason: classified.reason,
+        debug: classified.debug,
+        clearSession: classified.clearSession,
+        sessionId: sessionIdRef.current,
+      })
+      if (classified.clearSession) await dropSession(dmk)
+      setDebug(classified.debug)
+      if (classified.kind === 'rejected') {
+        setPhase('rejected')
+        setReason(classified.reason)
+        return { status: 'rejected', reason: classified.reason, debug: classified.debug }
+      }
+      setPhase('error')
+      setReason(classified.reason)
+      return { status: 'error', reason: classified.reason, debug: classified.debug }
+    },
+    [dropSession],
+  )
 
   /** Derive the device's ETH address (no device tap — checkOnDevice: false). */
   const getDeviceAddress = useCallback(async (): Promise<string> => {
     const dmk = await loadDmk()
-    if (!sessionIdRef.current) throw new Error('connect the Ledger first')
+    if (!sessionIdRef.current) throw tagged('SessionDead', 'connect the Ledger first')
+    ledgerLog('getAddress.start', { sessionId: sessionIdRef.current })
     const { SignerEthBuilder } = await import('@ledgerhq/device-signer-kit-ethereum')
     const signer = new SignerEthBuilder({ dmk, sessionId: sessionIdRef.current }).build()
     const { observable } = signer.getAddress(DERIVATION, { checkOnDevice: false })
     const state = await firstValueFrom(
       observable.pipe(filter((s) => s.status === 'completed' || s.status === 'error'), take(1)),
     )
-    if (state.status === 'error') throw new Error(String(state.error))
+    if (state.status === 'error') {
+      ledgerLogError('getAddress.error', state.error)
+      throw state.error
+    }
+    ledgerLog('getAddress.ok', { address: state.output.address })
     return state.output.address
   }, [loadDmk])
 
@@ -93,60 +107,144 @@ export function useLedgerApproval() {
     async (input: { message: string; expectedAddress?: string }): Promise<LedgerApprovalResult> => {
       setPhase('connecting')
       setReason(undefined)
+      setDebug(undefined)
+      ledgerLog('approval.start', {
+        expected: input.expectedAddress,
+        messageChars: input.message.length,
+        messageHead: input.message.slice(0, 72),
+        hadSession: !!sessionIdRef.current,
+      })
+      // The desync that fork-broke the device: the kit frames with string
+      // length but encodes UTF-8 — log both so any mismatch is visible.
+      {
+        const bytes = new TextEncoder().encode(input.message).length
+        ledgerLog('approval.message', {
+          bytes,
+          chars: input.message.length,
+          bytesMatchChars: bytes === input.message.length,
+          asciiOnly: /^[\x00-\x7f]*$/.test(input.message),
+          full: input.message,
+        })
+      }
+      let dmk: Awaited<ReturnType<typeof loadDmk>> | undefined
       try {
-        const [dmk] = await Promise.all([
-          loadDmk(),
-          import('@ledgerhq/device-management-kit').then((m) => m),
-        ])
+        const loaded = await Promise.all([loadDmk(), import('@ledgerhq/device-management-kit')])
+        dmk = loaded[0]
+        const { DeviceStatus, DeviceActionStatus, UserInteractionRequired } = loaded[1]
+        ledgerLog('approval.dmk', { ok: !!dmk })
 
-        // (a) discover + connect — inside the gesture's activation window
+        // Drop a stale session (unplug, refresh, another tab). Skill: never
+        // reuse Disconnected — restart discovery from the user gesture.
+        if (sessionIdRef.current) {
+          try {
+            const existing = await firstValueFrom(
+              dmk.getDeviceSessionState({ sessionId: sessionIdRef.current }).pipe(take(1), rxTimeout(3_000)),
+            )
+            ledgerLog('session.probe', { sessionId: sessionIdRef.current, ...summarizeSession(existing) })
+            if (existing.deviceStatus === DeviceStatus.NOT_CONNECTED) {
+              ledgerLog('session.stale', { why: 'NOT_CONNECTED' })
+              await dropSession(dmk)
+            }
+          } catch (probeErr) {
+            ledgerLogError('session.probe-fail', probeErr, { sessionId: sessionIdRef.current })
+            await dropSession(dmk)
+          }
+        }
+
         if (!sessionIdRef.current) {
+          ledgerLog('discover.start')
           const { webHidIdentifier } = await import('@ledgerhq/device-transport-kit-web-hid')
           const device = await firstValueFrom(
-            dmk.startDiscovering({ transport: webHidIdentifier }).pipe(rxTimeout(15_000)),
+            dmk.startDiscovering({ transport: webHidIdentifier }).pipe(
+              rxTimeout({
+                first: 15_000,
+                with: () => throwError(() => tagged('DiscoveryTimeout', 'No Ledger found')),
+              }),
+            ),
           )
+          ledgerLog('discover.hit', {
+            id: (device as { id?: string }).id,
+            name: (device as { name?: string }).name,
+            model: (device as { model?: string }).model,
+          })
           sessionIdRef.current = await dmk.connect({
             device,
             sessionRefresherOptions: { isRefresherDisabled: false },
           })
+          ledgerLog('connect.ok', { sessionId: sessionIdRef.current })
         }
 
-        // (b) wait for a usable session state (locked stays until PIN entry)
-        const { DeviceStatus } = await import('@ledgerhq/device-management-kit')
-        const state = await firstValueFrom(
+        let state = await firstValueFrom(
           dmk.getDeviceSessionState({ sessionId: sessionIdRef.current }).pipe(
             filter((s) => s.deviceStatus !== DeviceStatus.NOT_CONNECTED),
             take(1),
-            rxTimeout(30_000),
+            rxTimeout({
+              first: 30_000,
+              with: () => throwError(() => tagged('SessionWaitTimeout', 'Ledger did not come online')),
+            }),
           ),
         )
-        if (state.deviceStatus === DeviceStatus.LOCKED) setPhase('ready-on-device')
-        else setPhase('ready-on-device')
+        ledgerLog('session.state', {
+          ...summarizeSession(state),
+          stateKeys: Object.keys(state ?? {}),
+          currentAppRaw: (state as { currentApp?: unknown })?.currentApp,
+        })
 
-        // (c) sign — the signer auto-opens the Ethereum app; interactions drive phases
-        const { SignerEthBuilder, DeviceActionStatus, UserInteractionRequired } =
-          await import('@ledgerhq/device-signer-kit-ethereum')
+        if (state.deviceStatus === DeviceStatus.BUSY) {
+          ledgerLog('session.busy-wait')
+          state = await firstValueFrom(
+            dmk.getDeviceSessionState({ sessionId: sessionIdRef.current }).pipe(
+              filter((s) => s.deviceStatus !== DeviceStatus.BUSY),
+              take(1),
+              rxTimeout({
+                first: 10_000,
+                with: () => throwError(() => tagged('DeviceBusyTimeout', 'Device busy')),
+              }),
+            ),
+          )
+          ledgerLog('session.after-busy', summarizeSession(state))
+        }
+        if (state.deviceStatus === DeviceStatus.NOT_CONNECTED) {
+          throw tagged('SessionDead', 'Ledger disconnected')
+        }
+        setPhase('ready-on-device')
+
+        const { SignerEthBuilder } = await import('@ledgerhq/device-signer-kit-ethereum')
         const signer = new SignerEthBuilder({ dmk, sessionId: sessionIdRef.current }).build()
+        ledgerLog('sign.start', { derivation: DERIVATION, messageChars: input.message.length })
         const { observable, cancel } = signer.signMessage(DERIVATION, input.message)
 
         const output = await new Promise<{ r: string; s: string; v: number }>((resolve, reject) => {
           const timer = setTimeout(() => {
             cancel()
-            reject(Object.assign(new Error('Approval timed out on device'), { _tag: 'ApprovalTimeout' }))
+            reject(tagged('ApprovalTimeout', 'Approval timed out on device'))
           }, 60_000)
           observable.subscribe({
             next: (s) => {
-              if (s.status === DeviceActionStatus.Completed) {
+              const interaction = s.intermediateValue?.requiredUserInteraction
+              ledgerLog('sign.event', {
+                status: s.status,
+                interaction,
+              })
+              try {
+                if (s.status === DeviceActionStatus.Completed) {
+                  clearTimeout(timer)
+                  resolve(s.output)
+                } else if (s.status === DeviceActionStatus.Error) {
+                  clearTimeout(timer)
+                  reject(s.error)
+                } else if (s.status === DeviceActionStatus.Stopped) {
+                  clearTimeout(timer)
+                  reject(tagged('ApprovalTimeout', 'Approval stopped on device'))
+                } else if (s.status === DeviceActionStatus.Pending) {
+                  const i = s.intermediateValue?.requiredUserInteraction
+                  if (i === UserInteractionRequired.ConfirmOpenApp) setPhase('app-opening')
+                  else if (i === UserInteractionRequired.SignPersonalMessage) setPhase('sign-on-device')
+                  else if (i === UserInteractionRequired.UnlockDevice) setPhase('ready-on-device')
+                }
+              } catch (e) {
                 clearTimeout(timer)
-                resolve(s.output)
-              } else if (s.status === DeviceActionStatus.Error) {
-                clearTimeout(timer)
-                reject(s.error)
-              } else if (s.status === DeviceActionStatus.Pending) {
-                const i = s.intermediateValue?.requiredUserInteraction
-                if (i === UserInteractionRequired.ConfirmOpenApp) setPhase('app-opening')
-                else if (i === UserInteractionRequired.SignPersonalMessage) setPhase('sign-on-device')
-                else if (i === UserInteractionRequired.UnlockDevice) setPhase('ready-on-device')
+                reject(e)
               }
             },
             error: (e) => {
@@ -156,37 +254,36 @@ export function useLedgerApproval() {
           })
         })
 
-        // (d) assemble + self-verify BEFORE the round trip
         const signature = toEip191Signature(output)
         const recovered = await recoverMessageAddress({ message: input.message, signature })
+        ledgerLog('sign.ok', { recovered, sigBytes: (signature.length - 2) / 2, v: output.v })
         if (input.expectedAddress && recovered.toLowerCase() !== input.expectedAddress.toLowerCase()) {
           setPhase('error')
+          const wrong = 'Wrong Ledger — this device is not the designated approver.'
+          const detail = `recovered ${recovered}, expected ${input.expectedAddress}`
+          setReason(wrong)
+          setDebug(detail)
+          ledgerLog('sign.wrong-device', { recovered, expected: input.expectedAddress })
           return {
             status: 'error',
-            reason: 'Wrong Ledger — this device is not the designated approver.',
-            debug: `recovered ${recovered}, expected ${input.expectedAddress}`,
+            reason: wrong,
+            debug: detail,
           }
         }
         setPhase('approved')
         return { status: 'approved', address: recovered, signature }
       } catch (err) {
-        if (isDeviceRejection(err) || (err as { _tag?: string })?._tag === 'ApprovalTimeout') {
-          setPhase('rejected')
-          return { status: 'rejected' }
-        }
-        const { reason: r, debug } = classifyDeviceError(err)
-        setPhase('error')
-        setReason(r)
-        return { status: 'error', reason: r, debug }
+        return fail(err, dmk)
       }
     },
-    [loadDmk],
+    [dropSession, fail, loadDmk],
   )
 
   const reset = useCallback(() => {
     setPhase('idle')
     setReason(undefined)
+    setDebug(undefined)
   }, [])
 
-  return { phase, reason, requestApproval, getDeviceAddress, reset }
+  return { phase, reason, debug, requestApproval, getDeviceAddress, reset }
 }

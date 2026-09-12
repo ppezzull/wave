@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import { PixelWaves } from '@/components/ui/pixel/animations/pixel-waves'
 import { LandingSignIn } from '@/components/landing-sign-in'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export const metadata: Metadata = {
   title: 'Sign in — wave',
@@ -37,6 +38,9 @@ export default function LandingPage() {
           <span className="font-sans text-xl font-extrabold tracking-tight text-wave-text">
             wave
           </span>
+        </div>
+        <div className="ml-auto">
+          <ThemeToggle />
         </div>
       </header>
 

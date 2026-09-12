@@ -242,6 +242,37 @@ export const subgraph = {
     }
   },
 
+  /** Search strategies by description substring (graph-node String _contains);
+   *  a bare 0x address searches by author instead. Real rows only. */
+  async searchStrategies(
+    q: string,
+    limit = 5,
+  ): Promise<Array<Pick<SubgraphStrategy, 'id' | 'description' | 'author'>>> {
+    const needle = q.trim()
+    if (needle.length < 2) return []
+    if (/^0x[0-9a-fA-F]{40}$/.test(needle)) {
+      const byAuthor = await this.listStrategiesByAuthor(needle, limit)
+      return byAuthor.map((s) => ({ id: s.id, description: s.description, author: s.author }))
+    }
+    try {
+      const data = await client.request<{
+        strategies?: Array<Pick<SubgraphStrategy, 'id' | 'description' | 'author'>>
+      }>(
+        `query($q: String!, $first: Int) {
+          strategies(first: $first, where: { description_contains: $q }) {
+            id description author
+          }
+        }`,
+        { q: needle, first: limit },
+      )
+      return data.strategies ?? []
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return []
+      console.warn('[subgraph.searchStrategies]', error)
+      return []
+    }
+  },
+
   /** Production entity — swap history for the detail page. Empty while syncing. */
   async getSwapHistory(strategyId: string, limit = 50): Promise<SubgraphSwap[]> {
     if (!isStrategyId(strategyId)) return []

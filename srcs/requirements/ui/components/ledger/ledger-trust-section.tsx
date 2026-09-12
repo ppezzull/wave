@@ -22,11 +22,14 @@ export function LedgerTrustSection() {
     setError(undefined)
     setPaired(undefined)
     try {
-      // Connect first (browser picker — user gesture), then derive.
-      await ledger.requestApproval({ message: 'wave pairing' }) // walks connect+app-open
+      const res = await ledger.requestApproval({ message: 'wave pairing' })
+      if (res.status === 'error') {
+        setError(res.reason ?? 'Could not connect to the Ledger. Reconnect the device and try again.')
+        return
+      }
       setPaired(await ledger.getDeviceAddress())
-    } catch {
-      setError('Could not read the device address. Reconnect the Ledger and try again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read the device address. Reconnect the Ledger and try again.')
     }
   }
 

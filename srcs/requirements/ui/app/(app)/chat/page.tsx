@@ -1,16 +1,12 @@
-import { getRecentThreads, isMockMode } from '@/lib/data'
-import { ChatThreads } from './chat-threads'
-import { ChatThreadLoader } from './chat-thread-loader'
+import { ChatSelector } from './chat-selector'
 
-// Server component, split by data mode (frontend.md §8 — data resolves server-side
-// where it can):
-//   mock — the canned recent threads render fully server-side.
-//   live — threads are the SESSION WALLET's authorships, and the wallet only
-//          exists client-side (Privy), so a client loader fetches via listThreads.
-export default async function ChatPage() {
-  if (isMockMode()) {
-    const threads = await getRecentThreads(6)
-    return <ChatThreads threads={threads} />
-  }
-  return <ChatThreadLoader />
+// /chat — the conversation SELECTOR (the chat itself is the floating widget:
+// pick a thread → the widget opens replaying it). Threads are the session
+// wallet's on-chain authorships; the wallet resolves client-side (Privy), so
+// the selector is a client loader — never a fabricated list, never a fallback
+// to all strategies.
+export const dynamic = 'force-dynamic'
+
+export default function ChatPage() {
+  return <ChatSelector />
 }

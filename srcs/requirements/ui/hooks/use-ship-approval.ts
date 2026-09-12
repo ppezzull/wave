@@ -25,6 +25,8 @@ export interface ObtainApprovalResult {
   approval?: ShipApproval
   /** Honest, user-facing reason when ok is false. */
   reason?: string
+  /** Raw DMK / classifier detail — shown under the reason, never used as the title. */
+  debug?: string
 }
 
 export function useShipApproval() {
@@ -55,10 +57,18 @@ export function useShipApproval() {
       if (gate.mode === 'device') {
         const res = await ledger.requestApproval({ message, expectedAddress: gate.approverAddress })
         if (res.status === 'rejected') {
-          return { ok: false, reason: 'Cancelled on device — nothing was shipped.' }
+          return {
+            ok: false,
+            reason: res.reason ?? 'Cancelled on device — nothing was shipped.',
+            debug: res.debug,
+          }
         }
         if (res.status === 'error' || !res.address || !res.signature) {
-          return { ok: false, reason: res.reason ?? 'Ledger approval failed — nothing was shipped.' }
+          return {
+            ok: false,
+            reason: res.reason ?? 'Ledger approval failed — nothing was shipped.',
+            debug: res.debug,
+          }
         }
         return {
           ok: true,
@@ -96,7 +106,14 @@ export function useShipApproval() {
     [ledger, refreshGate, wallets],
   )
 
-  return { gateMode, obtainApproval, ledgerPhase: ledger.phase, ledgerReason: ledger.reason, resetLedger: ledger.reset }
+  return {
+    gateMode,
+    obtainApproval,
+    ledgerPhase: ledger.phase,
+    ledgerReason: ledger.reason,
+    ledgerDebug: ledger.debug,
+    resetLedger: ledger.reset,
+  }
 }
 
 export type { LedgerPhase }

@@ -176,6 +176,7 @@ export function SettingsForm({ user }: Props) {
                 </label>
                 <input
                   id="identity-handle"
+                  name="handle"
                   type="text"
                   value={sessionUser ? identity.handle : user.name}
                   readOnly
@@ -196,6 +197,7 @@ export function SettingsForm({ user }: Props) {
                 <div className="flex items-center gap-3">
                   <input
                     id="avatar-url"
+                    name="avatarUrl"
                     type="url"
                     value={avatarUrl}
                     onChange={(e) => setAvatarUrl(e.target.value)}

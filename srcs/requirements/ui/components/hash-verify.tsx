@@ -3,17 +3,16 @@ import type { Strategy } from '@/lib/mock-data'
 import { hashState, abbrevHash } from '@/lib/strategy/format'
 
 // Hash-verify chip (frontend.md L101, Pietro.md L64).
-// Two columns: on-chain programHash vs the author-committed hash.
-// match → green ✓; mismatch → both danger + "TAMPERED" (trust anchor);
-// pending → yellow when programHash is bytes32(0).
-//
-// Live path: hydrateStrategy() fills both hashes; without an identity source
-// the committed hash falls back to on-chain → always match/pending, never a
-// fabricated TAMPERED. That's correct.
+// Two columns: the on-chain programHash vs the hash RECOMPILED from the post's
+// description (lib/data/server.ts getStrategy). match → green ✓ — the post
+// provably compiles to what is on-chain. mismatch → red MISMATCH (the post
+// does not compile to the on-chain program; could be a rewritten post or
+// parser drift — either way, do not trust the prose). pending → yellow while
+// the derivation hasn't landed (no description / compile unavailable).
 
 const STATE_META = {
   match: { color: '#1F9D6B', label: 'Match', Icon: Check },
-  mismatch: { color: '#E5484D', label: 'TAMPERED', Icon: AlertTriangle },
+  mismatch: { color: '#E5484D', label: 'MISMATCH', Icon: AlertTriangle },
   pending: { color: '#F5A623', label: 'Pending', Icon: Clock },
 } as const
 
@@ -76,8 +75,10 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
             style={{ color: '#E5484D' }}
             role="alert"
           >
-            TAMPERED — the deployed bytecode hash does not match the
-            author-committed hash. Treat this strategy as untrusted.
+            MISMATCH — the post does not compile to the deployed program. This
+            can mean an edited post, or a time-dependent instruction (the
+            deadline block) rolling between compiles — the instruction table
+            above shows the program as recompiled from the post today.
           </p>
         )}
         {state === 'pending' && (
