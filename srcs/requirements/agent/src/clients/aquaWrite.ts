@@ -45,6 +45,21 @@ const AQUA_ABI = [
     ],
     outputs: [],
   },
+  {
+    name: "rawBalances",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "maker", type: "address" },
+      { name: "app", type: "address" },
+      { name: "strategyHash", type: "bytes32" },
+      { name: "token", type: "address" },
+    ],
+    outputs: [
+      { name: "balance", type: "uint248" },
+      { name: "tokensCount", type: "uint8" },
+    ],
+  },
 ] as const;
 
 /// The frozen router surface this arm needs. `order` is the ABI-encoded maker Order;
@@ -172,6 +187,20 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
         args: [cfg.router, strategyHash, tokens],
       });
       return send(makerWallet, request);
+    },
+
+    /** Aqua's authoritative liveness read: a strategyHash with registered balances
+     * (tokensCount != 0) is shipped or docked — re-shipping it reverts
+     * StrategiesMustBeImmutable(app, hash) (0x879f237b, Aqua.sol:46). Either token
+     * works: ship() registers both in the same call. */
+    async strategyLiveness(strategyHash: Hex, token: `0x${string}`) {
+      const [balance, tokensCount] = await pub.readContract({
+        address: cfg.aqua,
+        abi: AQUA_ABI,
+        functionName: "rawBalances",
+        args: [maker.address, cfg.router, strategyHash, token],
+      });
+      return { balance, tokensCount: Number(tokensCount) };
     },
 
     /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. The

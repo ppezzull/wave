@@ -373,8 +373,23 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
   const strategyId = strategyIdOf(order);
 
   // 4. Idempotency: already shipped with the same program hash → short-circuit.
-  if (deps.getOnchainProgramHash) {
-    const existing = await deps.getOnchainProgramHash(strategyId);
+  // Production default reads Aqua's rawBalances — the chain is the authority
+  // (process-memory idempotency dies with restarts): tokensCount != 0 means the
+  // dock exists and ship() would revert StrategiesMustBeImmutable (0x879f237b).
+  // The strategyId is keccak(order) and the order carries the program bytes, so
+  // an active dock under this id IS this program — return the local programHash.
+  const onchainProgramHash =
+    deps.getOnchainProgramHash ??
+    (async (id: Hex) => {
+      try {
+        const { tokensCount } = await (await client()).strategyLiveness(id, token0);
+        return tokensCount !== 0 ? programHash : null;
+      } catch {
+        return null; // degraded read → attempt the ship; its revert is honest if it happens
+      }
+    });
+  {
+    const existing = await onchainProgramHash(strategyId);
     if (existing && existing.toLowerCase() === programHash.toLowerCase()) {
       return {
         strategyId,

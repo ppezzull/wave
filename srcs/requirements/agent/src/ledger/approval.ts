@@ -58,12 +58,16 @@ export function actionHashOf(payload: unknown): string {
   return createHash("sha256").update(canonicalJson(payload)).digest("hex").slice(0, 32);
 }
 
-/** The exact text the device screen / wallet prompt shows and signs. The
- * description is capped: very long messages push the ETH app toward
- * blind-signing; the verifier only requires the hash to be embedded. */
+/**
+ * The exact text the device screen / wallet prompt shows and signs. STRICTLY
+ * ASCII and byte-identical with ui/lib/ledger.ts: the DMK signer kit frames
+ * with string-length but encodes UTF-8 — a non-ASCII char desyncs the APDU
+ * and the ETH app returns 6980 / an empty response ("no signature returned").
+ * The verifier only requires the hash to be embedded.
+ */
 export function approvalMessage(actionHash: string, description: string): string {
-  const clipped = description.length > 200 ? `${description.slice(0, 200)}…` : description;
-  return `wave HITL approval [${actionHash}] — ${clipped}`;
+  const ascii = (description.match(/[\x20-\x7e]+/g) ?? []).join(" ").slice(0, 200);
+  return `wave HITL approval [${actionHash}] -- ${ascii}`;
 }
 
 /** Verify an approval: right claimed address, hash embedded in the message,
