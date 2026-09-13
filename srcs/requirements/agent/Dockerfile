@@ -6,6 +6,9 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
+# mastra's bundler stage detects pnpm (pnpm-lock.yaml / pnpm-workspace.yaml) and
+# shells out to it; node:22-alpine ships npm only — make pnpm available.
+RUN npm i -g pnpm
 COPY . .
 RUN npm run build            # mastra build → .mastra/output/ (self-contained)
 
