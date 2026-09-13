@@ -19,9 +19,9 @@ dataSources:
       # receipt block 0xad301e = 11350046).
       # ⚠️ startBlock is the ROUTER DEPLOY block (11350046), NOT the first swap (11350065) —
       # starting at the swap misses the StrategyDeployed events that precede it.
-      address: "0x698d798895a03c858aab493564e0795732da0c68"
+      address: "0x041be37178986f9729e4cc93f9b57bcfc26d2d02"
       abi: EnsStrategyRouter
-      startBlock: 11352568 # router DEPLOY block (redeploy per #49 — 0xeb513f… era il placeholder #20 con programHash=0)
+      startBlock: 11689820 # router DEPLOY block 0xb25f5c (live redeploy #29 — fixed: was mis-converted)
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -85,9 +85,9 @@ dataSources:
     name: StrategyFactory
     network: sepolia
     source:
-      address: "0x0000000000000000000000000000000000000000"
+      address: "0x1bac7d2d37ff990a899d06a32ab8fff5b70fdff0"
       abi: StrategyFactory
-      startBlock: 0
+      startBlock: 11689822 # factory DEPLOY block 0xb25f5e (live #29 — fixed: was mis-converted)
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -100,4 +100,52 @@ dataSources:
       eventHandlers:
         - event: StrategyAttributed(indexed bytes32,indexed address)
           handler: handleStrategyAttributed
+      file: ./src/mapping.ts
+  # --- (e) ChatVault (on-chain encrypted chat backups) ---
+  # Append-only AES-GCM blobs relayed by the announcer EOA; privacy is CLIENT-SIDE
+  # encryption (the key is the owner's wallet signature, never uploaded) — the
+  # ciphertext is public by design. Restore reads the user's highest nonce.
+  - kind: ethereum/contract
+    name: ChatVault
+    network: sepolia
+    source:
+      address: "0xA326D3B14954b9aF0284a9B0d621C51c6CccafF6"
+      abi: ChatVault
+      startBlock: 11691527 # deploy tx landed within ~2 blocks of 11691529; small backscan is free
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ChatVault
+      abis:
+        - name: ChatVault
+          file: ./abis/ChatVault.abi.json
+      eventHandlers:
+        - event: Stored(indexed address,indexed uint256,bytes)
+          handler: handleChatVaultStored
+      file: ./src/mapping.ts
+  # --- (f) AvatarRegistry (IPFS avatar CID per wallet) ---
+  # The image lives on IPFS. This source only indexes the CID pointer so
+  # /u/<addr> and the rails can render a real photo. Replace address +
+  # startBlock after the Sepolia deploy (AVATAR_REGISTRY_ADDRESS).
+  - kind: ethereum/contract
+    name: AvatarRegistry
+    network: sepolia
+    source:
+      address: "0x3F45Ddd265A5A82E234204717E06BE8dD62865ce"
+      abi: AvatarRegistry
+      startBlock: 11694591
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Author
+      abis:
+        - name: AvatarRegistry
+          file: ./abis/AvatarRegistry.abi.json
+      eventHandlers:
+        - event: AvatarSet(indexed address,indexed uint256,string)
+          handler: handleAvatarSet
       file: ./src/mapping.ts

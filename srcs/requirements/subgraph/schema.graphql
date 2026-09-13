@@ -81,3 +81,30 @@ type Swap @entity(immutable: true) {
   blockNumber: BigInt!
   transactionHash: Bytes!
 }
+
+# On-chain encrypted chat backups (src/periphery/ChatVault.sol). PRIVACY = client-side
+# AES-256-GCM (key derived from the owner's wallet signature, never uploaded) — the
+# ciphertext below is PUBLIC on-chain by design; only `user`'s signature can decrypt.
+# Append-only per user: restore = highest nonce. The relayer (announcer EOA) writes on
+# the owner's behalf, so `user` is a parameter the vault trusts — acceptable because
+# nothing here is secret beyond the encryption, and a forged `user` only spams their own
+# restore view with undecryptable rows (AES-GCM auth fails, restore falls back a nonce).
+type ChatVault @entity(immutable: true) {
+  id: Bytes! # txHash[32] || uint32 logIndex (same composite-key convention as Swap)
+  user: Bytes! # filterable — the restore query keys on it
+  nonce: BigInt! # per-user append counter; orderBy:nonce desc, first:1 = latest
+  ciphertext: Bytes! # opaque AES-GCM blob ({iv, ct} JSON, base64) — never plaintext
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+# Latest IPFS avatar pointer per wallet. The image is on IPFS; this row is the
+# CID The Graph indexed from AvatarRegistry.AvatarSet. Mutable: a newer nonce
+# overwrites avatarCid. id == user address (lowercase Bytes).
+type Author @entity {
+  id: Bytes! # the wallet — same key as Strategy.author / profile /u/<addr>
+  avatarCid: String! # CIDv0 Qm… or CIDv1 bafy… (no gateway prefix)
+  nonce: BigInt!
+  updatedAt: BigInt!
+}

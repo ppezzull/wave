@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-// Production wave mapping. Three data sources:
+// Production wave mapping. Four data sources:
 //   EnsStrategyRouter -> handleStrategyDeployed, handleStrategyDescribed, handleSwapped
 //   Aqua              -> handlePushed, handlePulled, handleDocked (committed capital + status)
 //   StrategyFactory   -> handleStrategyAttributed (on-chain authorship — task #31)
+//   ChatVault         -> handleChatVaultStored (on-chain encrypted chat backups)
+//   AvatarRegistry    -> handleAvatarSet (IPFS CID pointer per wallet)
 // (The ENS resolver source and its follow handlers are REMOVED with the ENS layer — follows
 // were ENS text records; on-chain authorship owns identity now and stores no follow edges.)
 // Reorg safety = graph-node native block-level revert (entity versions for a reverted block
@@ -27,7 +29,9 @@ import { Bytes, BigInt } from "@graphprotocol/graph-ts";
 import { StrategyDeployed, StrategyDescribed, Swapped } from "../generated/EnsStrategyRouter/EnsStrategyRouter";
 import { Pushed as AquaPushed, Pulled as AquaPulled, Docked as AquaDocked } from "../generated/Aqua/Aqua";
 import { StrategyAttributed } from "../generated/StrategyFactory/StrategyFactory";
-import { Strategy, Swap } from "../generated/schema";
+import { Stored } from "../generated/ChatVault/ChatVault";
+import { AvatarSet } from "../generated/AvatarRegistry/AvatarRegistry";
+import { Strategy, Swap, ChatVault, Author } from "../generated/schema";
 
 const ACTIVE = "active";
 const STOPPED = "stopped";
@@ -176,4 +180,36 @@ export function handleStrategyAttributed(event: StrategyAttributed): void {
   }
   s.author = event.params.author;
   s.save();
+}
+
+// --- (e) ChatVault.Stored — on-chain encrypted chat backup appended ---
+// Opaque AES-GCM ciphertext keyed to its owner. No load-or-merge, no Strategy coupling:
+// rows are immutable appends; restore = user's highest nonce. A forged `user` (the relayer
+// is trusted, but anyone can call the contract directly) only spams that user's restore
+// with an undecryptable row — the client's AES-GCM auth fails and it falls back a nonce.
+// Ciphertext is stored as raw Bytes (lossless hex round-trip; the blob is base64 of a
+// {iv, ct} JSON — the UI decodes, never trusts).
+export function handleChatVaultStored(event: Stored): void {
+  let row = new ChatVault(event.transaction.hash.concatI32(event.logIndex.toI32()));
+  row.user = event.params.user;
+  row.nonce = event.params.nonce;
+  row.ciphertext = event.params.ciphertext;
+  row.timestamp = event.block.timestamp;
+  row.blockNumber = event.block.number;
+  row.transactionHash = event.transaction.hash;
+  row.save();
+}
+
+// --- (f) AvatarRegistry.AvatarSet — latest IPFS CID for a wallet ---
+// Mutable Author row keyed by address. A newer nonce overwrites avatarCid.
+// The image itself is on IPFS; this is only the pointer The Graph can query.
+export function handleAvatarSet(event: AvatarSet): void {
+  let author = Author.load(event.params.user);
+  if (author == null) {
+    author = new Author(event.params.user);
+  }
+  author.avatarCid = event.params.cid;
+  author.nonce = event.params.nonce;
+  author.updatedAt = event.block.timestamp;
+  author.save();
 }
