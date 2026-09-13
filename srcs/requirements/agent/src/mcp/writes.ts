@@ -6,6 +6,8 @@ import { createTool } from "@mastra/core/tools";
 import { z } from "zod/v4";
 import { deployStrategy, type DeployInput } from "../actions/deployStrategy.js";
 import { faucetDrip as runFaucetDrip } from "../actions/faucet.js";
+import { storeChatVault as runStoreChatVault } from "../actions/storeChatVault.js";
+import { setAvatar as runSetAvatar } from "../actions/setAvatar.js";
 
 const Address = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 
@@ -104,4 +106,53 @@ export const faucetDrip = createTool({
     error: z.string().optional(),
   }),
   execute: async ({ address }) => runFaucetDrip({ address }),
+});
+
+/**
+ * Append a user's ENCRYPTED chat archive on-chain (ChatVault.store, announcer relays).
+ * The UI derives an AES-256-GCM key from the owner's wallet signature client-side and
+ * sends only the base64 ciphertext — plaintext and key never leave the browser. Capped:
+ * 96 KB blob, per-user 10s cooldown. Never throws; {ok:false, error} for every failure.
+ *
+ * Authz (event demo): moves no funds — the cost is the announcer's gas. The privacy
+ * boundary is the encryption, not the write path.
+ */
+export const storeChatVault = createTool({
+  id: "storeChatVault",
+  description:
+    "Append a user's encrypted chat archive on-chain (ChatVault on Sepolia; the announcer " +
+    "EOA relays and pays gas). Input is ciphertext ONLY — the key is derived client-side " +
+    "from the owner's wallet signature and never uploaded. Capped at 96 KB, 10s per user.",
+  inputSchema: z.object({
+    user: Address,
+    ciphertext: z.string().min(8).max(200_000),
+  }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    txHash: z.string().optional(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ user, ciphertext }) => runStoreChatVault({ user, ciphertext }),
+});
+
+/**
+ * Publish a user's IPFS avatar CID on-chain (AvatarRegistry.setAvatar, announcer relays).
+ * The image is already on IPFS — this writes only the CID. The Graph indexes it as
+ * Author.avatarCid. Capped: CID shape + 10s per user. Never throws.
+ */
+export const setAvatar = createTool({
+  id: "setAvatar",
+  description:
+    "Publish a user's IPFS avatar CID on-chain (AvatarRegistry on Sepolia; the announcer " +
+    "EOA relays and pays gas). Input is a CID only (Qm… or bafy…). 10s per user.",
+  inputSchema: z.object({
+    user: Address,
+    cid: z.string().min(8).max(200),
+  }),
+  outputSchema: z.object({
+    ok: z.boolean(),
+    txHash: z.string().optional(),
+    error: z.string().optional(),
+  }),
+  execute: async ({ user, cid }) => runSetAvatar({ user, cid }),
 });

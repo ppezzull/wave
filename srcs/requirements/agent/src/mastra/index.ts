@@ -10,15 +10,17 @@ import "dotenv/config";
 import { Mastra } from "@mastra/core";
 import { LibSQLStore } from "@mastra/libsql";
 import { composeAgent, compose, composeStream } from "./compose.agent.js";
+import { assistantAgent } from "./assistant.agent.js";
 import { monitorAgent, retuneAgent, gateAgent } from "./agents.js";
 import { strategyWorkflow } from "./workflows/strategy.workflow.js";
 import { monitorWorkflow } from "./workflows/monitor.workflow.js";
 import { waveMcpServer } from "../mcp/server.js";
 import { storageConfig } from "../config/env.js";
 import { retuneStreamRoute } from "./routes/retune-stream.js";
+import { chatStreamRoute } from "./routes/chat-stream.js";
 
 export const mastra = new Mastra({
-  agents: { composeAgent, monitorAgent, retuneAgent, gateAgent },
+  agents: { composeAgent, assistantAgent, monitorAgent, retuneAgent, gateAgent },
   // Durable storage — REQUIRED for workflow suspend/resume (HITL) across restarts.
   storage: new LibSQLStore({ id: "wave-agent", url: storageConfig().url }),
   workflows: { strategyWorkflow, monitorWorkflow },
@@ -37,7 +39,9 @@ export const mastra = new Mastra({
   // destructive surface, not on reads.
   server: {
     port: Number(process.env.PORT ?? 3002),
-    apiRoutes: [retuneStreamRoute],
+    // chatStreamRoute (/stream/chat — VERBATIM, no /api prefix): the ONE chat
+    // endpoint — intent-routed assistant/strategy lanes on one wire.
+    apiRoutes: [retuneStreamRoute, chatStreamRoute],
   },
 });
 

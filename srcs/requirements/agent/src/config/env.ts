@@ -156,10 +156,18 @@ export function faucetTunables(): { dripWei: bigint; cooldownMs: number; maxTota
  */
 export function ledgerConfig() {
   const raw = process.env.LEDGER_GATE ?? "off";
-  // off | session | device. Legacy "on" == device (the original seam's meaning).
-  const mode = raw === "on" ? "device" : raw === "session" || raw === "device" ? raw : "off";
+  // off | session | device | both. "both" = per-ship identity choice: a
+  // device-kind approval authors the strategy as the Ledger (the pool
+  // account), a session-kind approval authors the connected wallet. Legacy
+  // "on" == device (the original seam's meaning).
+  const mode =
+    raw === "on"
+      ? "device"
+      : raw === "session" || raw === "device" || raw === "both"
+        ? raw
+        : "off";
   return {
-    mode: mode as "off" | "session" | "device",
+    mode: mode as "off" | "session" | "device" | "both",
     approverAddress: process.env.LEDGER_APPROVER_ADDRESS ?? "",
   };
 }

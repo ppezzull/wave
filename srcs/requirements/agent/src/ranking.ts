@@ -22,11 +22,15 @@
 //
 // ⚠️ returnPct NUMERATOR — realized PnL proxy, NOT true PnL. The subgraph indexes
 // cumulativeVolumeIn (Σ Swap.amountIn) and cumulativeVolumeOut (Σ Swap.amountOut).
-// Net realized PnL ≈ cumulativeVolumeOut − cumulativeVolumeIn (what came out minus
-// what went in). TRUE returnPct is "realized + unrealized PnL" (Pietro.md), but the
-// unrealized leg needs an oracle read of current inventory mark-to-market, which the
-// subgraph does not have. So this is the honest, subgraph-derivable lower bound —
-// documented loudly so no one mistakes it for mark-to-market return.
+// Maker extraction ≈ cumulativeVolumeIn − cumulativeVolumeOut (what the maker
+// received minus delivered ≈ fees + spread captured; the schema names
+// cumulativeVolumeIn "returnPct numerator proxy"). TRUE returnPct is "realized +
+// unrealized PnL" (Pietro.md), but the unrealized leg needs an oracle read of
+// current inventory mark-to-market, which the subgraph does not have. So this is
+// the honest, subgraph-derivable lower bound — documented loudly so no one
+// mistakes it for mark-to-market return. (Sign was previously out − in, which
+// ranked fee-collecting makers as LOSING; flipped to match the UI consumer —
+// this file's header promises both implement the identical formula.)
 
 /** Inputs for one strategy's rank. Wei values arrive as decimal strings from the
  *  subgraph (Strategy.* fields); `lastSwapAt`/`now` are unix seconds. */
@@ -59,9 +63,9 @@ export function returnPct(input: Pick<RankInput, "cumulativeVolumeIn" | "cumulat
   const capital = BigInt(input.committedCapital);
   if (capital <= 0n) return null; // unranked: no capital → no return% (the like-is-capital bar)
 
-  // Net realized PnL = out − in. Cumulative volumes are ≥ 0, so the result can be
+  // Maker extraction = in − out. Cumulative volumes are ≥ 0, so the result can be
   // negative (a losing strategy) — BigInt handles signed arithmetic natively.
-  const netPnl = BigInt(input.cumulativeVolumeOut) - BigInt(input.cumulativeVolumeIn);
+  const netPnl = BigInt(input.cumulativeVolumeIn) - BigInt(input.cumulativeVolumeOut);
 
   // Divide in BigInt with a scale, then back to Number. netPnl can be negative;
   // BigInt division truncates toward zero, so we scale-then-divide for the sign to

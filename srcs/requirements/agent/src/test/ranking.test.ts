@@ -14,8 +14,8 @@ const NOW = 1_700_000_000; // fixed tick for deterministic recencyDecay
 
 /** A ranked, recently-active, capital-backed strategy (baseline for mutation tests). */
 const base = (over: Partial<RankInput> = {}): RankInput => ({
-  cumulativeVolumeIn: wei("100"), // 100 ETH in
-  cumulativeVolumeOut: wei("250"), // 250 ETH out → +150 ETH net PnL on 100 ETH capital = +150%
+  cumulativeVolumeIn: wei("250"), // 250 ETH in
+  cumulativeVolumeOut: wei("100"), // 100 ETH out → +150 ETH extracted on 100 ETH capital = +150%
   committedCapital: wei("100"), // 100 ETH committed
   lastSwapAt: NOW, // just swapped → recencyDecay ≈ 1.0
   now: NOW,
@@ -24,17 +24,17 @@ const base = (over: Partial<RankInput> = {}): RankInput => ({
 
 describe("returnPct — realized PnL ÷ committed capital", () => {
   it("computes net realized return as a ratio (+150% here)", () => {
-    // (250 − 100) / 100 = 1.5 = +150%
+    // maker extraction (250 − 100) / 100 = 1.5 = +150%
     expect(returnPct(base())).toBeCloseTo(1.5, 6);
   });
 
   it("is negative for a losing strategy", () => {
-    // (40 − 100) / 100 = −0.6 = −60%
-    expect(returnPct(base({ cumulativeVolumeOut: wei("40") }))).toBeCloseTo(-0.6, 6);
+    // (250 − 310) / 100 = −0.6 = −60%
+    expect(returnPct(base({ cumulativeVolumeOut: wei("310") }))).toBeCloseTo(-0.6, 6);
   });
 
   it("is zero when in == out (no PnL)", () => {
-    expect(returnPct(base({ cumulativeVolumeOut: wei("100") }))).toBe(0);
+    expect(returnPct(base({ cumulativeVolumeOut: wei("250") }))).toBe(0);
   });
 
   it("returns null (UNRANKED) when committed capital is zero — the like-is-capital bar", () => {
@@ -47,11 +47,11 @@ describe("returnPct — realized PnL ÷ committed capital", () => {
   });
 
   it("stays precise at full-ETH wei magnitudes (no Number overflow)", () => {
-    // 1000 ETH capital, 2500 ETH out, 1000 ETH in → +150%. Number() would lose the
+    // 1000 ETH capital, 2500 ETH in, 1000 ETH out → +150%. Number() would lose the
     // low-order wei and drift the ratio; BigInt division must hold 1.5 exactly.
     const rp = returnPct({
-      cumulativeVolumeIn: wei("1000"),
-      cumulativeVolumeOut: wei("2500"),
+      cumulativeVolumeIn: wei("2500"),
+      cumulativeVolumeOut: wei("1000"),
       committedCapital: wei("1000"),
     });
     expect(rp).toBeCloseTo(1.5, 6);
@@ -60,8 +60,8 @@ describe("returnPct — realized PnL ÷ committed capital", () => {
   it("handles wei-scale values that dwarf Number.MAX_SAFE_INTEGER without drift", () => {
     // 1e24-wei-magnitude numerator/denominator (far past 9e15 safe-int ceiling).
     const rp = returnPct({
-      cumulativeVolumeIn: "1000000000000000000000000", // 1000 ETH in
-      cumulativeVolumeOut: "3000000000000000000000000", // 3000 ETH out
+      cumulativeVolumeIn: "3000000000000000000000000", // 3000 ETH in
+      cumulativeVolumeOut: "1000000000000000000000000", // 1000 ETH out
       committedCapital: "1000000000000000000000000", // 1000 ETH capital
     });
     // (3000 − 1000) / 1000 = 2.0 = +200%
@@ -69,11 +69,11 @@ describe("returnPct — realized PnL ÷ committed capital", () => {
   });
 
   it("matches a hand ratio for small whole-ETH values", () => {
-    // 3 in, 4 out, 1 capital → (4−3)/1 = 1.0 = +100%
+    // 4 in, 3 out, 1 capital → (4−3)/1 = 1.0 = +100%
     expect(
       returnPct({
-        cumulativeVolumeIn: wei("3"),
-        cumulativeVolumeOut: wei("4"),
+        cumulativeVolumeIn: wei("4"),
+        cumulativeVolumeOut: wei("3"),
         committedCapital: wei("1"),
       }),
     ).toBeCloseTo(1.0, 5);
@@ -119,7 +119,7 @@ describe("rank — the full sort key", () => {
   });
 
   it("sorts a winning recent strategy above a stale one (the G2 acceptance)", () => {
-    const winner = rank(base({ cumulativeVolumeOut: wei("400") })); // +300%, fresh
+    const winner = rank(base({ cumulativeVolumeIn: wei("400") })); // +300%, fresh
     const stale = rank(base({ lastSwapAt: NOW - 7 * 86_400 })); // +150%, week idle
     expect(winner).not.toBeNull();
     expect(stale).not.toBeNull();

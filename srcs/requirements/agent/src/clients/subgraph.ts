@@ -53,7 +53,7 @@ export type Swap = {
 // per-env for self-hosted graph-node (path B) or to pin an older version.
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.5";
+  "https://api.studio.thegraph.com/query/1756983/wave/v0.0.7";
 
 const client = new GraphQLClient(SUBGRAPH_URL);
 
@@ -124,7 +124,7 @@ function coerceStrategy(s: StrategyRow): Strategy {
 // deploy the whole `strategies` entity is absent and isEntityNotDeployed catches it before
 // these field names matter.
 // ⚠️ `author` (task #31) requires the StrategyFactory-era schema — the fork/local deploy
-// (local31+) has it; live v0.0.5 does NOT and errors on this field until the #29 v0.0.6
+// (local31+) has it; live v0.0.6 does NOT and errors on this field until the #29 v0.0.6
 // deploy lands. Fork-first by design.
 const STRATEGY_FIELDS =
   "id programHash status author cumulativeVolumeIn cumulativeVolumeOut committedCapital swapCount lastSwapTimestamp";

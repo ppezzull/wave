@@ -29,5 +29,9 @@ export const waveMcpServer = new MCPServer({
     shipStrategy: writes.shipStrategy,
     // Testnet faucet — capped Sepolia ETH drip to a wallet (PROD-TESTNET §4 buffer wallet).
     faucetDrip: writes.faucetDrip,
+    // On-chain encrypted chat backups — ciphertext-only relay (ChatVault), announcer
+    // pays gas. The privacy boundary is the client-side encryption, not this write.
+    storeChatVault: writes.storeChatVault,
+    setAvatar: writes.setAvatar,
   },
 });

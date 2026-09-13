@@ -324,6 +324,10 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
   // both-tokens override for offline tests and uniform-decimal mocks. A failure here
   // is pre-flight: nothing was written, so return the partial (no strategyId yet).
   let token0: Address, token1: Address, a0: string, a1: string, decimals0: number, decimals1: number;
+  // Who this strategy is FROM — the approval's kind decides (see the gate
+  // below): device-kind → the Ledger itself (the pool account), session-kind
+  // → the session wallet. Defaults to input.author when the gate is off.
+  let effectiveAuthor: Address | undefined = input.author;
   try {
     ({ token0, token1, amount0: a0, amount1: a1 } = requirePair(input.spec));
     // Author is validated pre-flight too: a malformed address would burn announce/approve
@@ -331,30 +335,46 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     if (input.author !== undefined && !/^0x[a-fA-F0-9]{40}$/.test(input.author)) {
       throw new Error("deploy: author must be a 0x…40-hex address");
     }
-    // Approval gate (Ledger Continuity): when LEDGER_GATE is on, the ship needs a
-    // fresh signature over the hash-bound message BEFORE any write. device mode
-    // accepts only the pinned Ledger; session mode accepts only `author`'s wallet.
-    // A missing/invalid approval fails pre-flight — no gas, no side effects.
+    // Approval gate (Ledger Continuity): a fresh signature over the hash-bound
+    // message BEFORE any write. The approval's KIND picks the identity —
+    //   device  → the pinned Ledger; the strategy is AUTHORED by the device
+    //              address (the Ledger is the effective pool account, not a
+    //              delegation from the session wallet)
+    //   session → the connected wallet; must recover to input.author
+    // Modes: device / session accept only their kind; BOTH accept either
+    // (per-ship choice). A missing/invalid approval fails pre-flight — no gas.
     const gate = ledgerConfig();
     if (gate.mode !== "off") {
       if (!input.approval) {
         throw new Error(
           `deploy: approval required (LEDGER_GATE=${gate.mode}) — ${
-            gate.mode === "device" ? "confirm on the Ledger device" : "sign with your connected wallet"
+            gate.mode === "device"
+              ? "confirm on the Ledger device"
+              : gate.mode === "both"
+                ? "confirm on the Ledger device or sign with your connected wallet"
+                : "sign with your connected wallet"
           }`,
         );
       }
       const expected =
         input.approval.kind === "device"
-          ? gate.approverAddress
+          ? gate.mode === "session"
+            ? "" // session mode refuses device-kind outright — fails the address check below
+            : gate.approverAddress
           : gate.mode === "device"
-            ? "" // device mode refuses session-kind outright — fails the address check below
+            ? "" // device mode refuses session-kind outright
             : (input.author ?? "");
       const check = await verifyApproval(input.approval, {
         expectedAddress: expected,
         actionHash: actionHashOf(input.spec),
       });
       if (!check.ok) throw new Error(`deploy: approval rejected — ${check.error}`);
+      // The identity that signed IS the identity the strategy is from.
+      if (input.approval.kind === "device") {
+        effectiveAuthor = gate.approverAddress as Address;
+      } else {
+        effectiveAuthor = input.author;
+      }
     }
     decimals0 = input.decimals ?? (await tokenDecimals(token0));
     decimals1 = input.decimals ?? (await tokenDecimals(token1));
@@ -432,12 +452,14 @@ export async function deployStrategy(input: DeployInput, deps: DeployDeps = {}):
     // AlreadyAttributed on a re-announce, revert) NEVER fails the ship: the on-chain
     // strategy is the product; provenance is display-layer. AlreadyDeployed short-circuits
     // above without re-attributing (append-only on-chain — second call would revert anyway).
-    if (input.author) {
+    // effectiveAuthor (not input.author): a device-kind ship attributes to the LEDGER —
+    // the device is the strategy's pool account, not a delegate of the session wallet.
+    if (effectiveAuthor) {
       const attribute = deps.attribute ?? (async (id: Hex, a: Address) => (await factory()).attribute(id, a));
       try {
-        attributeTxHash = await attribute(strategyId, input.author);
+        attributeTxHash = await attribute(strategyId, effectiveAuthor);
       } catch (e) {
-        console.warn(`[deploy] attribute(${strategyId.slice(0, 12)}…, ${input.author}) failed — ship stands:`, (e as Error).message);
+        console.warn(`[deploy] attribute(${strategyId.slice(0, 12)}…, ${effectiveAuthor}) failed — ship stands:`, (e as Error).message);
       }
     }
 

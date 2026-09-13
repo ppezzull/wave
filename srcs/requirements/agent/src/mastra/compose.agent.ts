@@ -26,7 +26,9 @@ Rules:
 - Emit nothing but the JSON object. No prose, no code, no markdown fences.`;
 
 // Recall the last turns of conversation so the agent "remembers" prior strategies.
-const composeMemory = new Memory({ options: { lastMessages: 20 } });
+// SHARED with assistantAgent (assistant.agent.ts): both lanes are one conversation —
+// the assistant recalls the spec it helped shape, compose recalls the discussion.
+export const composeMemory = new Memory({ options: { lastMessages: 20 } });
 
 /**
  * Fresh per call — AbortSignal.timeout is single-use (a fired signal stays aborted),

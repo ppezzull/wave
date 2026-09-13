@@ -61,9 +61,12 @@ function makeDeps(overrides: {
   // Captured ship args — the strategy BYTES are load-bearing: Aqua hashes the raw
   // abi.encode(order) body, so a wrapped encoding misses the router announcement.
   let shipStrategyArg: Hex | undefined;
+  // Captured attribute arg — WHO the strategy is authored by (device vs session).
+  let attributeArg: `0x${string}` | undefined;
   return {
     calls,
     shipStrategyArg: () => shipStrategyArg,
+    attributeArg: () => attributeArg,
     deps: {
       announcer: async () => ({ address: MAKER, privateKey: MAKER_KEY }),
       compile: async () => {
@@ -78,8 +81,9 @@ function makeDeps(overrides: {
         calls.push("approve");
       },
       // Task #31: authorship record — pushed to the log so order/tests can see it.
-      attribute: async () => {
+      attribute: async (_id: Hex, author: `0x${string}`) => {
         calls.push("attribute");
+        attributeArg = author;
         if (overrides.attributeShouldThrow) throw new Error("attribute reverted on-chain");
         return attributeTx;
       },
@@ -375,5 +379,62 @@ describe("deployStrategy approval gate (LEDGER_GATE trust ladder)", () => {
       ReturnType<typeof deployStrategy>
     >;
     expect(r.shipped).toBe(true);
+  });
+});
+
+describe("LEDGER_GATE=both — per-ship identity (the Ledger is the pool account)", () => {
+  it("device-kind ships AND attributes the strategy to the LEDGER address, not the session wallet", async () => {
+    const { deps, attributeArg } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "device");
+    const r = await withGate(
+      { LEDGER_GATE: "both", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () =>
+        deployStrategy(
+          { spec: SPEC, description: "test post", author: SESSION_ADDR, approval },
+          deps,
+        ),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(true);
+    expect(r.attributeTxHash).toBeDefined();
+    // The money assertion: a device ship is FROM the device — the session
+    // wallet (also connected) does not become the author by delegation.
+    expect(attributeArg()?.toLowerCase()).toBe(DEVICE_ADDR.toLowerCase());
+  });
+
+  it("session-kind ships AND attributes the session wallet", async () => {
+    const { deps, attributeArg } = makeDeps();
+    const approval = await signedBy(SESSION_KEY, "session");
+    const r = await withGate(
+      { LEDGER_GATE: "both", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () =>
+        deployStrategy(
+          { spec: SPEC, description: "test post", author: SESSION_ADDR, approval },
+          deps,
+        ),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(true);
+    expect(attributeArg()?.toLowerCase()).toBe(SESSION_ADDR.toLowerCase());
+  });
+
+  it("device-kind with no author passed still attributes the Ledger (device ships always attribute)", async () => {
+    const { deps, attributeArg } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "device");
+    const r = await withGate(
+      { LEDGER_GATE: "both", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(true);
+    expect(attributeArg()?.toLowerCase()).toBe(DEVICE_ADDR.toLowerCase());
+  });
+
+  it("session mode still refuses a device-kind approval (exclusive modes lock)", async () => {
+    const { deps } = makeDeps();
+    const approval = await signedBy(DEVICE_KEY, "device");
+    const r = await withGate(
+      { LEDGER_GATE: "session", LEDGER_APPROVER_ADDRESS: DEVICE_ADDR },
+      () => deployStrategy({ spec: SPEC, description: "test post", approval }, deps),
+    ) as Awaited<ReturnType<typeof deployStrategy>>;
+    expect(r.shipped).toBe(false);
+    expect(r.error).toMatch(/approval rejected/);
   });
 });
