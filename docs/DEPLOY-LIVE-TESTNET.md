@@ -8,8 +8,8 @@ create surface is now the **chat widget** (right-docked movable window;
 `/chat` is the conversation selector; `/compose` redirects).
 
 Live Sepolia today serves the Lisboa-era router `0x698d…0c68` (old surface),
-Aqua `0xdc8C…D1E`, Studio subgraph v0.0.5 (no author field). This doc is what
-stands between us and the live redeploy.
+Aqua `0xdc8C…D1E`, Studio subgraph **v0.0.8** (author + ChatVault entities).
+This doc is what stands between us and the live redeploy.
 
 ## Compatibility audit — verified 11 Sep 2026, re-confirmed 12 Sep
 
@@ -89,7 +89,47 @@ Owner rule recap: new router/factory owner = funded deployer EOA; the agent's
 announcer key must derive to the SAME address or every onlyOwner call fails
 (the agent validates this at boot via `EXPECTED_ANNOUNCER_OWNER`).
 
+## On-chain chat vault — LIVE (13 Sep 2026)
+
+Conversations can now be backed up on-chain, readable only by their owner.
+Privacy is **client-side encryption**, not access control: the wallet signs
+one domain-separated message (`wave chat vault key v1 -- <address>`), the
+signature hashes to an AES-256-GCM key **in the browser** (WebCrypto,
+non-extractable), and only ciphertext ever leaves the device. The chain sees
+base64-of-AES-GCM blobs and nothing else.
+
+Deployed and verified end-to-end on live Sepolia:
+
+- **Contract** `ChatVault` at `0xA326D3B14954b9aF0284a9B0d621C51c6CccafF6`
+  (deploy block **11691529**; `forge test` 4/4 in `test/ChatVault.t.sol`).
+  Append-only: `store(address user, bytes ciphertext)` bumps a per-user nonce
+  and emits `Stored(user, nonce, ciphertext)`; rejects empty / >98,304 B.
+  `user` is a trusted relayer parameter — forgery only spams undecryptable rows.
+- **Subgraph v0.0.8** (Studio `1756983/wave`) indexes `ChatVault` from block
+  11691527; also carries the `Author` avatar entity. UI default + `.env.local`
+  both point at v0.0.8.
+- **Agent** `storeChatVault` tool (`POST /api/tools/storeChatVault/execute`):
+  validates 0x-address + base64 shape (round-trip decode), 96 KB cap, 10 s
+  per-wallet cooldown, then the announcer EOA relays. Agent suite 124/124.
+- **UI** — `/chat` → Saved conversations: **Back up on-chain** / **Restore**,
+  status line ("Last on-chain backup: #n · date · receipt"), honest errors:
+  no backup → "no on-chain backup found for this wallet (on this network)";
+  AES-GCM auth failure → "wrong wallet — this backup was encrypted with a
+  different signature". Privacy page documents the ciphertext model.
+- **E2E proven** — backup from the browser (tx `0xd6a5b704…`, nonce 2),
+  archive wiped from localStorage, restore on a cold server re-derived the
+  key from one signature and decrypted the conversation back byte-identical.
+
+Env: `CHAT_VAULT_ADDRESS` + `CHAT_VAULT_DEPLOY_BLOCK` in root `.env` (agent
+reads `CHAT_VAULT_ADDRESS` from its own `.env` too). **Dokploy redeploy needs
+`CHAT_VAULT_ADDRESS` on both containers** before the buttons work in prod.
+Domain separation: the vault message can never be replayed as an approval
+(`wave HITL approval […]`) or a sign-in (`wave sign-in […]`). Ledger path:
+the same message clear-signs on the device — DMK `signPersonalMessage` is
+EIP-191, identical key material to the wallet path (device pass pending).
+
 ## Ledger — status (12 Sep 2026)
+
 
 DONE and fork-proven:
 
@@ -115,8 +155,11 @@ Remaining (post-funding, pre-Sep-13 for the bounty):
 3. (Optional hardening) freshness/nonce in the approval message — today the
    hash binds the spec; replay is defanged by the idempotent-ship guard.
 
-Kill-switch while testing: `LEDGER_GATE=off` on both services (ships behave
-exactly as pre-gate).
+Gate semantics: `LEDGER_GATE=both` (prod default) — per-ship identity: a
+**device** approval authors the strategy as the LEDGER itself (the pool
+account, `0x725D…79F9` gets the attribution); a **session** approval authors
+the connected wallet. `device`/`session` lock to one kind; `off` is the
+kill-switch (pre-gate behavior).
 
 ## Mainnet — what changes (post-event, second deploy)
 
