@@ -2,18 +2,17 @@ import { Check, AlertTriangle, Clock } from 'lucide-react'
 import type { Strategy } from '@/lib/mock-data'
 import { hashState, abbrevHash } from '@/lib/strategy/format'
 
-// ENS hash-verify chip (frontend.md L101, Pietro.md L64).
-// Two columns: on-chain programHash vs ENS v0.programhash.
-// match → green ✓; mismatch → both danger + "TAMPERED" (trust anchor);
-// pending → yellow when programHash is bytes32(0).
-//
-// Live path: hydrateStrategy() fills both hashes (subgraph + ENS). While
-// WAVE_ENS_WIRED is false, ensProgramHash falls back to on-chain → always
-// match/pending, never fabricated TAMPERED. That's correct.
+// Hash-verify chip (frontend.md L101, Pietro.md L64).
+// Two columns: the on-chain programHash vs the hash RECOMPILED from the post's
+// description (lib/data/server.ts getStrategy). match → green ✓ — the post
+// provably compiles to what is on-chain. mismatch → red MISMATCH (the post
+// does not compile to the on-chain program; could be a rewritten post or
+// parser drift — either way, do not trust the prose). pending → yellow while
+// the derivation hasn't landed (no description / compile unavailable).
 
 const STATE_META = {
   match: { color: '#1F9D6B', label: 'Match', Icon: Check },
-  mismatch: { color: '#E5484D', label: 'TAMPERED', Icon: AlertTriangle },
+  mismatch: { color: '#E5484D', label: 'MISMATCH', Icon: AlertTriangle },
   pending: { color: '#F5A623', label: 'Pending', Icon: Clock },
 } as const
 
@@ -24,7 +23,7 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
 
   const rows = [
     { label: 'On-chain hash', value: abbrevHash(strategy.programHash) },
-    { label: 'ENS record hash', value: abbrevHash(strategy.ensProgramHash) },
+    { label: 'Committed hash', value: abbrevHash(strategy.ensProgramHash) },
   ]
 
   return (
@@ -36,7 +35,7 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
         Hash Verification
       </h2>
 
-      <div className="rounded-[12px] p-5 bg-wave-surface border border-wave-border">
+      <div className="rounded-[12px] p-5 glass-surface border border-wave-border">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {rows.map((row, i) => (
             <div key={row.label} className="flex flex-col gap-2">
@@ -76,8 +75,10 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
             style={{ color: '#E5484D' }}
             role="alert"
           >
-            TAMPERED — the deployed bytecode hash does not match the hash
-            committed in the ENS record. Treat this strategy as untrusted.
+            MISMATCH. The post does not compile to the deployed program. This
+            can mean an edited post, or a time-dependent instruction (the
+            deadline block) rolling between compiles. The instruction table
+            above shows the program as recompiled from the post today.
           </p>
         )}
         {state === 'pending' && (

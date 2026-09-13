@@ -1,12 +1,16 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
 import {
   getProfile,
   getProfileStats,
   getStrategy,
   listProfileHandles,
+  type Profile,
 } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
+import { MicroSkeleton } from '@/components/skeleton'
+import { AuthorAvatar } from '@/components/generic-avatar'
 
 // Live profiles (not present at build) render dynamically; mock params are
 // generated so the mock build still prerenders the seed profile pages.
@@ -21,33 +25,8 @@ interface Props {
   params: Promise<{ handle: string }>
 }
 
-export default async function ProfilePage({ params }: Props) {
-  const { handle } = await params
-  const profile = await getProfile(handle)
-
-  if (!profile) {
-    return (
-      <>
-        <section className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
-          <h1 className="font-sans font-bold text-[1.5rem] text-wave-text mb-2">
-            Profile not found
-          </h1>
-          <p className="font-sans text-[15px] text-wave-muted mb-6 max-w-sm">
-            {`We couldn't find a profile for ${handle}.eth. It may not have shipped a strategy yet.`}
-          </p>
-          <Link
-            href="/explore"
-            className="font-sans text-[14px] font-semibold underline underline-offset-4"
-            style={{ color: '#2A9D8F' }}
-          >
-            Back to Explore
-          </Link>
-        </section>
-        <Footer />
-      </>
-    )
-  }
-
+/** Streaming child: the awaits that used to block the whole page. */
+async function ProfileStatsAndStrategies({ profile }: { profile: Profile }) {
   const profileStrategies = (
     await Promise.all(profile.strategyIds.map((id) => getStrategy(id)))
   ).filter((s): s is NonNullable<typeof s> => Boolean(s))
@@ -56,66 +35,7 @@ export default async function ProfilePage({ params }: Props) {
   const stats = await getProfileStats(profile)
 
   return (
-    <div className="w-full max-w-[600px] mx-auto border-x border-wave-border min-h-screen flex flex-col">
-      {/* Sticky title bar */}
-      <header className="sticky top-12 md:top-0 z-30 bg-wave-bg/85 backdrop-blur-md border-b border-wave-border px-4 py-2.5">
-        <h1 className="font-mono font-bold text-[1.25rem] text-wave-text truncate">
-          {profile.name}
-        </h1>
-        <p className="font-sans text-[13px] text-wave-muted">
-          {profile.strategyIds.length} strategies
-        </p>
-      </header>
-
-      {/* Profile identity */}
-      <section
-        className="bg-wave-bg border-b border-wave-border px-4 py-6"
-        aria-labelledby="profile-name"
-      >
-        <div className="w-full">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            {/* Avatar — ENS avatar record, or gradient fallback */}
-            <div
-              className="w-16 h-16 rounded-full shrink-0 overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-              aria-hidden="true"
-            >
-              {profile.avatarUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.avatarUrl || '/placeholder.svg'}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              )}
-            </div>
-
-            {/* Text block — ENS subdomain only, no display name or bio */}
-            <div className="flex flex-col gap-1 min-w-0">
-              <h1
-                id="profile-name"
-                className="font-mono font-bold text-[1.25rem] text-wave-text truncate"
-              >
-                {profile.name}
-              </h1>
-              <p
-                className="font-mono text-[13px] text-wave-text mt-1"
-                aria-label={`${profile.followingCount} following, ${profile.followersCount} followers`}
-              >
-                {profile.followingCount}
-                <span className="font-sans text-[13px] text-wave-muted ml-1 mr-3">
-                  following
-                </span>
-                {profile.followersCount}
-                <span className="font-sans text-[13px] text-wave-muted ml-1">
-                  followers
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
+    <>
       {/* Aggregate stats */}
       <section
         className="bg-wave-surface border-b border-wave-border px-4 py-5"
@@ -187,6 +107,80 @@ export default async function ProfilePage({ params }: Props) {
           ))}
         </div>
       </section>
+    </>
+  )
+}
+
+export default async function ProfilePage({ params }: Props) {
+  const { handle } = await params
+  const profile = await getProfile(handle)
+
+  if (!profile) {
+    return (
+      <>
+        <section className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
+          <h1 className="font-sans font-bold text-[1.5rem] text-wave-text mb-2">
+            Profile not found
+          </h1>
+          <p className="font-sans text-[15px] text-wave-muted mb-6 max-w-sm">
+            {`We couldn't find a profile for ${handle}. It may not have shipped a strategy yet.`}
+          </p>
+          <Link
+            href="/explore"
+            className="font-sans text-[14px] font-semibold underline underline-offset-4"
+            style={{ color: '#2A9D8F' }}
+          >
+            Back to Explore
+          </Link>
+        </section>
+        <Footer />
+      </>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-[600px] mx-auto border-x border-wave-border min-h-screen flex flex-col">
+      {/* Sticky title bar */}
+      <header className="sticky top-12 md:top-0 z-30 bg-wave-bg/85 backdrop-blur-md border-b border-wave-border px-4 py-2.5">
+        <h1 className="font-mono font-bold text-[1.25rem] text-wave-text truncate">
+          {profile.name}
+        </h1>
+        <p className="font-sans text-[13px] text-wave-muted">
+          {profile.strategyIds.length} strategies
+        </p>
+      </header>
+
+      {/* Profile identity */}
+      <section
+        className="bg-wave-bg/85 backdrop-blur-md border-b border-wave-border px-4 py-6"
+        aria-labelledby="profile-name"
+      >
+        <div className="w-full">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <AuthorAvatar url={profile.avatarUrl} size={64} />
+
+            {/* Text block — handle only, no display name or bio */}
+            <div className="flex flex-col gap-1 min-w-0">
+              <h1
+                id="profile-name"
+                className="font-mono font-bold text-[1.25rem] text-wave-text truncate"
+              >
+                {profile.name}
+              </h1>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Stats + strategies stream in their own boundary (micro-SSR): the
+          header + identity render instantly off the profile lookup. */}
+      <Suspense
+        fallback={
+          <MicroSkeleton label="Loading profile" />
+        }
+      >
+        <ProfileStatsAndStrategies profile={profile} />
+      </Suspense>
 
       <Footer />
     </div>

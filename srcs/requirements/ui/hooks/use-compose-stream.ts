@@ -1,20 +1,24 @@
 'use client'
 
-// useComposeStream — drive the create-drawer's "watch the AI fill the form" beat.
+// useComposeStream — drive the create-drawer's chat lanes.
 //
-// POSTs the user's natural-language intent to /api/compile (which proxies the
-// wave compose agent's Mastra stream), then reads the SSE response with a manual
-// reader (EventSource is GET-only; /api/compile is POST). Parses each chunk per
+// POSTs the user's message to /api/compile (which proxies the agent's intent-
+// routed /stream/chat), then reads the SSE response with a manual reader
+// (EventSource is GET-only; /api/compile is POST). Parses each chunk per
 // Mastra's ChunkType shapes (mastra.ai/reference/streaming/ChunkType):
+//   - "mode"       → the lane the agent routed this turn into ("assistant" |
+//                    "strategy") — arrives before any lane content.
 //   - "object"     → progressive partial StrategySpec (top-level `object` field);
 //                    each successive one is more complete. The last is validated.
-//   - "text-delta" → reasoning prose (payload.text) — shown as "Compiling…".
+//   - "object-result" → the final validated StrategySpec.
+//   - "text-delta" → strategy lane: reasoning prose ("Compiling…"). assistant
+//                    lane: the answer itself — accumulated into `reply`.
 //   - "error"      → failure (payload.error).
-//   - "finish"     → terminal; the most-recent `object` chunk is the final spec.
+//   - "finish"     → terminal; strategy lane promotes the last `object` to spec.
 //
 // The parser tolerates BOTH standard SSE framing (`data: {...}\n\n`) and bare
 // newline-delimited JSON, so it survives either transport Mastra may use.
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface StrategySpec {
   specVersion?: number
@@ -24,20 +28,42 @@ export interface StrategySpec {
   [k: string]: unknown
 }
 
+export type ComposeLane = 'assistant' | 'strategy'
+
 export interface ComposeStreamState {
   /** Most-recent partial StrategySpec (null until the first `object` chunk). */
   partial: StrategySpec | null
-  /** Final validated StrategySpec (null until the stream completes cleanly). */
+  /** Final validated StrategySpec (strategy lane only, clean finish). */
   spec: StrategySpec | null
   /** Latest reasoning/progress text for "Compiling…" affordances. */
   progress: string
+  /** Assistant-lane answer (mode === 'assistant'); accumulates like progress. */
+  reply: string
+  /** Lane the agent routed this turn into (null until the `mode` frame). */
+  mode: ComposeLane | null
   /** Error message if the stream failed; null otherwise. */
   error: string | null
   /** True while a stream is in flight. */
   isStreaming: boolean
 }
 
-type Frame = { type: string; object?: StrategySpec; payload?: { text?: string; error?: string } }
+const EMPTY_STATE: ComposeStreamState = {
+  partial: null,
+  spec: null,
+  progress: '',
+  reply: '',
+  mode: null,
+  error: null,
+  isStreaming: false,
+}
+
+type Frame = {
+  type: string
+  object?: StrategySpec
+  payload?: { text?: string; error?: unknown; mode?: string; [key: string]: unknown }
+}
+
+const LOG = '[wave:compose]'
 
 function tryParseJson(line: string): Frame | null {
   const trimmed = line.trim()
@@ -49,29 +75,118 @@ function tryParseJson(line: string): Frame | null {
   }
 }
 
-export function useComposeStream() {
-  const [state, setState] = useState<ComposeStreamState>({
-    partial: null,
-    spec: null,
-    progress: '',
-    error: null,
-    isStreaming: false,
-  })
+function summarizeSpec(spec: StrategySpec | null) {
+  if (!spec) return null
+  return {
+    pair: spec.pair ?? null,
+    size: spec.size ?? null,
+    blocks: Array.isArray(spec.blocks) ? spec.blocks.map((b) => b.type) : [],
+  }
+}
+
+function readStoredState(storageKey?: string): ComposeStreamState {
+  if (!storageKey || typeof window === 'undefined') return EMPTY_STATE
+  try {
+    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? 'null') as Partial<ComposeStreamState> | null
+    if (!value || typeof value !== 'object') return EMPTY_STATE
+    return {
+      partial: value.partial && typeof value.partial === 'object' ? value.partial : null,
+      spec: value.spec && typeof value.spec === 'object' ? value.spec : null,
+      progress: typeof value.progress === 'string' ? value.progress : '',
+      reply: typeof value.reply === 'string' ? value.reply : '',
+      mode:
+        value.mode === 'assistant' || value.mode === 'strategy'
+          ? (value.mode as ComposeLane)
+          : null,
+      error: typeof value.error === 'string' ? value.error : null,
+      // A page reload aborts a fetch; never revive an orphaned stream as active.
+      isStreaming: false,
+    }
+  } catch {
+    return EMPTY_STATE
+  }
+}
+
+/** Mastra error chunks put an object in payload.error — never feed that to React. */
+function formatAgentError(err: unknown): string {
+  if (err == null) return 'agent error'
+  if (typeof err === 'string') return err
+  if (typeof err === 'object') {
+    const o = err as {
+      message?: unknown
+      code?: unknown
+      details?: { value?: unknown }
+      cause?: { message?: unknown }
+    }
+    const parts: string[] = []
+    if (typeof o.message === 'string' && o.message.trim()) parts.push(o.message.trim())
+    else if (typeof o.code === 'string') parts.push(o.code)
+    if (typeof o.details?.value === 'string' && o.details.value.trim()) {
+      parts.push(`got: ${o.details.value}`)
+    }
+    if (parts.length > 0) return parts.join('\n')
+    try {
+      return JSON.stringify(err)
+    } catch {
+      return 'agent error'
+    }
+  }
+  return String(err)
+}
+
+function formatHttpError(body: string, status: number): string {
+  if (!body) return `compile failed (HTTP ${status})`
+  try {
+    const value = JSON.parse(body) as { error?: unknown; detail?: unknown }
+    if (typeof value.error === 'string') return value.error
+    if (typeof value.detail === 'string') return value.detail
+  } catch {
+    // Non-JSON upstream response: return its text below.
+  }
+  return body
+}
+
+export function useComposeStream(storageKey?: string) {
+  const [state, setState] = useState<ComposeStreamState>(() => readStoredState(storageKey))
   // The last `object` chunk — promoted to `spec` on finish (Mastra emits
   // successive objects; the final one is the validated StrategySpec).
   const lastObject = useRef<StrategySpec | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Lane + assistant reply, mirrored to refs so the text-delta handler and the
+  // completion block read current values (state updates lag the SSE loop).
+  const modeRef = useRef<ComposeLane | null>(null)
+  const replyRef = useRef('')
+
+  useEffect(() => {
+    if (!storageKey || state.isStreaming) return
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({ ...state, partial: state.spec ? state.partial : null }),
+      )
+    } catch {
+      // Local storage may be unavailable (private mode/quota); compose still works.
+    }
+  }, [state, storageKey])
 
   const compose = useCallback(async (intent: string, scope?: { resource: string; thread: string }) => {
     // Reset for a fresh turn.
     lastObject.current = null
-    setState({
-      partial: null,
-      spec: null,
-      progress: '',
-      error: null,
-      isStreaming: true,
+    modeRef.current = null
+    replyRef.current = ''
+    const t0 = Date.now()
+    const counts: Record<string, number> = {}
+    const bump = (type: string) => {
+      counts[type] = (counts[type] ?? 0) + 1
+    }
+
+    console.info(LOG, 'client start', {
+      intentChars: intent.length,
+      has0xAddress: /0x[a-fA-F0-9]{40}/.test(intent),
+      scope: scope ?? null,
     })
+
+    setState({ ...EMPTY_STATE, isStreaming: true })
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -85,17 +200,29 @@ export function useComposeStream() {
         signal: ctrl.signal,
       })
     } catch (err) {
-      if (ctrl.signal.aborted) return
+      if (ctrl.signal.aborted) {
+        console.info(LOG, 'client aborted before response')
+        return
+      }
+      console.warn(`${LOG} client fetch failed: ${String(err)}`)
       setState((s) => ({ ...s, isStreaming: false, error: String(err) }))
       return
     }
 
+    console.info(LOG, 'client HTTP', { status: response.status, ms: Date.now() - t0 })
+
     if (!response.ok || !response.body) {
       const detail = await response.text().catch(() => '')
+      const error = formatHttpError(detail, response.status)
+      console.warn(
+        `${LOG} client non-OK status=${response.status} body=${error.slice(0, 400)}`,
+      )
       setState((s) => ({
         ...s,
+        partial: null,
+        spec: null,
         isStreaming: false,
-        error: detail || `compile failed (HTTP ${response.status})`,
+        error,
       }))
       return
     }
@@ -104,6 +231,7 @@ export function useComposeStream() {
     const decoder = new TextDecoder()
     let buffer = ''
     let terminal = false
+    let streamError: string | null = null
 
     try {
       while (!terminal) {
@@ -125,23 +253,62 @@ export function useComposeStream() {
 
           const frame = tryParseJson(line)
           if (!frame) continue
+          bump(frame.type)
 
           switch (frame.type) {
+            case 'mode': {
+              // The router's lane verdict — arrives before any lane content, so
+              // the UI can render the right affordance from the first token.
+              if (frame.payload?.mode === 'assistant' || frame.payload?.mode === 'strategy') {
+                modeRef.current = frame.payload.mode
+                setState((s) => ({ ...s, mode: frame.payload!.mode as ComposeLane }))
+              }
+              break
+            }
             case 'object':
+            case 'object-result':
+              // Progressive partials are `object`; the final validated StrategySpec
+              // is `object-result` (Mastra structuredOutput). Both carry top-level
+              // `object` — promote either so the form fills even if only the final
+              // chunk arrives.
               if (frame.object && typeof frame.object === 'object') {
                 lastObject.current = frame.object
+                if (frame.type === 'object-result' || (counts.object ?? 0) === 1) {
+                  console.info(LOG, `client ${frame.type}`, summarizeSpec(frame.object))
+                }
                 setState((s) => ({ ...s, partial: frame.object! }))
               }
               break
             case 'text-delta':
-              if (frame.payload?.text) {
-                setState((s) => ({ ...s, progress: s.progress + frame.payload!.text }))
+              if (typeof frame.payload?.text === 'string') {
+                // Assistant lane: the text IS the answer. Strategy lane: it's
+                // reasoning prose for the "Compiling…" affordance.
+                if (modeRef.current === 'assistant') replyRef.current += frame.payload.text
+                setState((s) => ({
+                  ...s,
+                  progress: s.progress + frame.payload!.text,
+                  reply: modeRef.current === 'assistant' ? s.reply + frame.payload!.text : s.reply,
+                }))
               }
               break
-            case 'error':
-              setState((s) => ({ ...s, error: frame.payload?.error ?? 'agent error', isStreaming: false }))
+            case 'error': {
+              // payload.error is often a Mastra error object ({ message, code, … }),
+              // not a string — stringify before state/React or the UI crashes.
+              // Use warn + a single string: console.error(obj) makes Next's overlay
+              // pop "Console Error" with a useless `{}` serialization.
+              const raw = frame.payload?.error ?? frame.payload ?? frame
+              streamError = formatAgentError(raw)
+              console.warn(`${LOG} client sse error: ${streamError}`)
+              setState((s) => ({
+                ...s,
+                partial: null,
+                spec: null,
+                error: streamError,
+                isStreaming: false,
+              }))
               terminal = true
               break
+            }
             case 'finish':
               terminal = true
               break
@@ -152,14 +319,42 @@ export function useComposeStream() {
           }
         }
       }
-      // Stream ended (finish or clean close). Promote the last object to spec.
+      // Stream ended (finish or clean close). Strategy lane promotes the last
+      // object to spec; assistant lane exposes the accumulated reply instead.
+      const lane = modeRef.current
+      const isAssistant = lane === 'assistant'
+      const finalSpec = streamError || isAssistant ? null : lastObject.current
+      const reply = isAssistant && !streamError ? replyRef.current : ''
+      console.info(LOG, 'client done', {
+        ms: Date.now() - t0,
+        counts,
+        lane,
+        objectChunks: counts.object ?? 0,
+        objectResult: counts['object-result'] ?? 0,
+        hasSpec: Boolean(finalSpec),
+        spec: summarizeSpec(finalSpec),
+        replyChars: reply.length,
+        error: streamError,
+      })
+      if (!streamError && !finalSpec && !isAssistant) {
+        console.warn(
+          LOG,
+          'stream finished with no object/object-result — form will stay empty (structuredOutput missing or LLM derailed)',
+        )
+      }
       setState((s) => ({
         ...s,
+        partial: streamError ? null : s.partial,
         isStreaming: false,
-        spec: s.error ? null : lastObject.current,
+        spec: finalSpec,
+        reply,
       }))
     } catch (err) {
-      if (ctrl.signal.aborted) return
+      if (ctrl.signal.aborted) {
+        console.info(LOG, 'client aborted mid-stream')
+        return
+      }
+      console.warn(`${LOG} client read failed: ${String(err)}`)
       setState((s) => ({ ...s, isStreaming: false, error: String(err) }))
     } finally {
       abortRef.current = null

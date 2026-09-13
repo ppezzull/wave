@@ -1,29 +1,59 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Link from 'next/link'
 import type { Strategy } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
+import { useSessionUser } from '@/hooks/use-session-user'
+import type { SimilarMatch } from '@/app/actions/feed'
 
-type Tab = 'foryou' | 'following'
+type Tab = 'foryou' | 'new'
 
 interface Props {
   ranked: Strategy[]
   unranked: Strategy[]
-  following: Strategy[]
+  /** Server-resolved similarity. undefined = no session cookie yet. */
+  similar?: SimilarMatch[] | null
 }
 
 // Tab toggle is pure client state; the strategy arrays are server-resolved.
-// "For you": unranked (new / low-fill) float to the top, then ranked.
-// "Following": only strategies the user follows, newest activity first.
-export function ExploreFeed({ ranked, unranked, following }: Props) {
+// "For you" = REAL similarity: once the session wallet resolves, the server
+// ranks every described strategy by TF-IDF-cosine against the wallet's OWN
+// deployed descriptions (lib/similarity.ts) — matches (with a % badge) come
+// first, then the leaderboard tail. No wallet / nothing deployed yet → the
+// honest fallback (unranked then ranked) with a hint, never a fake ranking.
+// "New": only the unranked strategies, newest activity first.
+export function ExploreFeed({ ranked, unranked, similar }: Props) {
   const [tab, setTab] = useState<Tab>('foryou')
+  const { sessionUser } = useSessionUser()
+  const matches = similar ?? null
+  const address = sessionUser?.address
+
+  const matchedIds = useMemo(
+    () => new Set((matches ?? []).map((m) => m.strategy.id)),
+    [matches],
+  )
+  const matchPctById = useMemo(
+    () => new Map((matches ?? []).map((m) => [m.strategy.id, m.matchPct])),
+    [matches],
+  )
+  const tail = useMemo(
+    () =>
+      [...unranked, ...ranked].filter((s) => !matchedIds.has(s.id)),
+    [unranked, ranked, matchedIds],
+  )
+
+  const showMatched = tab === 'foryou' && matches !== null && matches.length > 0
+  const showHint =
+    tab === 'foryou' &&
+    (matches === null || matches.length === 0) &&
+    !!address
 
   const feed = useMemo<Strategy[]>(() => {
+    if (showMatched) return [...(matches ?? []).map((m) => m.strategy), ...tail]
     if (tab === 'foryou') return [...unranked, ...ranked]
-    return [...following].sort((a, b) => b.lastSwapTimestamp - a.lastSwapTimestamp)
-  }, [tab, ranked, unranked, following])
+    return [...unranked].sort((a, b) => b.lastSwapTimestamp - a.lastSwapTimestamp)
+  }, [showMatched, matches, tail, tab, ranked, unranked])
 
   return (
     <>
@@ -54,14 +84,14 @@ export function ExploreFeed({ ranked, unranked, following }: Props) {
           </button>
           <button
             role="tab"
-            aria-selected={tab === 'following'}
-            onClick={() => setTab('following')}
+            aria-selected={tab === 'new'}
+            onClick={() => setTab('new')}
             className={`flex-1 relative py-3.5 font-sans text-[15px] hover:bg-wave-surface transition-colors ${
-              tab === 'following' ? 'font-bold text-wave-text' : 'font-normal text-wave-muted'
+              tab === 'new' ? 'font-bold text-wave-text' : 'font-normal text-wave-muted'
             }`}
           >
-            Following
-            {tab === 'following' && (
+            New
+            {tab === 'new' && (
               <span
                 className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-1 rounded-full"
                 style={{ background: '#2A9D8F' }}
@@ -74,19 +104,21 @@ export function ExploreFeed({ ranked, unranked, following }: Props) {
 
       {/* Feed */}
       <section className="flex-1" aria-label="Strategy feed">
+        {showHint && (
+          <p className="px-4 py-3 font-sans text-[13px] text-wave-muted border-b border-wave-border">
+            For you ranks the feed by similarity to the strategies you deploy.
+            Ship one and matches appear here.
+          </p>
+        )}
         {feed.length > 0 ? (
-          feed.map((s) => <StrategyCard key={s.id} strategy={s} />)
+          feed.map((s) => (
+            <StrategyCard key={s.id} strategy={s} matchPct={matchPctById.get(s.id)} />
+          ))
         ) : (
           <div className="flex flex-col items-center justify-center py-20 px-6 text-center gap-3">
             <p className="font-sans text-[15px] text-wave-muted">
-              You&apos;re not following any strategies yet.
+              No strategies yet. Ship the first one.
             </p>
-            <Link
-              href="/follow"
-              className="font-sans text-[14px] font-semibold underline underline-offset-4 text-wave-text hover:text-wave-muted transition-colors"
-            >
-              Find strategies to follow
-            </Link>
           </div>
         )}
       </section>

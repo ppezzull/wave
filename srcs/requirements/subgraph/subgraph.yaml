@@ -1,9 +1,10 @@
 specVersion: 1.3.0
-# Production wave subgraph (v0.0.2). Replaces the spike. Three data sources:
+# Production wave subgraph. Two data sources (the ENS resolver source is REMOVED with the ENS
+# layer — follows were ENS text records; identity is on-chain authorship's job now, and it stores no
+# follow edges):
 #   (a) EnsStrategyRouter (Flaviano's deploy)   -> StrategyDeployed, Swapped
-#   (b) Sepolia ENS Public Resolver (constant)  -> TextChanged (filtered in mapping), VersionChanged
 #   (c) Aqua (1inch balance protocol, constant) -> Pushed, Pulled, Docked  (committed capital + status)
-# NOTE: no indexerHints.prune — Strategy and Follower are MUTABLE aggregates; prune:auto only
+# NOTE: no indexerHints.prune — Strategy is a MUTABLE aggregate; prune:auto only
 # works on fully immutable stores. Reorg safety = graph-node native block-level revert.
 schema:
   file: ./schema.graphql
@@ -18,9 +19,9 @@ dataSources:
       # receipt block 0xad301e = 11350046).
       # ⚠️ startBlock is the ROUTER DEPLOY block (11350046), NOT the first swap (11350065) —
       # starting at the swap misses the StrategyDeployed events that precede it.
-      address: "0x698d798895a03c858aab493564e0795732da0c68"
+      address: "0x041be37178986f9729e4cc93f9b57bcfc26d2d02"
       abi: EnsStrategyRouter
-      startBlock: 11352568 # router DEPLOY block (redeploy per #49 — 0xeb513f… era il placeholder #20 con programHash=0)
+      startBlock: 11689820 # router DEPLOY block 0xb25f5c (live redeploy #29 — fixed: was mis-converted)
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -32,37 +33,19 @@ dataSources:
         - name: EnsStrategyRouter
           file: ./abis/EnsStrategyRouter.abi.json
       eventHandlers:
+        # The event's third param (indexed bytes32) was born the ENS namehash; the announcer now
+        # passes the strategyId itself. Still indexed, still bytes32 — the handler ignores it.
         - event: StrategyDeployed(indexed bytes32,bytes32,indexed bytes32)
           handler: handleStrategyDeployed
+        # The post: description byte-for-byte (the compiler input). Emitted by the 3-arg
+        # announceStrategy overload, same tx as StrategyDeployed.
+        - event: StrategyDescribed(indexed bytes32,string)
+          handler: handleStrategyDescribed
         - event: Swapped(bytes32,address,address,address,address,uint256,uint256)
           handler: handleSwapped
       file: ./src/mapping.ts
-  # --- (b) ENS Public Resolver (constant on Sepolia) ---
-  - kind: ethereum/contract
-    name: ENSResolver
-    network: sepolia
-    source:
-      address: "0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5" # Sepolia ENS Public Resolver (PROD-TESTNET §3)
-      abi: ENSResolver
-      startBlock: 11348879 # spike value; resolver predates the router by a mile
-    mapping:
-      kind: ethereum/events
-      apiVersion: 0.0.9
-      language: wasm/assemblyscript
-      entities:
-        - Follow
-        - Follower
-        - NodeFollows
-        - Strategy
-      abis:
-        - name: ENSResolver
-          file: ./abis/ENSResolver.json
-      eventHandlers:
-        - event: TextChanged(indexed bytes32,indexed string,string,string)
-          handler: handleTextChanged
-        - event: VersionChanged(indexed bytes32,uint256)
-          handler: handleVersionChanged
-      file: ./src/mapping.ts
+  # NOTE: the local anvil-fork variant (adds the temporary V2 router source on the fork)
+  # lives in subgraph.local.yaml — deploy that one against local graph-node, never Studio.
   # --- (c) Aqua (1inch balance-management protocol; committed capital + status source) ---
   # Aqua is the AUTHORITATIVE source of committed capital: Pushed(amount)/Pulled(amount) maintain
   # Strategy.committedCapital (returnPct's denominator); Docked flips status. Join key:
@@ -91,4 +74,78 @@ dataSources:
           handler: handlePulled
         - event: Docked(address,address,bytes32)
           handler: handleDocked
+      file: ./src/mapping.ts
+  # --- (d) StrategyFactory (on-chain authorship — task #31) ---
+  # The factory's onlyOwner attribute(strategyId, author) emits StrategyAttributed right after
+  # announce, with the author being the UI session wallet the agent received on ship.
+  # ⚠️ PLACEHOLDER — the live factory address + deploy block land with the #29 router+factory
+  # redeploy (as that EOA). Until then this datasource indexes nothing live (startBlock 0 is
+  # replaced at deploy time); the schema/mapping/handler are already production-shaped.
+  - kind: ethereum/contract
+    name: StrategyFactory
+    network: sepolia
+    source:
+      address: "0x1bac7d2d37ff990a899d06a32ab8fff5b70fdff0"
+      abi: StrategyFactory
+      startBlock: 11689822 # factory DEPLOY block 0xb25f5e (live #29 — fixed: was mis-converted)
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Strategy
+      abis:
+        - name: StrategyFactory
+          file: ./abis/StrategyFactory.abi.json
+      eventHandlers:
+        - event: StrategyAttributed(indexed bytes32,indexed address)
+          handler: handleStrategyAttributed
+      file: ./src/mapping.ts
+  # --- (e) ChatVault (on-chain encrypted chat backups) ---
+  # Append-only AES-GCM blobs relayed by the announcer EOA; privacy is CLIENT-SIDE
+  # encryption (the key is the owner's wallet signature, never uploaded) — the
+  # ciphertext is public by design. Restore reads the user's highest nonce.
+  - kind: ethereum/contract
+    name: ChatVault
+    network: sepolia
+    source:
+      address: "0xA326D3B14954b9aF0284a9B0d621C51c6CccafF6"
+      abi: ChatVault
+      startBlock: 11691527 # deploy tx landed within ~2 blocks of 11691529; small backscan is free
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - ChatVault
+      abis:
+        - name: ChatVault
+          file: ./abis/ChatVault.abi.json
+      eventHandlers:
+        - event: Stored(indexed address,indexed uint256,bytes)
+          handler: handleChatVaultStored
+      file: ./src/mapping.ts
+  # --- (f) AvatarRegistry (IPFS avatar CID per wallet) ---
+  # The image lives on IPFS. This source only indexes the CID pointer so
+  # /u/<addr> and the rails can render a real photo. Replace address +
+  # startBlock after the Sepolia deploy (AVATAR_REGISTRY_ADDRESS).
+  - kind: ethereum/contract
+    name: AvatarRegistry
+    network: sepolia
+    source:
+      address: "0x3F45Ddd265A5A82E234204717E06BE8dD62865ce"
+      abi: AvatarRegistry
+      startBlock: 11694591
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Author
+      abis:
+        - name: AvatarRegistry
+          file: ./abis/AvatarRegistry.abi.json
+      eventHandlers:
+        - event: AvatarSet(indexed address,indexed uint256,string)
+          handler: handleAvatarSet
       file: ./src/mapping.ts

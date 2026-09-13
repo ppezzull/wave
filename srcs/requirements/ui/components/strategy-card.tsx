@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, GitFork, TrendingUp, TrendingDown } from 'lucide-react'
-import { useCountUp } from '@/hooks/use-count-up'
+import { GitFork, TrendingUp, TrendingDown } from 'lucide-react'
+import { GenericAvatar } from './generic-avatar'
 import { useSessionUser } from '@/hooks/use-session-user'
-import { followStrategy } from '@/app/actions/follow'
+import { useDrawer } from './drawer-context'
+import { useCountUp } from '@/hooks/use-count-up'
 import {
   type Strategy,
   returnPct,
@@ -20,18 +20,25 @@ interface StrategyCardProps {
   isDetailed?: boolean
   /** In the landing hero preview, disable navigation and drawer */
   isPreview?: boolean
+  /** Similarity to the viewer's own deployed strategies (the For-you feed),
+   *  from TF-IDF cosine over descriptions — undefined outside that context. */
+  matchPct?: number
 }
 
 export function StrategyCard({
   strategy,
   isDetailed = false,
   isPreview = false,
+  matchPct,
 }: StrategyCardProps) {
   const router = useRouter()
+  const { openCreate } = useDrawer()
   const { sessionUser } = useSessionUser()
-  const [following, setFollowing] = useState(false)
-  const [followBusy, setFollowBusy] = useState(false)
-  const [followError, setFollowError] = useState<string | null>(null)
+  const authorLabel =
+    strategy.authorHandle ||
+    (sessionUser?.address
+      ? `${sessionUser.address.slice(0, 6)}…${sessionUser.address.slice(-4)}`
+      : '')
 
   const ret = returnPct(strategy)
   const retStr = returnPctStr(strategy)
@@ -47,31 +54,17 @@ export function StrategyCard({
   const handleCardClick = () => {
     if (!isDetailed && !isPreview) router.push(`/s/${strategy.id}`)
   }
-  const handleFollow = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isPreview || followBusy) return
-    const followerName = sessionUser?.ensName
-    if (!followerName) {
-      setFollowError('Connect a wallet with an ENS name to follow')
-      return
-    }
-    setFollowBusy(true)
-    setFollowError(null)
-    void followStrategy(strategy.id, followerName).then((res) => {
-      setFollowBusy(false)
-      if (res.ok) setFollowing(true)
-      else setFollowError(res.reason ?? 'follow failed')
-    })
-  }
-  // Fork is a first-class verb → /compose?fork=<id> prefill (Pietro.md L61).
+  // Fork is a first-class verb → the chat widget opens prefilled with the
+  // author's description, right where you are (Pietro.md L61).
   const handleFork = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!isPreview) router.push(`/compose?fork=${encodeURIComponent(strategy.id)}`)
+    if (isPreview) return
+    openCreate(strategy.description)
   }
 
   return (
     <article
-      className={`bg-wave-bg transition-colors duration-150 ${
+      className={`transition-colors duration-150 ${
         isPreview
           ? 'glass-card rounded-[16px] p-4'
           : isDetailed
@@ -83,7 +76,9 @@ export function StrategyCard({
       tabIndex={!isDetailed && !isPreview ? 0 : undefined}
       aria-label={
         !isDetailed && !isPreview
-          ? `View strategy by ${strategy.authorHandle}, return ${retStr}`
+          ? `View strategy by ${strategy.authorHandle}, ${
+              strategy.swapCount === 0 ? 'no swaps yet' : `return ${retStr}`
+            }`
           : undefined
       }
       onKeyDown={
@@ -95,23 +90,36 @@ export function StrategyCard({
       }
     >
       <div className="flex gap-3">
-        <div
-          className="w-11 h-11 rounded-full shrink-0"
-          style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-          aria-hidden="true"
-        />
+        <GenericAvatar size={44} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
-              {strategy.authorHandle}
-            </span>
-            <span className="text-wave-muted" aria-hidden="true">
-              ·
-            </span>
+            {authorLabel && (
+              <>
+                <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
+                  {authorLabel}
+                </span>
+                <span className="text-wave-muted" aria-hidden="true">
+                  ·
+                </span>
+              </>
+            )}
             <span className="font-sans text-[14px] text-wave-muted">
               {formatRecency(strategy.lastSwapTimestamp)}
             </span>
+            {matchPct !== undefined && matchPct > 0 && (
+              <span
+                className="ml-auto font-mono text-[11px] font-bold px-2 py-0.5 rounded-full"
+                style={{
+                  color: '#2A9D8F',
+                  background: 'rgba(42,157,143,0.12)',
+                  border: '1px solid rgba(42,157,143,0.35)',
+                }}
+                aria-label={`${matchPct}% match with your strategies`}
+              >
+                {matchPct}% match
+              </span>
+            )}
           </div>
 
           <p
@@ -122,32 +130,53 @@ export function StrategyCard({
             {strategy.description}
           </p>
 
-          <div
-            className="mt-3 inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5"
-            style={{
-              background: isPositive
-                ? 'rgba(31,157,107,0.08)'
-                : 'rgba(229,72,77,0.08)',
-              border: `1px solid ${isPositive ? 'rgba(31,157,107,0.25)' : 'rgba(229,72,77,0.25)'}`,
-            }}
-            aria-label={`Return: ${retStr}`}
-          >
-            <TrendIcon size={22} style={{ color: returnColor }} aria-hidden="true" />
-            <span
-              className="font-mono font-bold leading-none"
-              style={{ color: returnColor, fontSize: isPreview ? '1.5rem' : '1.75rem' }}
+          {/* Return: pending until the first swap — a zero-swap strategy is NOT
+              -100% (returnPct's (0 - committed)/committed); that display lied. */}
+          {strategy.swapCount === 0 ? (
+            <div
+              className="mt-3 inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5"
+              style={{
+                background: 'rgba(245,166,35,0.08)',
+                border: '1px solid rgba(245,166,35,0.25)',
+              }}
+              aria-label="Return: no swaps yet"
             >
-              {returnPrefix}
-              {displayValue.toFixed(1)}%
-            </span>
-          </div>
+              <span
+                className="font-mono font-bold leading-none"
+                style={{ color: '#F5A623', fontSize: isPreview ? '1.5rem' : '1.75rem' }}
+              >
+                -
+              </span>
+              <span className="font-sans text-[12px] text-wave-muted">no swaps yet</span>
+            </div>
+          ) : (
+            <div
+              className="mt-3 inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5"
+              style={{
+                background: isPositive
+                  ? 'rgba(31,157,107,0.08)'
+                  : 'rgba(229,72,77,0.08)',
+                border: `1px solid ${isPositive ? 'rgba(31,157,107,0.25)' : 'rgba(229,72,77,0.25)'}`,
+              }}
+              aria-label={`Return: ${retStr}`}
+            >
+              <TrendIcon size={22} style={{ color: returnColor }} aria-hidden="true" />
+              <span
+                className="font-mono font-bold leading-none"
+                style={{ color: returnColor, fontSize: isPreview ? '1.5rem' : '1.75rem' }}
+              >
+                {returnPrefix}
+                {displayValue.toFixed(1)}%
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-5 mt-3">
             <div className="flex items-baseline gap-1.5">
               <span className="font-mono text-[13px] text-wave-text">
                 {formatEth(strategy.committedCapital)}
               </span>
-              <span className="font-sans text-[12px] text-wave-muted">committed</span>
+              <span className="font-sans text-[12px] text-wave-muted">committed (token units)</span>
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="font-mono text-[13px] text-wave-text">
@@ -164,37 +193,15 @@ export function StrategyCard({
           </div>
 
           {!isPreview && (
-            <div className="flex flex-col gap-1 mt-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleFollow}
-                  disabled={followBusy}
-                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold transition-colors duration-150 disabled:opacity-50"
-                  style={{
-                    border: following ? '1px solid #2F3336' : '1px solid #2A9D8F',
-                    color: following ? '#71767B' : '#2A9D8F',
-                    background: 'transparent',
-                  }}
-                  aria-label={following ? 'Unfollow this strategy' : 'Follow this strategy'}
-                  aria-pressed={following}
-                >
-                  {following && <Check size={14} aria-hidden="true" />}
-                  {followBusy ? '…' : following ? 'Following' : 'Follow'}
-                </button>
-                <button
-                  onClick={handleFork}
-                  className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
-                  aria-label="Fork this strategy"
-                >
-                  <GitFork size={14} aria-hidden="true" />
-                  Fork
-                </button>
-              </div>
-              {followError && (
-                <p className="font-sans text-[12px]" style={{ color: '#E5484D' }}>
-                  {followError}
-                </p>
-              )}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={handleFork}
+                className="flex items-center justify-center gap-1.5 px-4 h-9 rounded-full font-sans text-[14px] font-semibold text-wave-muted border border-wave-border hover:bg-wave-surface transition-colors duration-150"
+                aria-label="Fork this strategy"
+              >
+                <GitFork size={14} aria-hidden="true" />
+                Fork
+              </button>
             </div>
           )}
         </div>

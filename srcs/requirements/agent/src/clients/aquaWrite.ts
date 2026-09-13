@@ -14,7 +14,12 @@
 // (announceStrategy is onlyOwner). In this deployment they are the same EOA.
 import { createPublicClient, createWalletClient, http, type Hash, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sepolia } from "viem/chains";
+import { mainnet, sepolia } from "viem/chains";
+
+/// WAVE_CHAIN_ID=1 flips every write client to mainnet (mainnet-fork testing); the
+/// default stays Sepolia (the live demo chain). viem serializes txs with the chain
+/// object's id, so a chain-1 fork with a sepolia client would fail EIP-155 validation.
+const chain = Number(process.env.WAVE_CHAIN_ID ?? "11155111") === 1 ? mainnet : sepolia;
 
 const AQUA_ABI = [
   {
@@ -40,10 +45,27 @@ const AQUA_ABI = [
     ],
     outputs: [],
   },
+  {
+    name: "rawBalances",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "maker", type: "address" },
+      { name: "app", type: "address" },
+      { name: "strategyHash", type: "bytes32" },
+      { name: "token", type: "address" },
+    ],
+    outputs: [
+      { name: "balance", type: "uint248" },
+      { name: "tokensCount", type: "uint8" },
+    ],
+  },
 ] as const;
 
 /// The frozen router surface this arm needs. `order` is the ABI-encoded maker Order;
 /// both event payloads are derived on-chain (C1a, #40) so nothing here can misreport them.
+/// Kept as two single-entry ABIs (not one two-overload array): viem's simulateContract
+/// can't infer `args` across an overloaded functionName, and the branches stay readable.
 const ROUTER_ABI = [
   {
     name: "announceStrategy",
@@ -65,6 +87,40 @@ const ROUTER_ABI = [
   },
 ] as const;
 
+/// The described overload: same call + the strategy's public description (the post),
+/// which the router emits as StrategyDescribed for the subgraph.
+const ROUTER_DESCRIBED_ABI = [
+  {
+    name: "announceStrategy",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "order",
+        type: "tuple",
+        components: [
+          { name: "maker", type: "address" },
+          { name: "traits", type: "uint256" },
+          { name: "data", type: "bytes" },
+        ],
+      },
+      { name: "ensNode", type: "bytes32" },
+      { name: "description", type: "string" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+const ERC20_DECIMALS_ABI = [
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+] as const;
+
 export interface AquaWriteConfig {
   aqua: `0x${string}`;
   router: `0x${string}`;
@@ -80,11 +136,26 @@ export interface MakerOrder {
 }
 
 export function aquaWriteClient(cfg: AquaWriteConfig) {
-  const pub = createPublicClient({ chain: sepolia, transport: http(cfg.rpcUrl) });
+  const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) });
   const maker = privateKeyToAccount(cfg.makerKey);
   const owner = privateKeyToAccount(cfg.ownerKey ?? cfg.makerKey);
-  const makerWallet = createWalletClient({ account: maker, chain: sepolia, transport: http(cfg.rpcUrl) });
-  const ownerWallet = createWalletClient({ account: owner, chain: sepolia, transport: http(cfg.rpcUrl) });
+  const makerWallet = createWalletClient({ account: maker, chain, transport: http(cfg.rpcUrl) });
+  const ownerWallet = createWalletClient({ account: owner, chain, transport: http(cfg.rpcUrl) });
+
+  // Minimal ERC-20 surface — only `approve` is needed before aqua.ship (the maker must
+  // approve Aqua for both tokens so ship can register virtual balances; LiveSwapStock.s.sol:138).
+  const ERC20_ABI = [
+    {
+      name: "approve",
+      type: "function",
+      stateMutability: "nonpayable",
+      inputs: [
+        { name: "spender", type: "address" },
+        { name: "amount", type: "uint256" },
+      ],
+      outputs: [{ name: "", type: "bool" }],
+    },
+  ] as const;
 
   const send = async (wallet: typeof makerWallet, request: Parameters<typeof wallet.writeContract>[0]) => {
     const hash = await wallet.writeContract(request);
@@ -96,6 +167,15 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
   return {
     makerAddress: maker.address,
     ownerAddress: owner.address,
+
+    /** Read an ERC-20's decimals() on-chain. Real pairs MIX decimals (WETH 18 / USDC 6);
+     * parsing amounts with a single client-side scale miscommits by 1e12 on the 6dp leg —
+     * the Sepolia mocks were uniform so this only bites on real tokens. */
+    async decimalsOf(token: `0x${string}`): Promise<number> {
+      return Number(
+        await pub.readContract({ address: token, abi: ERC20_DECIMALS_ABI, functionName: "decimals" }),
+      );
+    },
 
     /** Withdraw a strategy from Aqua. Emits Docked → subgraph sets status = stopped. */
     async dock(strategyHash: Hex, tokens: `0x${string}`[]): Promise<Hash> {
@@ -109,14 +189,41 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
       return send(makerWallet, request);
     },
 
-    /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. */
-    async announce(order: MakerOrder, ensNode: Hex): Promise<Hash> {
+    /** Aqua's authoritative liveness read: a strategyHash with registered balances
+     * (tokensCount != 0) is shipped or docked — re-shipping it reverts
+     * StrategiesMustBeImmutable(app, hash) (0x879f237b, Aqua.sol:46). Either token
+     * works: ship() registers both in the same call. */
+    async strategyLiveness(strategyHash: Hex, token: `0x${string}`) {
+      const [balance, tokensCount] = await pub.readContract({
+        address: cfg.aqua,
+        abi: AQUA_ABI,
+        functionName: "rawBalances",
+        args: [maker.address, cfg.router, strategyHash, token],
+      });
+      return { balance, tokensCount: Number(tokensCount) };
+    },
+
+    /** Announce a (re)compiled order. MUST run BEFORE ship — see the header note. The
+     * bytes32 id is OPAQUE to the router (born as an ENS namehash; we now pass the
+     * strategyId — the subgraph's Strategy.id — since ENS is gone). With `description`,
+     * calls the described overload so the post ships in the same tx (StrategyDescribed). */
+    async announce(order: MakerOrder, strategyId: Hex, description?: string): Promise<Hash> {
+      if (description !== undefined) {
+        const { request } = await pub.simulateContract({
+          account: owner,
+          address: cfg.router,
+          abi: ROUTER_DESCRIBED_ABI,
+          functionName: "announceStrategy",
+          args: [order, strategyId, description],
+        });
+        return send(ownerWallet, request);
+      }
       const { request } = await pub.simulateContract({
         account: owner,
         address: cfg.router,
         abi: ROUTER_ABI,
         functionName: "announceStrategy",
-        args: [order, ensNode],
+        args: [order, strategyId],
       });
       return send(ownerWallet, request);
     },
@@ -131,6 +238,26 @@ export function aquaWriteClient(cfg: AquaWriteConfig) {
         args: [cfg.router, strategy, tokens, amounts],
       });
       return send(makerWallet, request);
+    },
+
+    /**
+     * Approve each token to Aqua for max (the maker wallet). MUST run before ship so Aqua can
+     * register the maker's virtual balances — LiveSwapStock.s.sol:138-139. Re-approving max is
+     * a no-op on the allowance. Returns the last approval tx hash.
+     */
+    async approve(tokens: `0x${string}`[]): Promise<Hash> {
+      let last: Hash | undefined;
+      for (const token of tokens) {
+        const { request } = await pub.simulateContract({
+          account: maker,
+          address: token,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [cfg.aqua, 2n ** 256n - 1n],
+        });
+        last = await send(makerWallet, request);
+      }
+      return last!;
     },
   };
 }

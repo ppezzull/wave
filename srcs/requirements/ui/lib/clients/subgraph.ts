@@ -15,18 +15,25 @@ import { GraphQLClient, ClientError } from 'graphql-request'
 export type StrategyStatus = 'active' | 'stopped' | 'removed'
 
 // Full production Strategy shape (srcs/requirements/subgraph/schema.graphql).
+// ensNode/followerCount exist on the deployed v0.0.4 but are intentionally NOT
+// queried: the ENS identity layer is gone and the upcoming ENS-free deploy
+// drops the fields — never select what we don't use.
 export interface SubgraphStrategy {
   id: string // bytes32 hex, lowercase 0x...
   programHash: string // bytes32
-  ensNode: string // bytes32 namehash hex
   status: StrategyStatus
+  /** The post — StrategyDescribed payload, byte-for-byte compiler input. "" pre-event. */
+  description: string
+  /** On-chain authorship — StrategyFactory.StrategyAttributed (task #31). ZERO_ADDRESS
+   *  sentinel = unattributed (shipped before the factory existed / no session wallet).
+   *  Profiles and /chat threads key on it. */
+  author: string
   cumulativeVolumeIn: string // BigInt wei string
   cumulativeVolumeOut: string // BigInt wei string
   /** Aqua Pushed − Pulled (C2 / PR #41). Present on v0.0.4+. */
   committedCapital: string
   swapCount: number
   lastSwapTimestamp: number // unix seconds (0 = never)
-  followerCount: number
 }
 
 export interface SubgraphSwap {
@@ -43,27 +50,29 @@ export interface SubgraphSwap {
   transactionHash: string
 }
 
-// The production Follow entity (srcs/requirements/subgraph/schema.graphql): one row per
-// TextChanged event on a `wave.following/<strategyId>` key. isFollowing flips
-// false on a clear (value==""). node is the follower's ENS namehash;
-// strategyKey is the full "wave.following/<id>" key (Pietro.md names this field).
-export interface Follow {
-  id: string
-  node: string // ENS namehash of the follower's name
-  strategyKey: string // "wave.following/<strategyId>"
-  isFollowing: boolean
-  timestamp: number // unix seconds
-}
-
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.4'
+  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.7'
 
 const headers: Record<string, string> | undefined = process.env.WAVE_SUBGRAPH_KEY
   ? { Authorization: `Bearer ${process.env.WAVE_SUBGRAPH_KEY}` }
   : undefined
 
 const client = new GraphQLClient(SUBGRAPH_URL, headers ? { headers } : undefined)
+
+// ── per-network instances (Settings selector) ─────────────────────────────
+// The subgraph is NETWORK data: the selector (cookie, lib/networks.ts) picks
+// which endpoint each request reads. Cached per URL — one GraphQLClient and
+// one API object per network, reused across requests.
+const instances = new Map<string, ReturnType<typeof makeSubgraph>>()
+export function subgraphFor(url: string) {
+  let inst = instances.get(url)
+  if (!inst) {
+    inst = makeSubgraph(new GraphQLClient(url, headers ? { headers } : undefined))
+    instances.set(url, inst)
+  }
+  return inst
+}
 
 // The deployed subgraph may be the SPIKE — querying a production entity
 // (`strategies`/`swaps`) that doesn't exist on it returns a GraphQL error.
@@ -82,78 +91,113 @@ function isEntityNotDeployed(error: unknown): boolean {
   )
 }
 
+// Studio v0.0.4 predates StrategyDescribed AND the live v0.0.6 predates the author field
+// (task #31, lands with v0.0.6): selecting either against those deploys fails the whole
+// query. That's a KNOWN old-deploy signature, not a bug — withOptionalStrategyFields
+// retries dropping the offending field (max 2) and the row mapper fills the documented
+// legacy value ("" description / ZERO_ADDRESS author) so behavior matches the old truth.
+type OptionalStrategyField = 'description' | 'author'
+
+function parseMissingStrategyField(error: unknown): OptionalStrategyField | null {
+  if (!(error instanceof ClientError)) return null
+  const messages = (error.response?.errors ?? []).map((e) => e.message ?? '')
+  for (const m of messages) {
+    const match = m.match(
+      /Cannot query field ["`](description|author)["`] on type ["`]Strategy["`]/i,
+    )
+    if (match) return match[1].toLowerCase() as OptionalStrategyField
+  }
+  return null
+}
+
+/** Selection fragment for the fields a deploy may predate. */
+function optionalFields(fields: OptionalStrategyField[]): string {
+  return fields.map((f) => ` ${f}`).join('')
+}
+
+/** Run a Strategy query, retrying (max 2) with the offending optional field dropped when
+ *  the pinned deploy errors "Cannot query field … on type Strategy". Other errors throw. */
+async function withOptionalStrategyFields<R>(
+  fetcher: (fields: OptionalStrategyField[]) => Promise<R>,
+): Promise<R> {
+  const fields: OptionalStrategyField[] = ['description', 'author']
+  for (let retries = 0; ; retries++) {
+    try {
+      return await fetcher(fields)
+    } catch (error) {
+      const missing = parseMissingStrategyField(error)
+      if (!missing || retries >= 2 || !fields.includes(missing)) throw error
+      fields.splice(fields.indexOf(missing), 1)
+    }
+  }
+}
+
+// The subgraph's "unattributed" sentinel (mapping.ts ZERO_ADDRESS) — lowercase to match
+// graph-node's Bytes serialization so comparisons stay case-safe.
+const ZERO_AUTHOR = '0x0000000000000000000000000000000000000000'
+
 function normalizeId(id: string): string {
   return id.startsWith('0x') ? id.toLowerCase() : `0x${id}`.toLowerCase()
+}
+
+/** Strategy ids are 32-byte hex. Anything else (e.g. a handle like "s-e52db455") is not
+ *  addressable — return "not found" rather than letting graph-node choke on the coerced id. */
+function isStrategyId(id: string): boolean {
+  return /^0x[0-9a-f]{64}$/.test(normalizeId(id))
 }
 
 function coerceStatus(raw: string | null | undefined): StrategyStatus {
   return raw === 'stopped' || raw === 'removed' ? raw : 'active'
 }
 
-export const subgraph = {
-  /** Production Follow entity (v0.0.4). Lists `wave.following/<id>` TextChanged
-   * events — the follow graph. Empty until follows happen.
-   */
-  async listFollows(first = 1000): Promise<Follow[]> {
-    try {
-      const data = await client.request<{
-        follows?: Array<{
-          id: string
-          node: string
-          strategyKey: string
-          isFollowing: boolean
-          timestamp: string | number
-        }>
-      }>(
-        `query($first: Int) {
-          follows(first: $first, where: { strategyKey_starts_with: "wave.following/" }, orderBy: timestamp, orderDirection: desc) {
-            id node strategyKey isFollowing timestamp
-          }
-        }`,
-        { first },
-      )
-      return (data.follows ?? []).map((r) => ({
-        id: r.id,
-        node: r.node,
-        strategyKey: r.strategyKey,
-        isFollowing: r.isFollowing,
-        timestamp: Number(r.timestamp),
-      }))
-    } catch (error) {
-      if (isEntityNotDeployed(error)) return []
-      throw error
-    }
-  },
+/** Raw GraphQL row — fields a deploy may predate arrive optional (see
+ *  withOptionalStrategyFields); counts/timestamps arrive as string or number. */
+type StrategyRow = Omit<
+  SubgraphStrategy,
+  'status' | 'description' | 'author' | 'committedCapital' | 'swapCount' | 'lastSwapTimestamp'
+> & {
+  status?: string
+  description?: string
+  author?: string
+  committedCapital?: string
+  swapCount: string | number
+  lastSwapTimestamp: string | number
+}
 
+const toStrategy = (row: StrategyRow): SubgraphStrategy => ({
+  id: row.id,
+  programHash: row.programHash,
+  status: coerceStatus(row.status),
+  description: row.description ?? '',
+  author: (row.author ?? ZERO_AUTHOR).toLowerCase(),
+  cumulativeVolumeIn: row.cumulativeVolumeIn,
+  cumulativeVolumeOut: row.cumulativeVolumeOut,
+  committedCapital: row.committedCapital ?? '',
+  swapCount: Number(row.swapCount),
+  lastSwapTimestamp: Number(row.lastSwapTimestamp),
+})
+
+function makeSubgraph(client: GraphQLClient) {
+  return {
   /** Production entity — empty while syncing / before any strategies seed. */
   async getStrategy(id: string): Promise<SubgraphStrategy | null> {
+    if (!isStrategyId(id)) return null
     const normalizedId = normalizeId(id)
-    try {
-      const data = await client.request<{
-        strategy?: Omit<SubgraphStrategy, 'status'> & { status?: string; committedCapital?: string }
-      }>(
+    const fetchOne = (fields: OptionalStrategyField[]) =>
+      client.request<{ strategy?: StrategyRow }>(
         `query($id: ID!) {
           strategy(id: $id) {
-            id programHash ensNode status
+            id programHash status${optionalFields(fields)}
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
-            swapCount lastSwapTimestamp followerCount
+            swapCount lastSwapTimestamp
           }
         }`,
         { id: normalizedId },
       )
+    try {
+      const data = await withOptionalStrategyFields(fetchOne)
       if (!data?.strategy) return null
-      return {
-        id: data.strategy.id,
-        programHash: data.strategy.programHash,
-        ensNode: data.strategy.ensNode,
-        status: coerceStatus(data.strategy.status),
-        cumulativeVolumeIn: data.strategy.cumulativeVolumeIn,
-        cumulativeVolumeOut: data.strategy.cumulativeVolumeOut,
-        committedCapital: data.strategy.committedCapital ?? '',
-        swapCount: Number(data.strategy.swapCount),
-        lastSwapTimestamp: Number(data.strategy.lastSwapTimestamp),
-        followerCount: Number(data.strategy.followerCount),
-      }
+      return toStrategy(data.strategy)
     } catch (error) {
       if (isEntityNotDeployed(error)) return null
       throw error
@@ -162,42 +206,20 @@ export const subgraph = {
 
   /** Production entity — empty while syncing / before any strategies seed. Newest-first by activity. */
   async listStrategies(first = 1000): Promise<SubgraphStrategy[]> {
-    try {
-      const data = await client.request<{
-        strategies?: Array<
-          Omit<
-            SubgraphStrategy,
-            'swapCount' | 'lastSwapTimestamp' | 'followerCount' | 'status' | 'committedCapital'
-          > & {
-            committedCapital?: string
-            swapCount: string | number
-            lastSwapTimestamp: string | number
-            followerCount: string | number
-            status?: string
-          }
-        >
-      }>(
+    const fetchList = (fields: OptionalStrategyField[]) =>
+      client.request<{ strategies?: StrategyRow[] }>(
         `query($first: Int) {
           strategies(first: $first, orderBy: lastSwapTimestamp, orderDirection: desc) {
-            id programHash ensNode status
+            id programHash status${optionalFields(fields)}
             cumulativeVolumeIn cumulativeVolumeOut committedCapital
-            swapCount lastSwapTimestamp followerCount
+            swapCount lastSwapTimestamp
           }
         }`,
         { first },
       )
-      return (data?.strategies ?? []).map((s) => ({
-        id: s.id,
-        programHash: s.programHash,
-        ensNode: s.ensNode,
-        status: coerceStatus(s.status),
-        cumulativeVolumeIn: s.cumulativeVolumeIn,
-        cumulativeVolumeOut: s.cumulativeVolumeOut,
-        committedCapital: s.committedCapital ?? '',
-        swapCount: Number(s.swapCount),
-        lastSwapTimestamp: Number(s.lastSwapTimestamp),
-        followerCount: Number(s.followerCount),
-      }))
+    try {
+      const data = await withOptionalStrategyFields(fetchList)
+      return (data?.strategies ?? []).map(toStrategy)
     } catch (error) {
       if (isEntityNotDeployed(error)) return []
       // Build-time / transient network: empty is the truth, never crash the UI.
@@ -206,8 +228,69 @@ export const subgraph = {
     }
   },
 
+  /** Author-keyed strategies — the /u/<address> profile and /chat thread list (task #31).
+   *  Pre-factory deploys never carry authorship, so nothing matches a real wallet — [] is
+   *  the honest truth, same as unattributed. Newest-first by activity. */
+  async listStrategiesByAuthor(author: string, first = 1000): Promise<SubgraphStrategy[]> {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(author)) return []
+    const fetchByAuthor = (fields: OptionalStrategyField[]) =>
+      client.request<{ strategies?: StrategyRow[] }>(
+        `query($author: Bytes!, $first: Int) {
+          strategies(first: $first, where: { author: $author }, orderBy: lastSwapTimestamp, orderDirection: desc) {
+            id programHash status${optionalFields(fields)}
+            cumulativeVolumeIn cumulativeVolumeOut committedCapital
+            swapCount lastSwapTimestamp
+          }
+        }`,
+        { author: author.toLowerCase(), first },
+      )
+    try {
+      const data = await withOptionalStrategyFields(fetchByAuthor)
+      return (data?.strategies ?? []).map(toStrategy)
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return []
+      // A pre-author deploy also rejects the `where: {author:…}` FILTER — that error names
+      // Strategy_filter, not Strategy, so the selection retry above correctly declines it
+      // and it lands here. No authorships exist there: [] is the truth. Never crash the UI.
+      console.warn('[subgraph.listStrategiesByAuthor]', error)
+      return []
+    }
+  },
+
+  /** Search strategies by description substring (graph-node String _contains);
+   *  a bare 0x address searches by author instead. Real rows only. */
+  async searchStrategies(
+    q: string,
+    limit = 5,
+  ): Promise<Array<Pick<SubgraphStrategy, 'id' | 'description' | 'author'>>> {
+    const needle = q.trim()
+    if (needle.length < 2) return []
+    if (/^0x[0-9a-fA-F]{40}$/.test(needle)) {
+      const byAuthor = await this.listStrategiesByAuthor(needle, limit)
+      return byAuthor.map((s) => ({ id: s.id, description: s.description, author: s.author }))
+    }
+    try {
+      const data = await client.request<{
+        strategies?: Array<Pick<SubgraphStrategy, 'id' | 'description' | 'author'>>
+      }>(
+        `query($q: String!, $first: Int) {
+          strategies(first: $first, where: { description_contains: $q }) {
+            id description author
+          }
+        }`,
+        { q: needle, first: limit },
+      )
+      return data.strategies ?? []
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return []
+      console.warn('[subgraph.searchStrategies]', error)
+      return []
+    }
+  },
+
   /** Production entity — swap history for the detail page. Empty while syncing. */
   async getSwapHistory(strategyId: string, limit = 50): Promise<SubgraphSwap[]> {
+    if (!isStrategyId(strategyId)) return []
     const normalizedId = normalizeId(strategyId)
     try {
       const data = await client.request<{
@@ -241,4 +324,63 @@ export const subgraph = {
       throw error
     }
   },
+
+  /** Latest on-chain chat backup. null = none indexed yet. */
+  async getLatestChatVault(user: string): Promise<{
+    ciphertextHex: string
+    nonce: string
+    timestamp: string
+    txHash: string
+  } | null> {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(user)) return null
+    try {
+      const data = await client.request<{
+        chatVaults?: {
+          nonce: string
+          ciphertext: string
+          timestamp: string
+          transactionHash: string
+        }[]
+      }>(
+        `query($user: Bytes!) {
+          chatVaults(where: { user: $user }, orderBy: nonce, orderDirection: desc, first: 1) {
+            nonce ciphertext timestamp transactionHash
+          }
+        }`,
+        { user: user.toLowerCase() },
+      )
+      const row = data.chatVaults?.[0]
+      if (!row) return null
+      return {
+        ciphertextHex: row.ciphertext,
+        nonce: row.nonce,
+        timestamp: row.timestamp,
+        txHash: row.transactionHash,
+      }
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return null
+      console.warn('[subgraph.getLatestChatVault]', error)
+      return null
+    }
+  },
+
+  /** Latest IPFS CID for a wallet. null = no Author row indexed yet. */
+  async getAuthorAvatarCid(address: string): Promise<string | null> {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null
+    try {
+      const data = await client.request<{ author?: { avatarCid?: string } | null }>(
+        `query($id: ID!) { author(id: $id) { avatarCid } }`,
+        { id: address.toLowerCase() },
+      )
+      return data.author?.avatarCid || null
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return null
+      console.warn('[subgraph.getAuthorAvatarCid]', error)
+      return null
+    }
+  },
 }
+}
+
+/** The env-configured default (sepolia). Per-request code uses subgraphFor(). */
+export const subgraph = subgraphFor(SUBGRAPH_URL)

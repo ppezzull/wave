@@ -4,6 +4,9 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* The pixel-ocean ramp (pixel-backdrop feeds PixelWaves the same four
+     colors) — CTAs reference this token so button and background stay in
+     sync. Change it here and both move together. */
   --gradient-lisboa: linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%);
 
   /* Wave palette — LIGHT (default when no .dark on the tree) */
@@ -55,12 +58,14 @@
   --wave-text: #E7E9EA;
   --wave-muted: #71767B;
 
-  /* Frosted surfaces — dark. Panel sits on near-black so it reads as the
-     same theme as the app, just lifted by border + shadow. */
-  --glass-panel-bg: rgba(0, 0, 0, 0.85);
+  /* Frosted surfaces — dark. Panel and cards share the same slightly
+     transparent black so the chat window and the widget read as one surface
+     over the pixel ocean (cards darken further where they stack on the
+     panel, plus the hairline keeps them separated). */
+  --glass-panel-bg: rgba(0, 0, 0, 0.72);
   --glass-panel-border: rgba(255, 255, 255, 0.12);
   --glass-panel-highlight: rgba(255, 255, 255, 0.08);
-  --glass-card-bg: rgba(22, 24, 28, 0.72);
+  --glass-card-bg: rgba(0, 0, 0, 0.72);
   --glass-hairline: rgba(255, 255, 255, 0.08);
   --glass-fill: rgba(255, 255, 255, 0.06);
   --glass-fill-hover: rgba(255, 255, 255, 0.12);
@@ -158,6 +163,15 @@
     inset 0 1px 0 var(--glass-panel-highlight);
 }
 
+/* The same slightly-transparent-black surface WITHOUT the window chrome —
+   the feed column and floating menus share the widget's look: the pixel
+   ocean ghosts through, content stays readable. */
+.glass-surface {
+  background: var(--glass-panel-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
 /* Frosted secondary button that sits on the glass. */
 .glass-btn {
   background: var(--glass-fill);
@@ -253,6 +267,13 @@
   animation: drawerPop 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Live "thinking…" dot in the compose bubble — signals the self-hosted LLM
+   stream is in flight (14–120s) so the wait reads as active, not frozen. */
+@keyframes wave-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 /* On mobile the panel is a bottom sheet; slide it up instead. */
 @media (max-width: 767px) {
   @keyframes drawerPop {
@@ -286,4 +307,11 @@
     overflow-x: clip;
     @apply bg-wave-bg text-wave-text;
   }
+}
+
+/* Avatar cropper (react-image-crop) — teal handles on the glass card. */
+.wave-image-crop {
+  --rc-focus-color: #2a9d8f;
+  --rc-border-color: rgba(42, 157, 143, 0.85);
+  --rc-drag-handle-bg-colour: rgba(42, 157, 143, 0.35);
 }

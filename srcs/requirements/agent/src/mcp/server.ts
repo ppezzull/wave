@@ -23,10 +23,15 @@ export const waveMcpServer = new MCPServer({
     getStrategyStatus: reads.getStrategyStatus,
     getProgramHash: reads.getProgramHash,
     quote: reads.quote,
-    resolveENS: reads.resolveENS,
-    getTextRecord: reads.getTextRecord,
-    // Writes — autonomous ENS (ensAgent), never HITL-gated. Per AGENT.md authz matrix.
-    setText: writes.setText,
-    registerSubname: writes.registerSubname,
+    // Live ship — compile → announce → approve → ship → verify. Destructive: the UI
+    // MUST gate behind explicit human approval (Ship confirm). Agent signs (demo); user-wallet
+    // signing is the post-event hardening.
+    shipStrategy: writes.shipStrategy,
+    // Testnet faucet — capped Sepolia ETH drip to a wallet (PROD-TESTNET §4 buffer wallet).
+    faucetDrip: writes.faucetDrip,
+    // On-chain encrypted chat backups — ciphertext-only relay (ChatVault), announcer
+    // pays gas. The privacy boundary is the client-side encryption, not this write.
+    storeChatVault: writes.storeChatVault,
+    setAvatar: writes.setAvatar,
   },
 });

@@ -29,6 +29,9 @@ contract EnsStrategyRouterTest is Test {
     ///      `programHash` in the data payload.
     event StrategyDeployed(bytes32 indexed strategyId, bytes32 programHash, bytes32 indexed ensNode);
 
+    /// @dev Mirrors the description event: `strategyId` indexed, description in the payload.
+    event StrategyDescribed(bytes32 indexed strategyId, string description);
+
     function setUp() public {
         _router = new EnsStrategyRouter(address(0), address(0), address(this), "Wave", "1");
     }
@@ -109,5 +112,26 @@ contract EnsStrategyRouterTest is Test {
         vm.prank(_NOT_OWNER);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, _NOT_OWNER));
         _router.announceStrategy(_order(), _ENS_NODE);
+    }
+
+    /// @notice The described overload emits the frozen event UNCHANGED plus the
+    ///         description event — same derived id in both topics.
+    function test_AnnounceStrategyDescribed_EmitsBothEvents() public {
+        ISwapVM.Order memory order = _order();
+        string memory description = "Keep ETH/USDC balanced; halt if Chainlink deviates 1.5%";
+
+        vm.expectEmit(true, true, true, true, address(_router));
+        emit StrategyDeployed(_router.hash(order), keccak256(_PROGRAM), _ENS_NODE);
+        vm.expectEmit(true, true, true, true, address(_router));
+        emit StrategyDescribed(_router.hash(order), description);
+
+        _router.announceStrategy(order, _ENS_NODE, description);
+    }
+
+    /// @notice A non-owner cannot post descriptions either
+    function test_AnnounceStrategyDescribed_RevertWhen_CallerIsNotOwner() public {
+        vm.prank(_NOT_OWNER);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, _NOT_OWNER));
+        _router.announceStrategy(_order(), _ENS_NODE, "spoofed post");
     }
 }

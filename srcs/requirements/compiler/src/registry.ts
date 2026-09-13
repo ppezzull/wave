@@ -42,7 +42,21 @@ const SEPOLIA_FEEDS: Record<Symbol_, RegistryEntry> = {
   "DAI/USD": { address: "0x14866185B1962B63C3Ea9E03Bc1da838bab34C19", decimals: 8, verified: false },
 };
 
+/// Ethereum mainnet (1). ETH/USD, BTC/USD and DAI/USD were verified ON-CHAIN
+/// (description() + decimals() + a fresh latestRoundData) against real mainnet
+/// state during the mainnet-fork E2E — stronger than docs-from-memory. The
+/// other two addresses from memory REVERTED on-chain (wrong), so they stay
+/// zero + unverified: resolveFeed throws until someone checks docs.chain.link.
+const MAINNET_FEEDS: Record<Symbol_, RegistryEntry> = {
+  "ETH/USD": { address: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419", decimals: 8, verified: true },
+  "BTC/USD": { address: "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c", decimals: 8, verified: true },
+  "LINK/USD": { address: "0x0000000000000000000000000000000000000000", decimals: 8, verified: false },
+  "USDC/USD": { address: "0x0000000000000000000000000000000000000000", decimals: 8, verified: false },
+  "DAI/USD": { address: "0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9", decimals: 8, verified: true },
+};
+
 export const FEED_REGISTRY: Record<number, Record<Symbol_, RegistryEntry>> = {
+  1: MAINNET_FEEDS,
   11155111: SEPOLIA_FEEDS,
 };
 

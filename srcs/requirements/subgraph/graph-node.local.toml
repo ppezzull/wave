@@ -1,0 +1,23 @@
+# graph-node config for the LOCAL anvil-fork stack (docker-compose.local.yml).
+# The fork on 127.0.0.1:8546 reports chain id 11155111, so naming the chain
+# "sepolia" here makes the manifest's `network: sepolia` match — the local
+# graph-node is a drop-in for the Studio endpoint.
+[store.primary]
+connection = "postgresql://graph-node:let-me-in@postgres:5432/graph-node"
+weight = 1
+pool_size = 10
+
+[chains]
+ingestor = "default"
+
+[chains.sepolia]
+shard = "primary"
+# Via rpc-shim.mjs (host, :8547): anvil's EIP-1898 object form returns blocks WITHOUT
+# hash, which stalls graph-node's ingestor; the shim flattens {"blockNumber":N} → N
+# before forwarding to the fork on :8546. Run `node rpc-shim.mjs` from this directory.
+provider = [ { label = "anvil-fork-shim", url = "http://host.docker.internal:8547", features = [] } ]
+
+[deployment]
+[[deployment.rule]]
+# catch-all: any subgraph, primary shard, this single combined node
+indexers = [ "default" ]

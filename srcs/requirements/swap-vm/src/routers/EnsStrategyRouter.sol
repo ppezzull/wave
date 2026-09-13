@@ -32,6 +32,15 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
     /// @param ensNode ENS namehash of the strategy's subname
     event StrategyDeployed(bytes32 indexed strategyId, bytes32 programHash, bytes32 indexed ensNode);
 
+    /// @notice The strategy's public description — the post, stored on-chain
+    /// @dev The description IS the prompt: the exact bytes the compiler consumed.
+    ///      ENS is gone, so this event is where the post lives ("the subgraph
+    ///      measures" — Pietro.md); the subgraph upserts it onto the Strategy
+    ///      row and the fork route reads it back byte-for-byte.
+    /// @param strategyId Identifier of the described strategy (the order hash)
+    /// @param description The human-written strategy description
+    event StrategyDescribed(bytes32 indexed strategyId, string description);
+
     /// @notice Deploy router with Aqua and WETH addresses
     /// @param aqua Address of Aqua protocol for balance management
     /// @param weth Address of WETH token for unwrapping support
@@ -71,6 +80,27 @@ contract EnsStrategyRouter is Simulator, SwapVM, StrategyOpcodes {
     /// @param ensNode ENS namehash of the strategy's subname
     function announceStrategy(ISwapVM.Order calldata order, bytes32 ensNode) external onlyOwner {
         emit StrategyDeployed(hash(order), keccak256(order.traits.program(order.data)), ensNode);
+    }
+
+    /// @notice Announce a shipped strategy together with its public description
+    /// @dev Same contract as the 2-arg overload, plus one event: emits the FROZEN
+    ///      `StrategyDeployed` unchanged and additionally `StrategyDescribed`
+    ///      carrying the description byte-for-byte. The description is pure
+    ///      display data (never executed), so — unlike the other payloads — it
+    ///      is caller-supplied; the announcer key already gates who may post.
+    /// @param order The shipped maker order (the same one handed to `aqua.ship`)
+    /// @param ensNode ENS namehash of the strategy's subname
+    /// @param description The strategy's public description (the compiler input)
+    function announceStrategy(
+        ISwapVM.Order calldata order,
+        bytes32 ensNode,
+        string calldata description
+    )
+        external
+        onlyOwner
+    {
+        emit StrategyDeployed(hash(order), keccak256(order.traits.program(order.data)), ensNode);
+        emit StrategyDescribed(hash(order), description);
     }
 
     /// @dev Returns instruction set for VM execution

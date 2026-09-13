@@ -87,6 +87,7 @@ Manage via [sepolia.app.ens.domains](https://sepolia.app.ens.domains). Gas is pa
 - The **deployer** wallet needs enough for Aqua + router + factory deploys (~a few SepoliaETH).
 - The **seed-strategy** wallets (§5) need enough to `ship()` real capital into Aqua and pay the swap gas for the demo retune beats.
 - The **demo-day judge** wallet (if we hand one out) needs a small balance for a live `swap()` against a seeded strategy.
+- The app also ships an **in-app faucet** (Settings → "Get test ETH", agent `faucetDrip` tool) backed by the buffer wallet — 0.05 SEP/drip, 6h cooldown per address, empty-wallet gate, per-process cap.
 
 ---
 
@@ -129,7 +130,7 @@ Manage via [sepolia.app.ens.domains](https://sepolia.app.ens.domains). Gas is pa
 
 | Risk | Why it's new vs anvil fork | Mitigation |
 |---|---|---|
-| **Faucet rate limits** | anvil gave unlimited ETH from a fork; SepoliaETH is rate-capped per wallet/IP/hours. | Pre-fund all wallets (deployer + seeds + judge) **before the event**; use 3–4 faucets; keep a buffer wallet. |
+| **Faucet rate limits** | anvil gave unlimited ETH from a fork; SepoliaETH is rate-capped per wallet/IP/hours. | Pre-fund all wallets (deployer + seeds + judge) **before the event**; use 3–4 faucets; keep a buffer wallet. The in-app capped faucet (Settings → "Get test ETH") covers judge wallets self-serve. |
 | **Subgraph sync latency** | anvil indexed instantly (local node); real Sepolia indexing has a sync lag — decentralized network worse than self-hosted for a fresh subgraph. | Deploy the subgraph at G1 (h12) so it's synced by demo time; for the retune beat, fall back to a direct `eth_getLogs` poll if the subgraph lags >a few blocks. |
 | **Sepolia congestion / tx latency** | anvil blocks were instant; Sepolia is a real network with real block times (~12s) and occasional congestion. | Budget ~12–60s per on-chain beat in the demo script; never demo a flow that needs sub-block confirmation. The retune tx may be *sent* early to absorb block latency — but **never built before the threshold-crossing decision exists** (see §5, autonomy boundary). |
 | **🔴 Oracle HALTs on the happy path** | the T-15min fork cut *guaranteed* a fresh Chainlink `updatedAt`; live Sepolia can't (testnet feeds lag past their ~3600s heartbeat), and `_oracleGuard2D` reverts on staleness **always, in both modes**. A stale feed during the demo = a HALT where a quote should be — the core beat backwards, unrecoverable. | `maxStalenessSecs=7200` is adequate in steady state, but for **demo reliability the deployed `MockAggregatorV3` serves the happy path too** (disclosed on the slide) — the demo never depends on live-feed freshness. Real Chainlink stays wired + quoted on the safety card as the production source. |

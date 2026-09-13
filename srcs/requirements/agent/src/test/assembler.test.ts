@@ -14,8 +14,8 @@ const SID = `0x${"11".repeat(32)}` as const;
 const strategy = (id = SID, status: Strategy["status"] = "active", over: Partial<Strategy> = {}): Strategy => ({
   id,
   programHash: `0x${"ab".repeat(32)}`,
-  ensNode: `0x${"22".repeat(32)}`,
   status,
+  author: "0x0000000000000000000000000000000000000000", // unattributed sentinel — irrelevant to policy
   // The subgraph's rolled-up fields (v0.0.3); default to "no data yet" so the fallback chain
   // (→ Swap[]-derived → config) is exercised. Override via `over` to test real-field preference.
   cumulativeVolumeIn: "0",
@@ -23,7 +23,6 @@ const strategy = (id = SID, status: Strategy["status"] = "active", over: Partial
   committedCapital: "0",
   swapCount: 0,
   lastSwapTimestamp: 0,
-  followerCount: 0,
   ...over,
 });
 

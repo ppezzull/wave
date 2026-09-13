@@ -10,6 +10,7 @@
 import { PrivyProvider } from '@privy-io/react-auth'
 import { sepolia } from 'viem/chains'
 import type { ReactNode } from 'react'
+import { LedgerProvider } from '@/components/ledger/ledger-provider'
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID
 
@@ -18,7 +19,7 @@ export function Providers({ children }: { children: ReactNode }) {
     // No app id configured → render the app anyway (auth features degrade to
     // "disconnected"); never crash the whole UI over a missing env.
     console.warn('NEXT_PUBLIC_PRIVY_APP_ID is not set — wallet features disabled.')
-    return <>{children}</>
+    return <LedgerProvider>{children}</LedgerProvider>
   }
   return (
     <PrivyProvider
@@ -28,7 +29,7 @@ export function Providers({ children }: { children: ReactNode }) {
         supportedChains: [sepolia],
       }}
     >
-      {children}
+      <LedgerProvider>{children}</LedgerProvider>
     </PrivyProvider>
   )
 }

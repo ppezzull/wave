@@ -1,83 +1,67 @@
 # wave subgraph
 
-The Graph subgraph for **wave** — indexes the on-chain data the feed and the retune agent read. There is **no database**; `getFeed()` and `graphDelta` query this subgraph + ENS resolve, nothing else. See [`docs/spikes/GRAPH-NODE-SPIKE.md`](../../../docs/spikes/GRAPH-NODE-SPIKE.md) for the indexing-path decision (decentralized network vs self-hosted `graph-node` vs `eth_getLogs`).
+The Graph subgraph for **wave** — indexes the on-chain data the feed, the profiles and the retune agent read. There is **no database**; `getFeed()`, `graphDelta`, profiles and threads query this subgraph, nothing else.
 
-## Status — production subgraph LIVE on Studio (v0.0.2)
-
-**Two layers:**
-- **v0.0.2 (deployed, live — production)** — two data sources (`EnsStrategyRouter` @ `0xeb513fd18c391fae1513ff12c1f97bf659d052c4` startBlock `11350046` + ENS resolver), entities `Strategy` / `Swap` / `Follow` / `Follower`. Queryable now; currently empty while syncing / before any swaps or announces are fired (expected). Query: `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2`.
-- **v0.0.1 (historical)** — the spike: single ENS-resolver `TextChanged` source, `textRecordChangeds` entity. Proved path A (decentralized network indexes Sepolia EVM with ~zero lag). Superseded by v0.0.2; kept on Studio for reference.
+## Status (ETHOnline, 11 Sep 2026)
 
 | | |
 |---|---|
 | **Studio page** | https://thegraph.com/studio/subgraph/wave |
-| **Query endpoint (v0.0.2, live)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.2` |
-| **Query endpoint (v0.0.1, historical)** | `https://api.studio.thegraph.com/query/1756983/wave/v0.0.1` |
+| **Live (serving)** | **v0.0.5** — `https://api.studio.thegraph.com/query/1756983/wave/v0.0.5` |
+| **Pending live** | **v0.0.6** — adds `Strategy.author` + the `StrategyFactory` data source (schema/mapping committed; deploys with the live router+factory redeploy — see [`docs/DEPLOY-LIVE-TESTNET.md`](../../../docs/DEPLOY-LIVE-TESTNET.md)) |
+| **Local dev** | full graph-node stack (anvil fork + rpc-shim + compose) — see the repo memory/runbook; `pnpm deploy:local` |
 
-**See also:** contract-layer gaps that block the demo (strategyId binding, committed capital, programHash) — see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md).
+Version history: v0.0.1 (ENS-resolver spike, superseded) → v0.0.2 (router + resolver) → v0.0.4 (Aqua capital) → v0.0.5 (descriptions, follows removed) → **v0.0.6 (authorship)**. The ENS resolver data source and the `Follow`/`Follower` entities were **removed at continuity** (`f441287`) — the follow graph no longer exists; ranking no longer has a follower term.
 
-### Production entities (v0.0.2, live) — matches the agent client (`srcs/requirements/agent/src/clients/subgraph.ts`)
+## Data sources (v0.0.6 shape)
 
-- **`Strategy`** (mutable): `id` (= orderHash), `programHash` (tolerates `bytes32(0)`), `ensNode`, `status`, ranking aggregates `cumulativeVolumeIn/Out`, **`committedCapital`**, `swapCount`, `lastSwapTimestamp`, `followerCount`.
-  - **`cumulativeVolumeIn/Out` are `BigInt`, not `BigDecimal`** — GraphQL decimal128 caps at 34 significant figures and loses wei; the UI converts to `BigDecimal` at read time.
-  - **`committedCapital` is sourced from Aqua** (`Pushed` − `Pulled`, keyed by `strategyHash == Strategy.id`) — `returnPct`'s denominator. Maintained as a running balance, so it stays correct as capital enters/leaves. No contract change was needed (C2 resolved); see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C2.
-  - **`programHash` is `bytes32(0)`** for every strategy until the compiler lands → the UI hash-verify chip must gate on `programHash != 0` (D3); see [`SUBGRAPH-CONTRACT-GAPS.md`](../../../docs/strategy/SUBGRAPH-CONTRACT-GAPS.md) C3.
-- **`Swap`** (immutable): `strategy` (join key = `Swapped.orderHash`), `amountIn/Out`, `timestamp`, … The client filters `swaps(where:{strategy:$id})`.
-- **`Follow`** (immutable log): one row per `wave.following/<id>` `TextChanged` event.
-- **`Follower`** (mutable index): `id = node‖strategyId` — makes `followerCount` O(1) per event, reorg-exact.
+| Contract | Events | Role |
+|---|---|---|
+| `EnsStrategyRouter` | `StrategyDeployed`, `StrategyDescribed`, `Swapped` | the ONLY row creator; the post (description) lives on-chain; swap aggregates |
+| `Aqua` | `Pushed`, `Pulled`, `Docked` | committed capital (running balance) + stopped status |
+| `StrategyFactory` | `StrategyAttributed` | **on-chain authorship** → `Strategy.author` |
 
-**Join key:** `Strategy.id` == `StrategyDeployed.strategyId` == `Swapped.orderHash` == `SwapVM.hash(order)`.
+## Entities
 
-**Ranking (`Pietro.md` 🔢):** `rank = returnPct × recencyDecay × (1 + log2(1 + followers))` — the UI computes this from `cumulativeVolume*`, `lastSwapTimestamp`, and `followerCount` exposed above. Every term is subgraph-sourced → still no database.
+- **`Strategy`** (mutable): `id`, `programHash`, `status`, `description`, **`author`** (`0x00…0` sentinel until attributed — filterable `where:{author:$addr}`, the profile/thread key), `cumulativeVolumeIn/Out` (**BigInt**, never decimal128 — wei-exact), `committedCapital`, `swapCount`, `lastSwapTimestamp`.
+- **`Swap`** (immutable): `strategy` join key, amounts, timestamp, tx hash. `swaps(where:{strategy:$id})`.
 
-> **v0.0.2 was deployed** by: setting the live `EnsStrategyRouter` address + startBlock `11350046` in `subgraph.yaml` → `graph deploy wave --studio` (label `v0.0.2`) → bumping the agent client's `SUBGRAPH_URL` default to `…/wave/v0.0.2`. **When #41 (Aqua data source) merges, re-deploy as `v0.0.3` and bump the client URL again.**
+**Join key (the load-bearing invariant):** `Strategy.id` == `StrategyDeployed.strategyId` == `Swapped.orderHash` == Aqua's `strategyHash` == `keccak(wrapped abi.encode(order))` == `SwapVM.hash(order)`. ONE id everywhere — the agent's ship pipeline pins it (`deployStrategy.ts`); a differently-encoded ship docks under an unreachable hash and the capital never indexes (fork-proven).
 
-## Build (verified green)
-
-```bash
-cd srcs/requirements/subgraph
-npm install
-npx graph codegen    # ✔ Types generated successfully
-npx graph build      # ✔ Build completed: build/subgraph.yaml
-```
+**No phantom rows (F2):** `handlePushed`/`handleSwapped`/`handleStrategyAttributed` all `Strategy.load(); if null return` — an event for an unknown strategy is ignored, never creates a row. This is why announce MUST precede ship.
 
 ## Layout
 
 ```
 srcs/requirements/subgraph/
-├── schema.graphql        # TextRecordChanged @entity(immutable) — the spike entity
-├── subgraph.yaml         # specVersion 1.3.0, network: sepolia, ENSResolver data source
-├── src/mapping.ts        # handleTextChanged — reorg-safe composite id (txHash+logIndex)
-├── abis/ENSResolver.json # TextChanged event ABI fragment
-└── package.json
+├── schema.graphql            # Strategy (author!) + Swap
+├── subgraph.yaml             # LIVE manifest (router + Aqua + factory datasources)
+├── subgraph.local.yaml       # local fork manifest (fresh addresses + startBlocks)
+├── src/mapping.ts            # handle{StrategyDeployed,StrategyDescribed,Swapped,Pushed,Pulled,Docked,StrategyAttributed}
+├── abis/                     # router + Aqua + StrategyFactory fragments
+├── test/local-invariants.mjs # pnpm test:local — real assertions against the RUNNING graph-node
+└── package.json              # pnpm; graph-cli/graph-ts (allowBuilds for native deps)
 ```
 
-## Deploy (path A — Subgraph Studio / decentralized network)
+## Build & deploy
 
 ```bash
-graph auth --studio <DEPLOY_KEY>
-graph deploy --node https://api.studio.thegraph.com/deploy/ wave --network sepolia
+pnpm install
+pnpm codegen && pnpm build
+
+# local (needs the anvil-fork + graph-node stack up)
+pnpm create-local && pnpm deploy:local --version-label local<N>
+
+# studio (needs `graph auth --studio <key>` once)
+pnpm deploy:studio --version-label v0.0.6
 ```
 
-If Studio can't index Sepolia EVM reliably → self-host `graph-node` (path B), see the spike doc.
+⚠️ Local-stack gotcha: graph-node behind the **rpc-shim** (anvil answers EIP-1898 object params with a hashless block that stalls the ingestor) — the shim at `:8547` is mandatory between graph-node and anvil.
 
-## The follower-count trick (why two data sources)
+## Tests
 
-ENS is forward-only — given a name you can read its records, but there's no reverse index from a record value back to which names hold it. So:
-
-- `followStrategy()` writes a `wave.following/<strategy>` text record on the **follower's** own name.
-- This subgraph indexes the resolver's `TextChanged` events, filters `key.startsWith("wave.following/")` in the mapping (the on-chain topic is a keccak hash, so prefix-filter happens off-chain), and counts distinct emitter nodes per strategy → `followerCount`, the third term of the rank formula.
-
-That's why the real subgraph indexes **two contracts**: our `StrategyRouter` **and** the Sepolia ENS Public Resolver.
-
-## Listing threshold (consumer-layer rule)
-
-A strategy **ranks** once it has `swapCount >= 3` **AND** `now - lastSwapTimestamp >= 3600` (seconds). Before that it is **listed but unranked**.
-
-This rule is applied at the **CONSUMER layer** (UI `getFeed()` and the agent feed query), **not in the subgraph** — graph-node has no derived boolean that stays in sync without a block handler. The schema exposes raw `swapCount` and `lastSwapTimestamp`; both consumers MUST implement the identical formula to agree on what "exists/ranks".
-
-The shared consumer-layer math — `rank = returnPct × recencyDecay × (1 + log2(1 + followers))` over these raw wei-string aggregates — lives in [`srcs/requirements/agent/src/ranking.ts`](../agent/src/ranking.ts) (pure, BigInt-safe, tested). The future UI `getFeed()` and any agent-side feed sort call it; do not re-implement the formula.
+`pnpm test:local` runs `test/local-invariants.mjs` against the running gateway: every `author` is the sentinel or a valid address, `committedCapital` integrality, swaps join existing strategies, and (with `WAVE_TEST_AUTHOR=0x…`) the author-keyed path the profiles depend on. Structural by design — it pins the mapping's promises on real indexed blocks, not fixtures.
 
 ## Composable upside — a standardized Aqua-strategy index
 
-The SwapVM/Aqua core of this subgraph (`Swap`, per-strategy volume aggregates, Aqua-sourced `committedCapital`) is **generic** — 1inch ships SwapVM and Aqua but no indexer for either, so this is the first standardized Aqua-strategy index. The wave-specific layer (ENS `wave.following/` social follow) sits cleanly on top, not interleaved. Full assessment + the split that would make it reusable as a base subgraph: [`docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md`](../../../docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md).
+The SwapVM/Aqua core (`Swap`, per-strategy volume aggregates, Aqua-sourced `committedCapital`, on-chain authorship) is **generic** — 1inch ships SwapVM and Aqua but no indexer for either, so this is a first standardized Aqua-strategy index. Full assessment: [`docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md`](../../../docs/strategy/SUBGRAPH-AQUA-REUSABILITY.md).

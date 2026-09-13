@@ -1,224 +1,149 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, Send, CheckCircle2, Minus, GripHorizontal, MessageSquare } from 'lucide-react'
+// CreateDrawer — the chat WINDOW (the only chat surface): a floating
+// bottom-right-docked window at every desktop size (draggable + resizable),
+// a full-width docked sheet on mobile, minimize pill. All conversation logic
+// lives in components/agent-chat.tsx; this file is the glassy chrome plus the
+// collapsible conversation sidebar (MUI x-chat's features.conversationList,
+// wave-styled): the wallet's shipped strategies as threads, one click to
+// replay one.
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { X, Minus, Bookmark, GripHorizontal, MessageSquare, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { useDrawer } from './drawer-context'
-import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
-import { StreamNotifications } from './stream-notifications'
-
-const LISBOA =
-  'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
-
-interface Message {
-  id: string
-  role: 'agent' | 'user'
-  content: string
-  timestamp: string
-  type?: 'safety-card' | 'ship-button' | 'post-ship' | 'approval' | 'text'
-}
-
-const DEFAULT_MESSAGES: Message[] = [
-  {
-    id: 'a1',
-    role: 'agent',
-    content:
-      "Describe your trading strategy in plain English. I'll compile it, check it for safety, and ship it on-chain.",
-    timestamp: '2:14 PM',
-    type: 'text',
-  },
-  {
-    id: 'u1',
-    role: 'user',
-    content:
-      'ETH/USDC momentum: buy when 4h RSI crosses 55 from below, sell when it crosses 45 from above. Hard stop at 3% drawdown.',
-    timestamp: '2:15 PM',
-    type: 'text',
-  },
-  {
-    id: 'a2',
-    role: 'agent',
-    content: 'Compiling... Checking safety constraints.',
-    timestamp: '2:15 PM',
-    type: 'text',
-  },
-  {
-    id: 'a3',
-    role: 'agent',
-    content: '',
-    timestamp: '2:15 PM',
-    type: 'safety-card',
-  },
-  {
-    id: 'a4',
-    role: 'agent',
-    content:
-      'Strategy is safe. Ready to ship as eth-usdc-momentum.wave.eth. Confirm?',
-    timestamp: '2:16 PM',
-    type: 'text',
-  },
-  {
-    id: 'a5',
-    role: 'agent',
-    content: '',
-    timestamp: '2:16 PM',
-    type: 'ship-button',
-  },
-]
-
-function InlineSafetyCard() {
-  return (
-    <div
-      className="animate-safety-reveal rounded-[14px] p-4 text-white"
-      style={{ background: '#1F9D6B' }}
-      role="status"
-      aria-label="Strategy safety result: SAFE"
-    >
-      <p className="font-sans text-lg font-bold mb-3">SAFE</p>
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: 'Monotonicity', value: '0.97' },
-          { label: 'Symmetry', value: '12 bps' },
-          { label: 'Guard Triggers', value: '3' },
-          { label: 'Skew vs Cap', value: '0.04' },
-        ].map((m) => (
-          <div key={m.label}>
-            <p className="font-sans text-[11px] text-white/70 mb-0.5">
-              {m.label}
-            </p>
-            <p className="font-mono font-bold text-[1rem] text-white">
-              {m.value}
-            </p>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function PostShipMessage() {
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <CheckCircle2 size={14} style={{ color: '#2A9D8F' }} aria-hidden="true" />
-        <span className="font-mono text-[13px]" style={{ color: '#2A9D8F' }}>
-          tx 0x1a2b3c4d5e6f...7890
-        </span>
-      </div>
-      <p className="font-sans text-[14px] text-wave-text">
-        Registered as eth-usdc-momentum.wave.eth
-      </p>
-    </div>
-  )
-}
-
-function ApprovalButtons() {
-  const [decision, setDecision] = useState<'approve' | 'deny' | null>(null)
-  return (
-    <div className="flex gap-2 mt-1">
-      <button
-        onClick={() => setDecision('approve')}
-        className="px-4 py-2 rounded-lg font-sans text-[14px] font-semibold min-h-[40px] transition-all duration-150"
-        style={{
-          border: '1px solid #2A9D8F',
-          color: decision === 'approve' ? '#000000' : '#2A9D8F',
-          background: decision === 'approve' ? '#2A9D8F' : 'transparent',
-        }}
-        aria-label="Approve strategy pause"
-      >
-        Approve
-      </button>
-      <button
-        onClick={() => setDecision('deny')}
-        className="px-4 py-2 rounded-lg font-sans text-[14px] font-semibold min-h-[40px] transition-all duration-150"
-        style={{
-          border: '1px solid #E5484D',
-          color: decision === 'deny' ? '#ffffff' : '#E5484D',
-          background: decision === 'deny' ? '#E5484D' : 'transparent',
-        }}
-        aria-label="Deny strategy pause"
-      >
-        Deny
-      </button>
-    </div>
-  )
-}
+import { AgentChat, LIVE_CHAT_MESSAGES_KEY } from './agent-chat'
+import { saveToArchive, type ArchiveMessage } from '@/lib/chat-archive'
+import { ThreadRow } from './thread-row'
+import { useThreads } from '@/hooks/use-threads'
+import { ConnectButton } from './connect-button'
+import { MicroSkeleton } from '@/components/skeleton'
 
 // Desktop window defaults + constraints
-const DEFAULT_W = 460
-const DEFAULT_H = 640
-const MIN_W = 340
-const MIN_H = 420
+const DEFAULT_W = 560
+const DEFAULT_H = 680
+const MIN_W = 380
+const MIN_H = 460
 const PANEL_MARGIN = 24
 
-// Live compose beat: render the StrategySpec as it streams in (the "watch the AI
-// fill the form" affordance). Fields that haven't arrived yet render as muted
-// placeholders — never invented. `partial` is incomplete by design until `spec`.
-function LiveSpecCard({ spec, done }: { spec: StrategySpec | null; done: boolean }) {
-  const pair = spec?.pair
-  const size = spec?.size
-  const blocks = spec?.blocks ?? []
-  const token0 = pair?.token0
-  const token1 = pair?.token1
-  // Truncate 0x addresses for readability; placeholder when absent.
-  const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—')
+/** Collapsible threads pane (desktop only — the mobile sheet has no room). */
+function ConversationPane({ onClose }: { onClose: () => void }) {
+  const threads = useThreads()
   return (
     <div
-      className="rounded-[14px] p-4 bg-wave-surface border border-wave-border"
-      role="status"
-      aria-label={done ? 'Strategy spec compiled' : 'Strategy spec compiling'}
+      className="hidden md:flex w-[240px] shrink-0 flex-col min-h-0"
+      style={{
+        background: 'var(--glass-fill)',
+        borderRight: '1px solid var(--glass-hairline)',
+      }}
+      aria-label="Conversations"
     >
-      <p className="font-sans text-[13px] font-bold text-wave-text mb-3">
-        {done ? 'Compiled spec' : 'Compiling spec…'}
-      </p>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-[12px]">
-        <div className="text-wave-muted">token0</div>
-        <div className="text-wave-text truncate">{short(token0)}</div>
-        <div className="text-wave-muted">token1</div>
-        <div className="text-wave-text truncate">{short(token1)}</div>
-        <div className="text-wave-muted">size0</div>
-        <div className="text-wave-text">{size?.amount0 ?? '—'}</div>
-        <div className="text-wave-muted">size1</div>
-        <div className="text-wave-text">{size?.amount1 ?? '—'}</div>
-        <div className="text-wave-muted">blocks</div>
-        <div className="text-wave-text">
-          {blocks.length ? blocks.map((b) => b.type).join(', ') : '—'}
-        </div>
+      <div className="flex items-center gap-2 px-3 h-12 shrink-0">
+        <span className="font-sans text-[13px] font-semibold text-wave-text">
+          Threads
+        </span>
+        <button
+          onClick={onClose}
+          className="ml-auto w-8 h-8 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors"
+          aria-label="Hide conversations"
+        >
+          <PanelLeftClose size={15} aria-hidden="true" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto" role="listbox" aria-label="Your strategy threads">
+        {threads.phase === 'resolving' || threads.phase === 'loading' ? (
+          <MicroSkeleton label="Loading threads" className="px-3 py-4" />
+        ) : threads.phase === 'disconnected' ? (
+          <div className="px-3 py-3 flex flex-col gap-2.5 items-start">
+            <p className="font-sans text-[12px] text-wave-muted">
+              Connect your wallet to see your strategy threads.
+            </p>
+            <ConnectButton />
+          </div>
+        ) : threads.threads.length === 0 ? (
+          <p className="px-3 py-3 font-sans text-[12px] text-wave-muted">
+            No strategies yet. Ship your first one and it becomes a thread.
+          </p>
+        ) : (
+          <ul>
+            {threads.threads.map((s) => (
+              <li key={s.id}>
+                <ThreadRow strategy={s} compact />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
 }
 
-// One turn of the live compose conversation.
-interface LiveMessage {
-  id: string
-  role: 'agent' | 'user'
-  // text bubble OR a live spec card (progressive) OR the safety card + ship CTA.
-  content?: string
-  kind?: 'text' | 'spec' | 'ship'
+/** Minimized chat chip — right-rail slot on desktop, fixed fallback on mobile. */
+export function MinimizedChatPill() {
+  const { state, restore, close } = useDrawer()
+  if (!state.open || !state.minimized) return null
+  const title = state.agentStrategy ? state.agentStrategy.authorHandle : 'New strategy'
+  return (
+    <div
+      className="mt-auto flex w-fit items-center gap-2 self-start rounded-full py-2 pl-4 pr-2 glass-panel"
+      style={{ borderRadius: 999 }}
+      role="dialog"
+      aria-label={`${title} (minimized)`}
+    >
+      <MessageSquare size={16} style={{ color: '#2A9D8F' }} aria-hidden="true" />
+      <button
+        onClick={restore}
+        className="font-sans text-[14px] font-semibold text-wave-text"
+        aria-label={`Restore ${title} chat`}
+      >
+        {title}
+      </button>
+      <button
+        onClick={close}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-wave-muted transition-colors hover:text-wave-text"
+        aria-label="Close chat"
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+  )
 }
 
+function useSaveConversation() {
+  const [savedFlash, setSavedFlash] = useState(false)
+  const saveCurrentConversation = useCallback(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(LIVE_CHAT_MESSAGES_KEY) ?? '[]') as unknown
+      const messages = Array.isArray(raw) ? (raw as ArchiveMessage[]) : []
+      const saved = saveToArchive(messages)
+      setSavedFlash(Boolean(saved))
+      if (saved) setTimeout(() => setSavedFlash(false), 1600)
+    } catch {
+      // nothing to save
+    }
+  }, [])
+  return { savedFlash, saveCurrentConversation }
+}
+
+/** The chat floats at every desktop size now — no rail slot remains (the
+ *  minimized pill is fixed bottom-right). DockedChatPanel was removed with
+ *  the rail hosting. */
+
 export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
-  const { state, close, minimize, restore } = useDrawer()
-  const { open, minimized, forkSource, agentStrategy } = state
+  const { state, close, minimize } = useDrawer()
+  const { open, minimized, agentStrategy } = state
+  const [showThreads, setShowThreads] = useState(false)
+  const { savedFlash, saveCurrentConversation } = useSaveConversation()
 
-  const [inputValue, setInputValue] = useState('')
-  const [shipped, setShipped] = useState(false)
   const [isDesktop, setIsDesktop] = useState(false)
-  const threadRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-
-  // Live compose stream (live mode only). Mock mode replays DEFAULT_MESSAGES.
-  const compose = useComposeStream()
-  const [liveMessages, setLiveMessages] = useState<LiveMessage[]>([])
 
   // Track viewport so the floating window's fixed size/position only applies on
   // desktop. On mobile the panel is a full-width docked sheet.
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const update = () => setIsDesktop(mq.matches)
+  useLayoutEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsDesktop(desktop.matches)
     update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
+    desktop.addEventListener('change', update)
+    return () => desktop.removeEventListener('change', update)
   }, [])
 
   // Floating position (desktop only). null = use default bottom-right dock.
@@ -232,86 +157,6 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
   const resizeStart = useRef<
     { x: number; y: number; w: number; h: number } | null
   >(null)
-
-  // An existing pool agent conversation replays the exchange that produced
-  // that strategy — reusing the same message primitives (safety card, ship).
-  const agentMessages: Message[] | null = agentStrategy
-    ? [
-        {
-          id: 'ag-a1',
-          role: 'agent',
-          content:
-            "Describe your trading strategy in plain English. I'll compile it, check it for safety, and ship it on-chain.",
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-        {
-          id: 'ag-u1',
-          role: 'user',
-          content: agentStrategy.description,
-          timestamp: '2:15 PM',
-          type: 'text',
-        },
-        {
-          id: 'ag-a2',
-          role: 'agent',
-          content: 'Compiling... Checking safety constraints.',
-          timestamp: '2:15 PM',
-          type: 'text',
-        },
-        {
-          id: 'ag-a3',
-          role: 'agent',
-          content: '',
-          timestamp: '2:15 PM',
-          type: 'safety-card',
-        },
-        {
-          id: 'ag-a4',
-          role: 'agent',
-          content: `Shipped as ${agentStrategy.authorHandle}. It's live on-chain and taking swaps.`,
-          timestamp: '2:16 PM',
-          type: 'text',
-        },
-      ]
-    : null
-
-  // Canned mock/demo messages. Empty in live mode (no fork/agent replay) so the
-  // live compose thread owns the panel; the live branch below renders it.
-  const messages: Message[] = !useMock && !forkSource && !agentStrategy
-    ? []
-    : forkSource
-    ? [
-        {
-          id: 'a1',
-          role: 'agent',
-          content:
-            "Describe your trading strategy in plain English. I'll compile it, check it for safety, and ship it on-chain.",
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-        {
-          id: 'u1-fork',
-          role: 'user',
-          content: forkSource.description,
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-        {
-          id: 'a2-fork',
-          role: 'agent',
-          content: 'Got it. Compiling your fork... Checking safety constraints.',
-          timestamp: '2:14 PM',
-          type: 'text',
-        },
-      ]
-    : agentMessages ?? DEFAULT_MESSAGES
-
-  useEffect(() => {
-    if (threadRef.current) {
-      threadRef.current.scrollTop = threadRef.current.scrollHeight
-    }
-  }, [open, minimized, shipped])
 
   // --- Dragging (desktop) ---
   const clamp = useCallback(
@@ -397,71 +242,16 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     }
   }, [onPointerMove, onPointerUp, onResizeMove, onResizeUp])
 
-  const handleShip = () => {
-    setShipped(true)
-    setTimeout(() => {
-      close()
-      setShipped(false)
-    }, 2000)
-  }
-
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Byte-for-byte: do not trim — description IS the compiler input.
-    const intent = inputValue
-    setInputValue('')
-    // Mock mode: the canned demo conversation is already on screen; sending is
-    // a no-op (the input is decorative in the mock). Live mode: drive the real
-    // compose stream — the agent parses the intent to a bounded StrategySpec.
-    if (useMock || intent.length === 0) return
-    setLiveMessages([
-      { id: `u-${Date.now()}`, role: 'user', kind: 'text', content: intent },
-      { id: `a-compile-${Date.now()}`, role: 'agent', kind: 'text', content: 'Compiling…' },
-      { id: `a-spec-${Date.now()}`, role: 'agent', kind: 'spec' },
-    ])
-    void compose.compose(intent)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
-      e.preventDefault()
-      handleSend(e as unknown as React.FormEvent)
-    }
-  }
-
   if (!open) return null
 
-  const title = forkSource
-    ? `Fork: ${forkSource.authorHandle}`
-    : agentStrategy
-      ? agentStrategy.authorHandle
-      : 'New strategy'
+  const title = agentStrategy ? agentStrategy.authorHandle : 'New strategy'
 
-  // --- Minimized pill ---
+  // Minimized: a fixed bottom-right chip at every desktop size (the rail no
+  // longer hosts the chat — it floats).
   if (minimized) {
     return (
-      <div className="fixed z-[60] bottom-4 right-4 md:bottom-6 md:right-6">
-        <div
-          className="flex items-center gap-2 rounded-full pl-4 pr-2 py-2 bg-wave-bg border border-wave-border shadow-2xl"
-          role="dialog"
-          aria-label={`${title} (minimized)`}
-        >
-          <MessageSquare size={16} style={{ color: '#2A9D8F' }} aria-hidden="true" />
-          <button
-            onClick={restore}
-            className="font-sans text-[14px] font-semibold text-wave-text"
-            aria-label={`Restore ${title} chat`}
-          >
-            {title}
-          </button>
-          <button
-            onClick={close}
-            className="w-8 h-8 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-full transition-colors"
-            aria-label="Close chat"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
+      <div className="fixed z-[60] bottom-4 right-4">
+        <MinimizedChatPill />
       </div>
     )
   }
@@ -474,246 +264,83 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     ? undefined
     : pos
       ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto', width: size.w, height: size.h }
+      // Farcaster-style dock: pinned to the TOP-right, aligned with the
+      // layout columns' top edge — a right-hand column until dragged away.
+      // Default dock: pinned BOTTOM-right — the chat is a floor-level window
+      // (the old top-right dock read as a second header; the rail no longer
+      // hosts it, so nothing sits under it but the page).
       : { right: PANEL_MARGIN, bottom: PANEL_MARGIN, width: size.w, height: size.h }
 
   return (
     <div
       ref={panelRef}
-      className="fixed z-[60] flex flex-col overflow-hidden bg-wave-bg border border-wave-border shadow-2xl
+      className="fixed z-[60] flex overflow-hidden glass-panel
         inset-x-0 bottom-0 h-[88dvh] rounded-t-[20px]
-        md:inset-x-auto md:bottom-auto md:h-auto md:rounded-[16px]
+        md:inset-x-auto md:bottom-auto md:rounded-[18px]
         animate-drawer-pop"
       style={desktopStyle}
       role="dialog"
       aria-label={title}
     >
-      {/* Title bar (drag handle on desktop) */}
-      <div
-        onPointerDown={onTitlePointerDown}
-        className="flex items-center gap-2 px-3 h-12 border-b border-wave-border shrink-0 md:cursor-grab md:active:cursor-grabbing select-none bg-wave-surface"
-      >
-        <GripHorizontal
-          size={16}
-          className="hidden md:block text-wave-muted shrink-0"
-          aria-hidden="true"
-        />
-        <h2 className="font-sans text-[14px] font-semibold text-wave-text truncate flex-1">
-          {title}
-        </h2>
-        {/* Window controls */}
-        <button
-          onClick={minimize}
-          className="w-9 h-9 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors shrink-0"
-          aria-label="Minimize chat"
+      {/* Conversation sidebar (MUI features.conversationList, wave glass) */}
+      {showThreads && <ConversationPane onClose={() => setShowThreads(false)} />}
+
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Title bar (drag handle on desktop) */}
+        <div
+          onPointerDown={onTitlePointerDown}
+          className="flex items-center gap-1.5 px-3 h-12 shrink-0 md:cursor-grab md:active:cursor-grabbing select-none"
+          style={{ borderBottom: '1px solid var(--glass-hairline)' }}
         >
-          <Minus size={16} aria-hidden="true" />
-        </button>
-        <button
-          onClick={close}
-          className="w-9 h-9 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors shrink-0"
-          aria-label="Close chat"
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
-      </div>
-
-      <div className="px-3 pt-3 shrink-0">
-        <StreamNotifications enabled={!useMock} />
-      </div>
-
-      {/* Message thread */}
-      <div
-        ref={threadRef}
-        className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3"
-      >
-        {messages.map((msg) => {
-          if (msg.type === 'safety-card') {
-            return (
-              <div key={msg.id} className="max-w-[85%]">
-                <InlineSafetyCard />
-                <p className="font-sans text-[11px] text-wave-muted mt-1 pl-1">
-                  {msg.timestamp}
-                </p>
-              </div>
-            )
-          }
-
-          if (msg.type === 'ship-button') {
-            return (
-              <div key={msg.id} className="w-full">
-                {shipped ? (
-                  <PostShipMessage />
-                ) : (
-                  <button
-                    onClick={handleShip}
-                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
-                    style={{ background: LISBOA, minHeight: '52px' }}
-                    aria-label="Confirm and ship strategy on-chain"
-                  >
-                    Ship on-chain
-                  </button>
-                )}
-              </div>
-            )
-          }
-
-          const isAgent = msg.role === 'agent'
-          return (
-            <div
-              key={msg.id}
-              className={`flex flex-col max-w-[85%] ${
-                isAgent ? 'self-start' : 'self-end'
-              }`}
-            >
-              <div
-                className={`px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed ${
-                  isAgent ? 'bg-wave-surface' : ''
-                }`}
-                style={{
-                  background: isAgent ? undefined : 'rgba(42,157,143,0.18)',
-                  borderRadius: isAgent
-                    ? '12px 12px 12px 4px'
-                    : '12px 12px 4px 12px',
-                }}
-              >
-                {msg.content}
-              </div>
-              <span
-                className={`font-sans text-[11px] text-wave-muted mt-1 ${
-                  isAgent ? 'pl-1' : 'pr-1 text-right'
-                }`}
-              >
-                {msg.timestamp}
-              </span>
-            </div>
-          )
-        })}
-
-        {/* Live compose stream (live mode only). Mock mode uses the canned
-            messages above + the HITL approval demo below. */}
-        {!useMock && !forkSource && !agentStrategy && liveMessages.length === 0 && (
-          <div className="flex flex-col max-w-[85%] self-start">
-            <div
-              className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed bg-wave-surface"
-              style={{ borderRadius: '12px 12px 12px 4px' }}
-            >
-              Describe your trading strategy in plain English. I&apos;ll compile
-              it to a bounded spec, check it for safety, and ship it on-chain.
-            </div>
-          </div>
-        )}
-        {!useMock && liveMessages.map((msg) => {
-          if (msg.kind === 'spec') {
-            return (
-              <div key={msg.id} className="max-w-[85%]">
-                <LiveSpecCard spec={compose.partial ?? compose.spec} done={!!compose.spec} />
-                {compose.isStreaming && (
-                  <p className="font-sans text-[11px] text-wave-muted mt-1 pl-1">
-                    filling the form…
-                  </p>
-                )}
-              </div>
-            )
-          }
-          const isAgent = msg.role === 'agent'
-          return (
-            <div
-              key={msg.id}
-              className={`flex flex-col max-w-[85%] ${isAgent ? 'self-start' : 'self-end'}`}
-            >
-              <div
-                className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed"
-                style={{
-                  background: isAgent ? undefined : 'rgba(42,157,143,0.18)',
-                  borderRadius: isAgent ? '12px 12px 12px 4px' : '12px 12px 4px 12px',
-                }}
-              >
-                {msg.content}
-              </div>
-            </div>
-          )
-        })}
-
-        {/* Live: once the spec lands, show the safety card + ship CTA (the
-            compiled spec IS the form the agent filled; ship is the demo beat). */}
-        {!useMock && compose.spec && (
-          <>
-            <div className="max-w-[85%]">
-              <InlineSafetyCard />
-            </div>
-            {compose.error ? (
-              <p className="font-sans text-[13px]" style={{ color: '#E5484D' }}>
-                {compose.error}
-              </p>
-            ) : (
-              <div className="w-full">
-                {shipped ? (
-                  <PostShipMessage />
-                ) : (
-                  <button
-                    onClick={handleShip}
-                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
-                    style={{ background: LISBOA, minHeight: '52px' }}
-                    aria-label="Confirm and ship strategy on-chain"
-                  >
-                    Ship on-chain
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Live: surface a compose error with no spec (e.g. agent unreachable). */}
-        {!useMock && !compose.spec && compose.error && (
-          <p className="font-sans text-[13px] self-start" style={{ color: '#E5484D' }}>
-            {compose.error}
-          </p>
-        )}
-
-        {/* Human-in-the-loop approval scenario (mock demo only — not shown when
-            replaying an already-shipped pool agent conversation, or in live mode
-            where the compose stream owns the thread). */}
-        {useMock && !agentStrategy && (
-        <div className="flex flex-col max-w-[85%] self-start">
-          <div
-            className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed bg-wave-surface"
-            style={{ borderRadius: '12px 12px 12px 4px' }}
-          >
-            {"This strategy's oracle has been stale for 4h. I want to pause execution. Approve?"}
-          </div>
-          <ApprovalButtons />
-          <span className="font-sans text-[11px] text-wave-muted mt-2 pl-1">
-            2:17 PM
-          </span>
-        </div>
-        )}
-      </div>
-
-      {/* Input area — contained rounded field so text is never flush to the edge */}
-      <div className="shrink-0 px-3 py-3 border-t border-wave-border">
-        <form
-          onSubmit={handleSend}
-          className="flex items-center gap-1 rounded-[12px] pl-4 pr-1.5 py-1.5 bg-wave-surface border border-wave-border focus-within:border-wave-teal transition-colors"
-        >
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="describe your strategy..."
-            className="flex-1 min-w-0 font-sans text-[14px] bg-transparent outline-none placeholder:text-wave-muted placeholder:italic text-wave-text"
-            aria-label="Strategy description input"
+          <GripHorizontal
+            size={16}
+            className="hidden md:block text-wave-muted shrink-0"
+            aria-hidden="true"
           />
+          <span className="sr-only" role="heading" aria-level={2}>
+            {title}
+          </span>
+          <span className="min-w-0 flex-1" aria-hidden="true" />
+          {/* Window controls */}
           <button
-            type="submit"
-            className="w-9 h-9 flex items-center justify-center text-white rounded-[9px] transition-all duration-150 hover:brightness-110 shrink-0"
-            style={{ background: LISBOA }}
-            aria-label="Send message"
+            onClick={() => setShowThreads((v) => !v)}
+            className="w-9 h-9 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors shrink-0 hidden md:flex"
+            aria-label={showThreads ? 'Hide conversations' : 'Show conversations'}
+            aria-pressed={showThreads}
           >
-            <Send size={15} aria-hidden="true" />
+            {showThreads ? (
+              <PanelLeftClose size={15} aria-hidden="true" />
+            ) : (
+              <PanelLeft size={15} aria-hidden="true" />
+            )}
           </button>
-        </form>
+          <button
+            onClick={saveCurrentConversation}
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors shrink-0 ${
+              savedFlash ? 'text-wave-teal' : 'text-wave-muted hover:text-wave-text'
+            }`}
+            aria-label="Save conversation to your archive"
+            title={savedFlash ? 'Saved' : 'Save conversation'}
+          >
+            <Bookmark size={15} fill={savedFlash ? 'currentColor' : 'none'} aria-hidden="true" />
+          </button>
+          <button
+            onClick={minimize}
+            className="w-9 h-9 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors shrink-0"
+            aria-label="Minimize chat"
+          >
+            <Minus size={16} aria-hidden="true" />
+          </button>
+          <button
+            onClick={close}
+            className="w-9 h-9 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-lg transition-colors shrink-0"
+            aria-label="Close chat"
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+
+        <AgentChat useMock={useMock} />
       </div>
 
       {/* Resize handle (desktop only, bottom-right corner) */}

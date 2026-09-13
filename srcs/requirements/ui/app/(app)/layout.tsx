@@ -1,18 +1,41 @@
-import { getCurrentUser, getSuggestedProfiles, isMockMode } from '@/lib/data'
+import { Suspense } from 'react'
+import { getCurrentUser, isMockMode } from '@/lib/data'
+import { networkOptions, selectedNetworkId } from '@/lib/networks'
+import { readSessionCookie } from '@/lib/session-cookie'
 import { AppWrapper } from '@/components/app-wrapper'
+import { WhoToFollow } from '@/components/who-to-follow'
+import { MicroSkeleton } from '@/components/skeleton'
+import { RailKeywords } from './rail-keywords'
 
-// Server-resolved identity for the whole app shell: the current user (left-rail
-// account chip + nav) and the "who to follow" list (right column). Both flow
-// down as props — no business logic runs in the client (frontend.md §8). The
-// data MODE is passed down too so the create-drawer picks live compose vs the
-// canned mock demo without exposing the server env to the browser.
+// Fast cookie reads only. Subgraph scans (keywords, who-to-follow) stream
+// in their own Suspense slots so the page body is not blocked (frontend.md §8).
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const [currentUser, profiles] = await Promise.all([
+  const [currentUser, selected, hint] = await Promise.all([
     getCurrentUser(),
-    getSuggestedProfiles(),
+    selectedNetworkId(),
+    readSessionCookie(),
   ])
+  // Cookie address is a hint for the rail — no subgraph wait.
+  if (hint?.address && !currentUser.walletAddress) {
+    currentUser.walletAddress = hint.address
+    currentUser.handle = hint.address.toLowerCase()
+  }
   return (
-    <AppWrapper currentUser={currentUser} profiles={profiles} useMock={isMockMode()}>
+    <AppWrapper
+      currentUser={currentUser}
+      network={{ selected, options: await networkOptions() }}
+      keywordsSlot={
+        <Suspense fallback={null}>
+          <RailKeywords />
+        </Suspense>
+      }
+      useMock={isMockMode()}
+      rightRail={
+        <Suspense fallback={<MicroSkeleton label="Loading who to follow" className="py-4" />}>
+          <WhoToFollow />
+        </Suspense>
+      }
+    >
       {children}
     </AppWrapper>
   )
