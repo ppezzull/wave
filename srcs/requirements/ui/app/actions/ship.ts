@@ -1,5 +1,7 @@
 'use server'
 
+import { currentNetwork } from '@/lib/networks'
+
 // shipStrategy — the UI's "Ship on-chain" server action. Forwards the finalized
 // StrategySpec (from the compose agent) to the agent's shipStrategy tool, which runs the
 // full pipeline in the agent process: compile → announce → approve → ship → verify. The
@@ -77,6 +79,18 @@ export async function shipStrategy(
     return { ok: false, reason: 'missing pair or blocks in spec' }
   }
 
+  // The honest network guard: READS follow the Settings selector, but the
+  // agent SIGNS on one chain per process (AGENT_NETWORK, default sepolia).
+  // Refuse instead of shipping somewhere you're not looking.
+  const net = await currentNetwork()
+  const agentNetwork = process.env.AGENT_NETWORK ?? 'sepolia'
+  if (net.id !== agentNetwork) {
+    return {
+      ok: false,
+      reason: `You are browsing ${net.label}, but ships execute on the agent's network (${agentNetwork}). Switch the selector back in Settings to ship. Nothing was sent.`,
+    }
+  }
+
   let res: Response
   try {
     res = await fetch(`${AGENT_URL}/api/tools/shipStrategy/execute`, {
@@ -133,10 +147,15 @@ export async function shipStrategy(
  * Runtime env via server action — no NEXT_PUBLIC rebuild coupling.
  */
 export async function approvalGateConfig(): Promise<{
-  mode: 'off' | 'session' | 'device'
+  mode: 'off' | 'session' | 'device' | 'both'
   approverAddress: string
 }> {
   const raw = process.env.LEDGER_GATE ?? 'off'
-  const mode = raw === 'on' ? 'device' : raw === 'session' || raw === 'device' ? raw : 'off'
+  const mode =
+    raw === 'on'
+      ? 'device'
+      : raw === 'session' || raw === 'device' || raw === 'both'
+        ? raw
+        : 'off'
   return { mode, approverAddress: process.env.LEDGER_APPROVER_ADDRESS ?? '' }
 }

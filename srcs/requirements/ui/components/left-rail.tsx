@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -10,16 +10,16 @@ import {
   Settings,
   X,
   Menu,
-  Feather,
   MessageSquare,
+  Search,
 } from 'lucide-react'
-import { useDrawer } from './drawer-context'
+import { WAVE_SEARCH_EVENT } from './whats-new'
 import { ThemeToggle } from './theme-toggle'
 import { AccountChip } from './account-chip'
+import { RailNetworkSwitcher, type NetworkOption } from './network-selector'
+import { searchStrategies } from '@/app/actions/search'
+import type { NetworkId } from '@/lib/networks'
 import type { CurrentUser } from './app-wrapper'
-
-const LISBOA =
-  'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
 
 function navItems(handle: string) {
   return [
@@ -74,18 +74,152 @@ function NavItemRow({ item, active, collapsed = false, onClick }: NavItemRowProp
   )
 }
 
+export interface RailNetwork {
+  selected: NetworkId
+  options: NetworkOption[]
+}
+
+interface SearchHit {
+  id: string
+  description: string
+  author: string
+}
+
+function StrategySearch({
+  query,
+  onQuery,
+  onNavigate,
+}: {
+  query: string
+  onQuery: (value: string) => void
+  onNavigate?: () => void
+}) {
+  const [hits, setHits] = useState<SearchHit[] | null>(null)
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (query.trim().length >= 2) setOpen(true)
+  }, [query])
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    if (query.trim().length < 2) {
+      setHits(null)
+      return
+    }
+    timer.current = setTimeout(() => {
+      void searchStrategies(query)
+        .then((rows) => setHits(rows))
+        .catch(() => setHits(null))
+    }, 300)
+    return () => {
+      if (timer.current) clearTimeout(timer.current)
+    }
+  }, [query])
+
+  return (
+    <div className="relative mx-2">
+      <div className="flex h-10 items-center gap-2.5 rounded-full border border-wave-border px-3 glass-surface transition-colors hover:border-wave-teal/60 focus-within:border-wave-teal">
+        <Search size={16} className="shrink-0 text-wave-muted" aria-hidden="true" />
+        <input
+          id="search-strategies"
+          name="q"
+          type="text"
+          value={query}
+          onChange={(e) => {
+            onQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search strategies"
+          className="min-w-0 flex-1 bg-transparent font-sans text-[13px] text-wave-text outline-none placeholder:text-wave-muted"
+          aria-label="Search strategies"
+        />
+        {query && (
+          <button
+            onClick={() => {
+              onQuery('')
+              setHits(null)
+            }}
+            className="shrink-0 text-wave-muted hover:text-wave-text"
+            aria-label="Clear search"
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+
+      {open && query.trim().length >= 2 && (
+        <div
+          className="absolute inset-x-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-[14px] border border-wave-border shadow-xl glass-surface"
+          role="listbox"
+          aria-label="Search results"
+        >
+          {hits === null ? (
+            <p className="px-3 py-2.5 font-sans text-[12px] text-wave-muted">
+              Searching…
+            </p>
+          ) : hits.length === 0 ? (
+            <p className="px-3 py-2.5 font-sans text-[12px] text-wave-muted">
+              No strategies match “{query.trim()}”.
+            </p>
+          ) : (
+            <ul>
+              {hits.map((h) => (
+                <li key={h.id}>
+                  <Link
+                    href={`/s/${h.id}`}
+                    onClick={() => {
+                      setOpen(false)
+                      onNavigate?.()
+                    }}
+                    className="group block px-3 py-2 transition-colors hover:bg-wave-teal/10"
+                    role="option"
+                    aria-selected={false}
+                  >
+                    <span className="block font-sans text-[12px] leading-snug text-wave-text transition-colors group-hover:text-wave-teal line-clamp-2">
+                      {h.description || '(no description)'}
+                    </span>
+                    <span className="mt-0.5 block font-mono text-[10px] text-wave-muted">
+                      {h.author.slice(0, 6)}…{h.author.slice(-4)}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RailContent({
   currentUser,
+  network,
+  keywordsSlot,
   collapsed = false,
   onNavClick,
 }: {
   currentUser: CurrentUser
+  network: RailNetwork
+  keywordsSlot?: ReactNode
   collapsed?: boolean
   onNavClick?: () => void
 }) {
   const pathname = usePathname()
-  const { openCreate } = useDrawer()
   const items = navItems(currentUser.handle)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    const onSearch = (e: Event) => {
+      const q = (e as CustomEvent<string>).detail
+      if (typeof q === 'string') setSearchQuery(q)
+    }
+    window.addEventListener(WAVE_SEARCH_EVENT, onSearch)
+    return () => window.removeEventListener(WAVE_SEARCH_EVENT, onSearch)
+  }, [])
 
   return (
     <div className="flex flex-col h-full py-3">
@@ -128,30 +262,27 @@ function RailContent({
         ))}
       </nav>
 
-      {/* Create button — opens the chat widget (the one chat surface). */}
-      <div className={`mt-4 ${collapsed ? 'flex justify-center px-2' : 'px-3'}`}>
-        {collapsed ? (
-          <button
-            onClick={() => openCreate()}
-            className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]"
-            style={{ background: LISBOA }}
-            aria-label="Create new strategy"
-          >
-            <Feather size={20} aria-hidden="true" />
-          </button>
-        ) : (
-          <button
-            onClick={() => openCreate()}
-            className="w-full py-3.5 font-sans text-[16px] font-bold text-white rounded-full shadow-sm transition-all duration-[220ms] hover:brightness-110 active:scale-[0.99]"
-            style={{ background: LISBOA }}
-            aria-label="Create new strategy"
-          >
-            Create
-          </button>
-        )}
-      </div>
+      {!collapsed && (
+        <div className="mt-3 flex flex-col gap-3">
+          <StrategySearch
+            query={searchQuery}
+            onQuery={setSearchQuery}
+            onNavigate={onNavClick}
+          />
+          {keywordsSlot}
+        </div>
+      )}
 
       <div className="flex-1" aria-hidden="true" />
+
+      {/* Network switcher — the same selection as Settings, inline */}
+      <div className={`mb-1 ${collapsed ? 'flex justify-center px-2' : 'px-2'}`}>
+        <RailNetworkSwitcher
+          selected={network.selected}
+          options={network.options}
+          collapsed={collapsed}
+        />
+      </div>
 
       {/* Theme toggle */}
       <div className={`mb-1 ${collapsed ? 'flex justify-center px-2' : 'px-2'}`}>
@@ -168,25 +299,34 @@ function RailContent({
   )
 }
 
-export function LeftRail({ currentUser }: { currentUser: CurrentUser }) {
+export function LeftRail({
+  currentUser,
+  network,
+  keywordsSlot,
+}: {
+  currentUser: CurrentUser
+  network: RailNetwork
+  keywordsSlot?: ReactNode
+}) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <>
-      {/* Desktop rail (full) */}
+      {/* Desktop rail (full) — transparent: the pixel ocean shows through
+          (the feed column stays the opaque readable island). */}
       <aside
-        className="hidden xl:flex sticky top-0 h-screen w-[275px] shrink-0 flex-col bg-wave-bg"
+        className="hidden xl:flex sticky top-0 h-screen w-[275px] shrink-0 flex-col"
         aria-label="Navigation sidebar"
       >
-        <RailContent currentUser={currentUser} collapsed={false} />
+        <RailContent currentUser={currentUser} network={network} keywordsSlot={keywordsSlot} collapsed={false} />
       </aside>
 
       {/* Tablet/laptop rail: icon-only */}
       <aside
-        className="hidden md:flex xl:hidden sticky top-0 h-screen w-[88px] shrink-0 flex-col bg-wave-bg"
+        className="hidden md:flex xl:hidden sticky top-0 h-screen w-[88px] shrink-0 flex-col"
         aria-label="Navigation sidebar"
       >
-        <RailContent currentUser={currentUser} collapsed={true} />
+        <RailContent currentUser={currentUser} network={network} keywordsSlot={keywordsSlot} collapsed={true} />
       </aside>
 
       {/* Mobile: top header bar with burger + logo */}
@@ -226,7 +366,7 @@ export function LeftRail({ currentUser }: { currentUser: CurrentUser }) {
             aria-hidden="true"
           />
           <aside
-            className="md:hidden fixed left-0 top-0 bottom-0 w-[280px] z-50 bg-wave-bg border-r border-wave-border flex flex-col"
+            className="md:hidden fixed left-0 top-0 bottom-0 w-[280px] z-50 bg-wave-bg/95 backdrop-blur-md border-r border-wave-border flex flex-col"
             aria-label="Navigation sidebar"
           >
             <button
@@ -238,6 +378,8 @@ export function LeftRail({ currentUser }: { currentUser: CurrentUser }) {
             </button>
             <RailContent
               currentUser={currentUser}
+              network={network}
+              keywordsSlot={keywordsSlot}
               collapsed={false}
               onNavClick={() => setMobileOpen(false)}
             />

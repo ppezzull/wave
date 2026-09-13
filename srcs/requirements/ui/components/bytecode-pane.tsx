@@ -13,7 +13,7 @@ export function BytecodePane({ strategy }: { strategy: Strategy }) {
       </h2>
 
       <div
-        className="rounded-[12px] p-5 overflow-x-auto overflow-y-auto bg-wave-surface border border-wave-border"
+        className="rounded-[12px] p-5 overflow-x-auto overflow-y-auto glass-surface border border-wave-border"
         style={{ maxHeight: '320px' }}
         role="region"
         aria-label="Strategy bytecode instructions"

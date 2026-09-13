@@ -35,7 +35,7 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
         Hash Verification
       </h2>
 
-      <div className="rounded-[12px] p-5 bg-wave-surface border border-wave-border">
+      <div className="rounded-[12px] p-5 glass-surface border border-wave-border">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {rows.map((row, i) => (
             <div key={row.label} className="flex flex-col gap-2">
@@ -75,9 +75,9 @@ export function HashVerify({ strategy }: { strategy: Strategy }) {
             style={{ color: '#E5484D' }}
             role="alert"
           >
-            MISMATCH — the post does not compile to the deployed program. This
+            MISMATCH. The post does not compile to the deployed program. This
             can mean an edited post, or a time-dependent instruction (the
-            deadline block) rolling between compiles — the instruction table
+            deadline block) rolling between compiles. The instruction table
             above shows the program as recompiled from the post today.
           </p>
         )}

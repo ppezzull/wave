@@ -4,19 +4,15 @@
 // and the in-app pairing helper: derives the device's ETH address with NO
 // device tap (checkOnDevice: false) so it can be copied into
 // LEDGER_APPROVER_ADDRESS. Replaces the old World trust panel.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLedgerApproval } from '@/hooks/use-ledger-approval'
-import { approvalGateConfig } from '@/app/actions/ship'
 
-export function LedgerTrustSection() {
+export type GateConfig = { mode: string; approverAddress: string }
+
+export function LedgerTrustSection({ gate }: { gate: GateConfig }) {
   const ledger = useLedgerApproval()
-  const [gate, setGate] = useState<{ mode: string; approverAddress: string }>()
   const [paired, setPaired] = useState<string>()
   const [error, setError] = useState<string>()
-
-  useEffect(() => {
-    approvalGateConfig().then(setGate).catch(() => {})
-  }, [])
 
   const pair = async () => {
     setError(undefined)
@@ -72,7 +68,7 @@ export function LedgerTrustSection() {
         {error && <p className="font-sans text-[12px]" style={{ color: '#E5484D' }}>{error}</p>}
         {gate?.mode === 'off' && (
           <p className="font-sans text-[12px] text-wave-muted">
-            Gate off — ships need no signature. Set LEDGER_GATE=session|device to arm it.
+            Gate off. Ships need no signature. Set LEDGER_GATE=session|device to arm it.
           </p>
         )}
       </div>

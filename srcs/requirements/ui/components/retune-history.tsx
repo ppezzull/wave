@@ -26,7 +26,7 @@ export function RetuneHistory({ strategy }: { strategy: Strategy }) {
       </div>
 
       {entries.length === 0 ? (
-        <div className="rounded-[12px] px-5 py-8 text-center bg-wave-surface border border-wave-border">
+        <div className="rounded-[12px] px-5 py-8 text-center glass-surface border border-wave-border">
           <p className="font-sans text-[14px] text-wave-muted">
             No retunes yet. This strategy is running exactly as shipped.
           </p>

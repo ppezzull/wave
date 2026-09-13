@@ -49,21 +49,27 @@ export function formatRecency(unixSeconds: number, now = CURRENT_NOW): string {
 // is gone, so the ranking sorts on return × recency alone.)
 
 // C2b INTERIM (docs/strategy/SUBGRAPH-CONTRACT-GAPS.md C2).
-// returnPct's true denominator is committed capital, which NO event emits today
-// (C2a blocked on a contract change). So:
-//   - if the strategy CARRIES a committedCapital (mock data, or a future C2a
-//     contract emit), use the rigorous PnL-on-capital formula;
-//   - otherwise fall back to the C2b turnover-ratio proxy (out/in − 1) so the
-//     ranking still sorts against live subgraph data. Restore the denominator
-//     unconditionally when C2a lands.
+// returnPct's true value is (realized + unrealized PnL) ÷ committed capital
+// (Pietro.md 🔢) — the unrealized leg needs oracle pricing the subgraph doesn't
+// have. The honest subgraph-derivable proxy is MAKER EXTRACTION:
+//   realizedPnL ≈ cumulativeVolumeIn − cumulativeVolumeOut
+// (what the maker received minus delivered ≈ fees + spread captured; the schema
+// itself names cumulativeVolumeIn "returnPct numerator proxy"). Valid while the
+// pair trades near parity (mock/demo tokens); loud caveat, never mark-to-market.
+//
+// ⚠️ The former formula here was (out − cap)/cap — structurally ≤ 0 FOREVER:
+// by token conservation the maker can never pay out more than it committed +
+// received (Σout ≤ committedCapital), so every real strategy showed a down
+// trend and the "+247.3%" pitch number was reachable only in fabricated mock
+// rows. Same flip applied to agent/src/ranking.ts (its header promises BOTH
+// consumers implement the identical formula).
 export function returnPct(s: Strategy): number {
-  const cap = Number(s.committedCapital)
-  if (cap > 0) {
-    return ((Number(s.cumulativeVolumeOut) - cap) / cap) * 100
-  }
   const inn = Number(s.cumulativeVolumeIn)
-  if (inn === 0) return 0
-  return (Number(s.cumulativeVolumeOut) / inn - 1) * 100
+  const out = Number(s.cumulativeVolumeOut)
+  const cap = Number(s.committedCapital)
+  // C2b fallback: no capital on record → normalize by turnover instead.
+  if (cap <= 0) return inn === 0 ? 0 : ((inn - out) / inn) * 100
+  return ((inn - out) / cap) * 100
 }
 
 // signed, 1-decimal display string, e.g. '+247.3%' / '-12.4%'

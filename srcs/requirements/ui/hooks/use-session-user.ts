@@ -1,37 +1,68 @@
 'use client'
 
-// useSessionUser — the real wallet identity from the Privy session.
-//
-// Returns the connected wallet's Identity (lib/identity.ts seam) when the user
-// is authenticated, or null when disconnected/not ready. This is the live
-// counterpart to the server getCurrentUser() stub: ship/create flows and the
-// account chip read this so identity comes from the actual connected wallet,
-// never a fabricated value.
-//
-// Trust layer: Ledger Continuity — hardware approval lives on the agent's HITL
-// gate (LEDGER_GATE), not on the session identity. The seam stays offline:
-// truncated handle, verifiedHuman false until a trust resolver returns.
+// useSessionUser — identity from resolveSession (lib/session.ts).
+// Order is Privy → Ledger device → local Anvil → none. Do not re-check
+// those doors in callers; read `source` and the sign helpers.
+import { useEffect, useRef, useState } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
 import { identityFromAddress, type Identity } from '@/lib/identity'
+import { readLedgerSession } from '@/lib/ledger-session'
+import { syncSessionCookie } from '@/app/actions/session'
+import {
+  resolveSession,
+  type SessionMarker,
+  type SessionSource,
+} from '@/lib/session'
 
-/** The connected wallet's identity via the seam. */
 export type SessionUser = Identity
+export type { SessionSource }
 
 export function useSessionUser(): {
   sessionUser: SessionUser | null
   ready: boolean
   authenticated: boolean
+  source: SessionSource
 } {
-  const { ready, authenticated } = usePrivy()
+  const { ready: privyReady, authenticated: privyAuthenticated } = usePrivy()
   const { wallets } = useWallets()
-  const connected = wallets[0]?.address
+  const privyAddress = wallets[0]?.address
 
-  if (!ready || !authenticated || !connected) {
-    return { sessionUser: null, ready, authenticated }
-  }
+  const [hydrated, setHydrated] = useState(false)
+  const [marker, setMarker] = useState<SessionMarker | null>(null)
+  useEffect(() => {
+    const sync = () => setMarker(readLedgerSession())
+    sync()
+    setHydrated(true)
+    window.addEventListener('wave-ledger-session', sync)
+    return () => window.removeEventListener('wave-ledger-session', sync)
+  }, [])
+
+  const snap = resolveSession({
+    privyReady,
+    privyAuthenticated,
+    privyAddress,
+    markerHydrated: hydrated,
+    marker,
+  })
+
+  // Mirror into the SSR cookie once. Next navigation runs wallet-keyed
+  // reads on the server (similar feed, threads, vault) instead of a hook.
+  const cookieKey = useRef('')
+  useEffect(() => {
+    if (!snap.ready) return
+    const next =
+      snap.authenticated && snap.address && snap.source
+        ? JSON.stringify({ address: snap.address, source: snap.source })
+        : ''
+    if (next === cookieKey.current) return
+    cookieKey.current = next
+    void syncSessionCookie(next ? (JSON.parse(next) as { address: string; source: Exclude<SessionSource, null> }) : null)
+  }, [snap.ready, snap.authenticated, snap.address, snap.source])
+
   return {
-    sessionUser: identityFromAddress(connected),
-    ready,
-    authenticated,
+    sessionUser: snap.address ? identityFromAddress(snap.address) : null,
+    ready: snap.ready,
+    authenticated: snap.authenticated,
+    source: snap.source,
   }
 }

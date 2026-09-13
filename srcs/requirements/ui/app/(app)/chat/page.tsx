@@ -1,12 +1,28 @@
+import { getThreadsByAuthor, getLatestChatVault } from '@/lib/data'
+import { readSessionCookie } from '@/lib/session-cookie'
+import { RequireSession } from '@/components/require-session'
 import { ChatSelector } from './chat-selector'
 
-// /chat — the conversation SELECTOR (the chat itself is the floating widget:
-// pick a thread → the widget opens replaying it). Threads are the session
-// wallet's on-chain authorships; the wallet resolves client-side (Privy), so
-// the selector is a client loader — never a fabricated list, never a fallback
-// to all strategies.
+// /chat — threads + vault status resolve on the server when the session
+// cookie is present. The selector stays a client island for archive/vault
+// writes. Account-only: signed-out visitors go to `/`.
 export const dynamic = 'force-dynamic'
 
-export default function ChatPage() {
-  return <ChatSelector />
+export default async function ChatPage() {
+  const hint = await readSessionCookie()
+  const [threads, vault] = hint?.address
+    ? await Promise.all([
+        getThreadsByAuthor(hint.address, 6).catch(() => []),
+        getLatestChatVault(hint.address),
+      ])
+    : [undefined, undefined]
+
+  return (
+    <RequireSession>
+      <ChatSelector
+        initialThreads={hint?.address && threads ? { address: hint.address, threads } : undefined}
+        initialVault={vault === undefined ? undefined : vault}
+      />
+    </RequireSession>
+  )
 }

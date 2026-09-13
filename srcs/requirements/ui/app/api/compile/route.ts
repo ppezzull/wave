@@ -1,32 +1,26 @@
-// /api/compile — POST, SSE. A transparent byte-pipe to the wave compose agent.
+// /api/compile — POST, SSE. A transparent byte-pipe to the wave chat agent.
 //
-// The browser POSTs a natural-language intent here; this route forwards it to
-// the agent's Mastra stream endpoint and pipes the SSE response straight back,
+// The browser POSTs a message here; this route forwards it to the agent's
+// intent-routed chat endpoint and pipes the SSE response straight back,
 // unchanged. The browser never sees AGENT_URL or the LLM key (frontend.md §8 —
-// no business logic, no keys, on the client). The agent does the compile.
+// no business logic, no keys, on the client). The agent does the work.
 //
-// Mastra auto-mounts `new Agent()` instances under /api/agents/<mapKey>/... —
-// the compose agent is registered under key `composeAgent` (NOT the instance
-// `id` "compose"; recall.smoke.ts:32 resolves it via getAgent("composeAgent")),
-// so the stream route is /api/agents/composeAgent/stream (mastra-api skill +
-// mastra.ai/reference/server/routes.md: POST /api/agents/:agentId/stream).
+// The upstream is /stream/chat (agent/src/mastra/routes/chat-stream.ts) — the
+// ONE chat endpoint, VERBATIM path (Mastra mounts apiRoutes as-is and rejects
+// /api prefixes for custom routes). It classifies the lane first:
+//   assistant → conversational answer (text-delta frames)
+//   strategy  → the strict compose flow (object/object-result form-fill frames)
+// The old UI-side 422 "needs two 0x addresses" preflight moved INTO the agent's
+// strategy lane — questions must never be blocked by a compiler gate, and the
+// strategy lane still never reaches the LLM unpairable.
 //
 // Request body (this route):  { intent: string; scope?: { resource; thread } }
-// Forwarded body (to Mastra): { messages: [{role:'user', content:intent}],
-//                               output: <StrategySpec zod schema echo OFF>,
-//                               memory?: scope }
-// `output` is intentionally NOT echoed: composeAgent already applies the
-// structuredOutput schema in defaultOptions / generateOptions (compose.agent.ts),
-// so the agent returns the bounded StrategySpec regardless. Echoing a
-// client-supplied schema would let the browser override the safety bound —
-// the opposite of what we want.
+// Forwarded body (to Mastra): the same shape, verbatim. No client schema is
+// echoed: composeAgent applies its structuredOutput bounds internally.
 //
 // Response: the agent's SSE stream, piped through verbatim. Chunk shapes are
-// Mastra's (mastra.ai/reference/streaming/ChunkType): successive `object` chunks
-// carry partial→complete StrategySpec in a top-level `object` field (the
-// "watch the AI fill the form" beat); `text-delta` carries reasoning prose;
-// `error` carries failures. This route is format-agnostic — parsing lives in
-// the browser hook (hooks/use-compose-stream.ts).
+// Mastra's (mastra.ai/reference/streaming/ChunkType) plus the router's `mode`
+// frame; parsing lives in the browser hook (hooks/use-compose-stream.ts).
 import { NextRequest } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -47,10 +41,6 @@ function intentPreview(intent: string): string {
 
 function hasHexAddress(intent: string): boolean {
   return /0x[a-fA-F0-9]{40}/.test(intent)
-}
-
-function addressesIn(intent: string): string[] {
-  return intent.match(/0x[a-fA-F0-9]{40}/g) ?? []
 }
 
 /** Tee the upstream SSE: forward bytes unchanged, log a compact chunk summary. */
@@ -146,7 +136,8 @@ export async function POST(req: NextRequest) {
   // Byte-for-byte: the description IS the prompt (Pietro.md). Do NOT trim,
   // reflow, or normalize — the description must match the compiled program
   // byte-for-byte; a mismatch is a compile failure, not polish. Empty-string
-  // only rejects missing input.
+  // only rejects missing input. The two-address gate lives in the agent's
+  // strategy lane now (chat-stream.ts) — questions route to the assistant.
   const intent = typeof body.intent === 'string' ? body.intent : ''
   if (intent.length === 0) {
     console.warn(LOG, 'missing intent')
@@ -156,25 +147,7 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // The compiler contract requires an explicit two-token pair. Do not send a
-  // symbol-only or unsupported strategy to the LLM: it will otherwise try to
-  // invent placeholder addresses and the resulting Zod failure is opaque.
-  const addresses = addressesIn(intent)
-  if (addresses.length < 2) {
-    const error =
-      'This composer creates two-token SwapVM liquidity strategies. Include token0 and token1 as 0x addresses plus both liquidity amounts. Scheduled DCA, moving-average triggers, and drawdown rules are not supported strategy blocks yet.'
-    console.warn(LOG, 'intent rejected before agent', {
-      reason: 'missing pair addresses',
-      addressCount: addresses.length,
-      preview: intentPreview(intent),
-    })
-    return new Response(JSON.stringify({ error }), {
-      status: 422,
-      headers: { 'content-type': 'application/json' },
-    })
-  }
-
-  const upstreamUrl = `${AGENT_URL}/api/agents/composeAgent/stream`
+  const upstreamUrl = `${AGENT_URL}/stream/chat`
   console.info(LOG, 'proxy → agent', {
     agentUrl: AGENT_URL,
     upstreamUrl,
@@ -190,17 +163,14 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Compose the Mastra request. messages accepts a CoreMessage[] | string; we
-  // send a single user turn. memory is optional recall scope (resource/thread).
-  const forwardBody: Record<string, unknown> = {
-    messages: [{ role: 'user', content: intent }],
-  }
+  // Same shape downstream: the chat route parses {intent, scope} directly.
+  const forwardBody: Record<string, unknown> = { intent }
   if (
     body.scope &&
     typeof body.scope.resource === 'string' &&
     typeof body.scope.thread === 'string'
   ) {
-    forwardBody.memory = { resource: body.scope.resource, thread: body.scope.thread }
+    forwardBody.scope = { resource: body.scope.resource, thread: body.scope.thread }
   }
 
   let upstream: Response

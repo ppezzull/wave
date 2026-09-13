@@ -72,6 +72,16 @@ export async function getCurrentUser(): Promise<Profile & { walletAddress: strin
   return USE_MOCK ? mock.getCurrentUser() : server.getCurrentUser()
 }
 
+export async function getAuthorAvatarUrl(address: string): Promise<string> {
+  return USE_MOCK ? Promise.resolve('') : server.getAuthorAvatarUrl(address)
+}
+
+export type { LatestVault } from './server'
+
+export async function getLatestChatVault(user: string) {
+  return USE_MOCK ? Promise.resolve(null) : server.getLatestChatVault(user)
+}
+
 // generateStaticParams helper for the dynamic routes — mock-only param sets
 // (live mode is dynamic via `export const dynamic = 'force-dynamic'`).
 export async function listStrategyIds(): Promise<string[]> {

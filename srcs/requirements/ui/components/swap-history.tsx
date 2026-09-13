@@ -4,7 +4,7 @@ import type { SubgraphSwap } from '@/lib/clients/subgraph'
 // Hidden entirely when empty (a strategy that never filled shows nothing, not
 // a fake table). Only the fields the query actually selects are rendered.
 function short(a: string): string {
-  if (!a) return '—'
+  if (!a) return '-'
   try {
     const n = BigInt(a)
     // Raw units, human-scale for typical 18dp tokens; keep 4 significant digits.
@@ -51,7 +51,7 @@ export function SwapHistory({ swaps }: { swaps: SubgraphSwap[] }) {
                 <td className="pb-1.5 whitespace-nowrap font-sans text-[12px] text-wave-muted">
                   {s.timestamp
                     ? new Date(s.timestamp * 1000).toLocaleString()
-                    : '—'}
+                    : '-'}
                 </td>
               </tr>
             ))}

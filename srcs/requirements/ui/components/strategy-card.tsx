@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { GitFork, TrendingUp, TrendingDown } from 'lucide-react'
+import { GenericAvatar } from './generic-avatar'
+import { useSessionUser } from '@/hooks/use-session-user'
 import { useDrawer } from './drawer-context'
 import { useCountUp } from '@/hooks/use-count-up'
 import {
@@ -31,6 +33,12 @@ export function StrategyCard({
 }: StrategyCardProps) {
   const router = useRouter()
   const { openCreate } = useDrawer()
+  const { sessionUser } = useSessionUser()
+  const authorLabel =
+    strategy.authorHandle ||
+    (sessionUser?.address
+      ? `${sessionUser.address.slice(0, 6)}…${sessionUser.address.slice(-4)}`
+      : '')
 
   const ret = returnPct(strategy)
   const retStr = returnPctStr(strategy)
@@ -56,7 +64,7 @@ export function StrategyCard({
 
   return (
     <article
-      className={`bg-wave-bg transition-colors duration-150 ${
+      className={`transition-colors duration-150 ${
         isPreview
           ? 'glass-card rounded-[16px] p-4'
           : isDetailed
@@ -82,20 +90,20 @@ export function StrategyCard({
       }
     >
       <div className="flex gap-3">
-        <div
-          className="w-11 h-11 rounded-full shrink-0"
-          style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-          aria-hidden="true"
-        />
+        <GenericAvatar size={44} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
-              {strategy.authorHandle}
-            </span>
-            <span className="text-wave-muted" aria-hidden="true">
-              ·
-            </span>
+            {authorLabel && (
+              <>
+                <span className="font-mono text-[15px] font-semibold text-wave-text truncate">
+                  {authorLabel}
+                </span>
+                <span className="text-wave-muted" aria-hidden="true">
+                  ·
+                </span>
+              </>
+            )}
             <span className="font-sans text-[14px] text-wave-muted">
               {formatRecency(strategy.lastSwapTimestamp)}
             </span>
@@ -137,7 +145,7 @@ export function StrategyCard({
                 className="font-mono font-bold leading-none"
                 style={{ color: '#F5A623', fontSize: isPreview ? '1.5rem' : '1.75rem' }}
               >
-                —
+                -
               </span>
               <span className="font-sans text-[12px] text-wave-muted">no swaps yet</span>
             </div>

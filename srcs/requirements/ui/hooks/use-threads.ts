@@ -1,28 +1,35 @@
 'use client'
 
-// The wallet's conversations — its shipped strategies (on-chain authorships),
-// fetched via the listThreads server action once Privy resolves the address.
-// Shared by the /chat selector page and the widget's conversation sidebar.
-// Never fabricated, never a fallback to ALL strategies (that would invent
-// ownership); honest connect/loading/empty states live at the call sites.
+// The wallet's conversations — its shipped strategies (on-chain authorships).
+// Prefer the server-resolved list from /chat. Refetch only when the session
+// address does not match that payload (cookie stale / first sign-in).
 import { useEffect, useState } from 'react'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { listThreads } from '@/app/actions/threads'
 import type { Strategy } from '@/lib/data'
 
 export type ThreadsState =
-  | { phase: 'resolving' } // Privy still loading
-  | { phase: 'disconnected' } // no wallet
-  | { phase: 'loading' } // wallet known, rows fetching
+  | { phase: 'resolving' }
+  | { phase: 'disconnected' }
+  | { phase: 'loading' }
   | { phase: 'ready'; threads: Strategy[] }
 
-export function useThreads(): ThreadsState {
+export interface InitialThreads {
+  address: string
+  threads: Strategy[]
+}
+
+export function useThreads(initial?: InitialThreads): ThreadsState {
   const { sessionUser, ready } = useSessionUser()
-  const [threads, setThreads] = useState<Strategy[] | null>(null)
   const address = sessionUser?.address
+  const [threads, setThreads] = useState<Strategy[] | null>(initial?.threads ?? null)
 
   useEffect(() => {
     if (!address) return
+    if (initial && initial.address.toLowerCase() === address.toLowerCase()) {
+      setThreads(initial.threads)
+      return
+    }
     let cancelled = false
     setThreads(null)
     void listThreads(address).then((rows) => {
@@ -31,9 +38,12 @@ export function useThreads(): ThreadsState {
     return () => {
       cancelled = true
     }
-  }, [address])
+  }, [address, initial])
 
-  if (!ready) return { phase: 'resolving' }
+  if (!ready) {
+    if (initial) return { phase: 'ready', threads: initial.threads }
+    return { phase: 'resolving' }
+  }
   if (!sessionUser) return { phase: 'disconnected' }
   if (threads === null) return { phase: 'loading' }
   return { phase: 'ready', threads }

@@ -1,17 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Strategy } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
 import { useSessionUser } from '@/hooks/use-session-user'
-import { similarFeed, type SimilarMatch } from '@/app/actions/feed'
+import type { SimilarMatch } from '@/app/actions/feed'
 
 type Tab = 'foryou' | 'new'
 
 interface Props {
   ranked: Strategy[]
   unranked: Strategy[]
+  /** Server-resolved similarity. undefined = no session cookie yet. */
+  similar?: SimilarMatch[] | null
 }
 
 // Tab toggle is pure client state; the strategy arrays are server-resolved.
@@ -21,29 +23,11 @@ interface Props {
 // first, then the leaderboard tail. No wallet / nothing deployed yet → the
 // honest fallback (unranked then ranked) with a hint, never a fake ranking.
 // "New": only the unranked strategies, newest activity first.
-export function ExploreFeed({ ranked, unranked }: Props) {
+export function ExploreFeed({ ranked, unranked, similar }: Props) {
   const [tab, setTab] = useState<Tab>('foryou')
   const { sessionUser } = useSessionUser()
-  const [matches, setMatches] = useState<SimilarMatch[] | null>(null)
-  const [matchFailed, setMatchFailed] = useState(false)
+  const matches = similar ?? null
   const address = sessionUser?.address
-
-  useEffect(() => {
-    if (!address) return
-    let cancelled = false
-    setMatches(null)
-    setMatchFailed(false)
-    void similarFeed(address)
-      .then((m) => {
-        if (!cancelled) setMatches(m)
-      })
-      .catch(() => {
-        if (!cancelled) setMatchFailed(true)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [address])
 
   const matchedIds = useMemo(
     () => new Set((matches ?? []).map((m) => m.strategy.id)),
@@ -62,7 +46,6 @@ export function ExploreFeed({ ranked, unranked }: Props) {
   const showMatched = tab === 'foryou' && matches !== null && matches.length > 0
   const showHint =
     tab === 'foryou' &&
-    !matchFailed &&
     (matches === null || matches.length === 0) &&
     !!address
 
@@ -123,8 +106,8 @@ export function ExploreFeed({ ranked, unranked }: Props) {
       <section className="flex-1" aria-label="Strategy feed">
         {showHint && (
           <p className="px-4 py-3 font-sans text-[13px] text-wave-muted border-b border-wave-border">
-            For you ranks the feed by similarity to the strategies you deploy —
-            ship one and matches appear here.
+            For you ranks the feed by similarity to the strategies you deploy.
+            Ship one and matches appear here.
           </p>
         )}
         {feed.length > 0 ? (

@@ -15,19 +15,25 @@
 // status, role="log" polite transcript — all wearing the app's glass tokens
 // (.glass-card / .glass-input / .glass-fill in globals.css).
 import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
-import { Send, CheckCircle2, ChevronDown, Sparkles } from 'lucide-react'
+import { Send, CheckCircle2, ChevronDown } from 'lucide-react'
 import { useDrawer } from './drawer-context'
+import { saveToArchive } from '@/lib/chat-archive'
 import { useComposeStream, type StrategySpec } from '@/hooks/use-compose-stream'
 import { useSessionUser } from '@/hooks/use-session-user'
+import { allowsSessionApproval } from '@/lib/session'
 import { StreamNotifications } from './stream-notifications'
 import { shipStrategy, type ShipResult } from '@/app/actions/ship'
-import { useShipApproval, type ShipApproval } from '@/hooks/use-ship-approval'
+import { useShipApproval, type ShipApproval, type ApprovalKind } from '@/hooks/use-ship-approval'
 import { emitProgram, type EmitInstruction } from '@/app/actions/emit'
 import { LedgerApprovalPanel } from './ledger/ledger-approval-panel'
+import { GenericAvatar } from './generic-avatar'
 
-const LISBOA =
-  'linear-gradient(135deg, #0F3460 0%, #2A9D8F 45%, #26A69A 70%, #FFF3E0 100%)'
+// The CTA gradient — the SAME ramp the pixel-ocean backdrop renders, kept in
+// sync through the --gradient-lisboa token (globals.css) instead of a local
+// copy of the hex values.
+const LISBOA = 'var(--gradient-lisboa)'
 
 interface Message {
   id: string
@@ -84,36 +90,24 @@ const DEFAULT_MESSAGES: Message[] = [
   },
 ]
 
-/** The wave agent — gradient avatar shown on the first message of each
- *  consecutive agent run (MUI ChatMessageGroup). */
+/** The wave mark — shown on the first message of each consecutive agent run. */
 function AgentAvatar() {
   return (
-    <span
-      className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full mt-0.5"
-      style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-      aria-hidden="true"
-    >
-      <Sparkles size={13} style={{ color: '#FFF3E0' }} />
+    <span className="mt-0.5 h-6 w-6 shrink-0 overflow-hidden" aria-hidden="true">
+      <Image
+        src="/wave-logo.png"
+        alt=""
+        width={24}
+        height={24}
+        className="h-6 w-6"
+      />
     </span>
   )
 }
 
-/** Session-wallet initials chip on user messages. */
-function UserAvatar({ address }: { address?: string }) {
-  const initials = address ? address.slice(2, 4).toUpperCase() : 'ME'
-  return (
-    <span
-      className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full mt-0.5 font-mono text-[10px] font-bold"
-      style={{
-        background: 'var(--glass-fill)',
-        border: '1px solid var(--glass-hairline)',
-        color: '#2A9D8F',
-      }}
-      aria-hidden="true"
-    >
-      {initials}
-    </span>
-  )
+/** Generic person mark on user messages (no address initials). */
+function UserAvatar() {
+  return <GenericAvatar size={24} className="mt-0.5" />
 }
 
 /** Collapsible reasoning part (MUI's reasoning part) — auto-opens while the
@@ -214,7 +208,7 @@ function InlineSafetyCard({ emit }: {
       className="animate-safety-reveal rounded-[14px] p-4 text-white glass-card"
       style={{ background: 'rgba(31, 157, 107, 0.88)' }}
       role="status"
-      aria-label="Strategy compiled — deterministic bytecode verified"
+      aria-label="Strategy compiled, deterministic bytecode verified"
     >
       <p className="font-sans text-[15px] font-bold mb-3">Compiled · bytecode verified</p>
       <div className="grid grid-cols-2 gap-3">
@@ -311,7 +305,7 @@ function PostShipMessage({ result }: { result: ShipResult | null }) {
       )}
       {result.alreadyDeployed && (
         <p className="font-sans text-[12px] text-wave-muted">
-          (Already on-chain — no duplicate ship sent.)
+          (Already on-chain. No duplicate ship sent.)
         </p>
       )}
       {result.strategyId && (
@@ -367,7 +361,7 @@ function LiveSpecCard({ spec, done }: { spec: StrategySpec | null; done: boolean
   const token0 = pair?.token0
   const token1 = pair?.token1
   // Truncate 0x addresses for readability; placeholder when absent.
-  const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '—')
+  const short = (a?: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '-')
   return (
     <div
       className="rounded-[14px] p-4 glass-card"
@@ -383,12 +377,12 @@ function LiveSpecCard({ spec, done }: { spec: StrategySpec | null; done: boolean
         <div className="text-wave-muted">token1</div>
         <div className="text-wave-text truncate">{short(token1)}</div>
         <div className="text-wave-muted">size0</div>
-        <div className="text-wave-text">{size?.amount0 ?? '—'}</div>
+        <div className="text-wave-text">{size?.amount0 ?? '-'}</div>
         <div className="text-wave-muted">size1</div>
-        <div className="text-wave-text">{size?.amount1 ?? '—'}</div>
+        <div className="text-wave-text">{size?.amount1 ?? '-'}</div>
         <div className="text-wave-muted">blocks</div>
         <div className="text-wave-text">
-          {blocks.length ? blocks.map((b) => b.type).join(', ') : '—'}
+          {blocks.length ? blocks.map((b) => b.type).join(', ') : '-'}
         </div>
       </div>
     </div>
@@ -449,7 +443,7 @@ function lastUserText(messages: LiveMessage[]): string {
 function ReplayStrategyCard({ strategy }: { strategy: import('@/lib/mock-data').Strategy }) {
   const shortHash = strategy.programHash
     ? `${strategy.programHash.slice(0, 10)}…${strategy.programHash.slice(-4)}`
-    : '—'
+    : '-'
   const committed = strategy.committedCapital
     ? `${(Number(strategy.committedCapital) / 1e18).toFixed(1)} (token units)`
     : '0'
@@ -486,16 +480,23 @@ function ReplayStrategyCard({ strategy }: { strategy: import('@/lib/mock-data').
 
 export interface AgentChatProps {
   useMock?: boolean
+  /** Hug content instead of filling leftover rail height. */
+  compact?: boolean
 }
 
-export function AgentChat({ useMock = false }: AgentChatProps) {
-  const { state, consumePrefill } = useDrawer()
-  const { agentStrategy, prefill } = state
+export function AgentChat({ useMock = false, compact = false }: AgentChatProps) {
+  const { state, consumePrefill, consumeReplay } = useDrawer()
+  const { agentStrategy, prefill, replay } = state
   // The session wallet rides the ship opts as `author` — the agent attributes the
   // strategy on-chain (factory attribute) so it lands on the user's profile. No
   // wallet → unattributed ship (ZERO sentinel), never fabricated.
-  const { sessionUser } = useSessionUser()
-  const { obtainApproval, ledgerPhase, ledgerReason, ledgerDebug, resetLedger } = useShipApproval()
+  const { sessionUser, source } = useSessionUser()
+  const { obtainApproval, ledgerPhase, ledgerReason, ledgerDebug, resetLedger, refreshGate, allowedKinds } =
+    useShipApproval()
+  // Session-kind ship needs a software wallet. Ledger and local do not.
+  const kinds = allowsSessionApproval(source)
+    ? allowedKinds
+    : allowedKinds.filter((k) => k !== 'session')
 
   const [inputValue, setInputValue] = useState('')
   // The last sent intent, kept for the ship step: it is the description (the post)
@@ -523,6 +524,11 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
   const threadRef = useRef<HTMLDivElement>(null)
 
   // Live compose stream (live mode only). Mock mode replays DEFAULT_MESSAGES.
+  // Gate mode drives which confirm buttons render — resolve once on mount.
+  useEffect(() => {
+    void refreshGate()
+  }, [refreshGate])
+
   const compose = useComposeStream(LIVE_CHAT_COMPOSE_KEY)
   const [liveMessages, setLiveMessages] = useState<LiveMessage[]>(readLiveMessages)
 
@@ -535,6 +541,18 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
     }
   }, [prefill, consumePrefill])
 
+  // Archived-conversation replay (one-shot, same pattern as the prefill):
+  // the saved transcript becomes the live thread — readable history you can
+  // still continue from.
+  useEffect(() => {
+    if (replay !== undefined && replay.length > 0) {
+      setLiveMessages(replay as LiveMessage[])
+      consumeReplay()
+    } else if (replay !== undefined) {
+      consumeReplay()
+    }
+  }, [replay, consumeReplay])
+
   // Chat history is deliberately local-only: no conversation data is written
   // to the app backend, chain, or subgraph. Refreshing the page restores
   // the local draft/conversation and its last completed StrategySpec.
@@ -545,6 +563,48 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
       // Storage is optional; the live chat remains usable when unavailable.
     }
   }, [liveMessages])
+
+  // Assistant lane end-of-turn: freeze the streamed reply into the thread. The
+  // compile/spec placeholders for that turn are dropped and one agent text
+  // bubble — the exact bytes the live bubble streamed — takes their place, so
+  // the conversation persists across reloads like a compiled turn does.
+  const [assistantFrozen, setAssistantFrozen] = useState(false)
+  // Only freeze a turn THIS mount actually streamed: restored compose state
+  // (reload/fast-refresh) also carries mode='assistant' + a non-empty reply,
+  // and freezing those again would append the same reply a second time.
+  const sawStreamRef = useRef(false)
+  useEffect(() => {
+    if (compose.isStreaming) {
+      sawStreamRef.current = true
+      setAssistantFrozen(false)
+      return
+    }
+    if (!sawStreamRef.current) return
+    if (useMock || assistantFrozen || compose.mode !== 'assistant') return
+    if (!compose.reply && !compose.error) return
+    setAssistantFrozen(true)
+    setLiveMessages((prev) => {
+      const kept = [...prev]
+      while (kept.length > 0) {
+        const last = kept[kept.length - 1]
+        const pending =
+          last.id.startsWith('a-compile-') || (last.id.startsWith('a-spec-') && !last.spec)
+        if (!pending) break
+        kept.pop()
+      }
+      // Idempotent: StrictMode double-run or a re-entered effect must not
+      // append the same reply twice.
+      if (compose.reply && kept[kept.length - 1]?.content !== compose.reply) {
+        kept.push({
+          id: `a-reply-${Date.now()}`,
+          role: 'agent',
+          kind: 'text',
+          content: compose.reply,
+        })
+      }
+      return kept
+    })
+  }, [useMock, assistantFrozen, compose.isStreaming, compose.mode, compose.reply, compose.error])
 
   // When the spec finalizes, run the deterministic compiler (emitProgram action) to surface
   // the REAL programHash + emitted-byte count + applied rules in the safety card. A NEW
@@ -654,16 +714,20 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
   // the first click arms (shipConfirming), the second click fires the agent shipStrategy
   // action. The approval (Ledger device or session wallet) is obtained inside the
   // confirming click — the WebHID gesture requirement.
-  const handleShip = async () => {
-    // Stage 1 — arm the confirm gate (the destructive-op HITL approval).
-    if (!shipConfirming) {
-      setShipConfirming(true)
-      setShipResult(null)
-      resetLedger()
-      return
-    }
-    // Stage 2 — confirmed. Forward the finalized spec to the agent; the agent re-derives
-    // bytes/hashes, so nothing client-supplied can misreport the on-chain program.
+  /** Stage 1 — arm the confirm gate (the destructive-op HITL approval). */
+  const armShip = () => {
+    setShipConfirming(true)
+    setShipResult(null)
+    resetLedger()
+  }
+
+  /**
+   * Stage 2 — confirmed AS THE CHOSEN IDENTITY. kind picks who this strategy
+   * is from: 'device' → the Ledger authors it (the pool account); 'session'
+   * → the connected wallet. The agent verifies the signature against the
+   * kind's pinned address and attributes authorship to the same identity.
+   */
+  const confirmShip = async (kind: ApprovalKind) => {
     const spec = compose.spec
     if (!spec) {
       setShipConfirming(false)
@@ -699,9 +763,10 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
         },
         description ?? '',
         sessionUser?.address,
+        kind,
       )
       if (!approval.ok) {
-        setShipResult({ ok: false, reason: approval.reason ?? 'Approval not granted — nothing was shipped.' })
+        setShipResult({ ok: false, reason: approval.reason ?? 'Approval not granted. Nothing was shipped.' })
         return
       }
       shipOpts.approval = approval.approval
@@ -726,16 +791,21 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
       setShipResult(result)
       if (result.ok) {
         setShipped(true)
-        // Persist the COMPLETED conversation for look-back: the terminal
-        // thread embeds the final spec and the real receipt, so reloading the
-        // chat shows the full exchange with live data — never empty cards.
-        // Only the STREAM draft key is cleared (a reload must not resurrect
-        // a zombie compose state); the messages key is rewritten, not removed.
+        // Persist the COMPLETED conversation for look-back: this turn's spec
+        // + the real receipt are appended to the thread (the user message and
+        // any earlier Q&A stay), so reloading shows the full exchange with
+        // live data — never empty cards. Only the STREAM draft key is cleared
+        // (a reload must not resurrect a zombie compose state); the messages
+        // key is rewritten, not removed.
+        const stamp = Date.now()
         const finalThread: LiveMessage[] = [
-          { id: `u-ship-${Date.now()}`, role: 'user', kind: 'text', content: description || lastUserText(liveMessages) },
-          { id: `a-compile-${Date.now()}`, role: 'agent', kind: 'text', content: 'Compiling…' },
-          { id: `a-spec-${Date.now()}`, role: 'agent', kind: 'spec', spec },
-          { id: `a-ship-${Date.now()}`, role: 'agent', kind: 'ship', receipt: result },
+          ...liveMessages.filter((m) => {
+            if (m.id.startsWith('a-compile-')) return false
+            if (m.id.startsWith('a-spec-')) return false // superseded by the terminal spec below
+            return true
+          }),
+          { id: `a-spec-${stamp}`, role: 'agent', kind: 'spec', spec },
+          { id: `a-ship-${stamp}`, role: 'agent', kind: 'ship', receipt: result },
         ]
         setLiveMessages(finalThread)
         try {
@@ -744,6 +814,9 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
         } catch {
           // Storage optional.
         }
+        // Archive the finished conversation — the transcript with its receipt
+        // outlives the next overwrite and is exportable from /chat.
+        saveToArchive(finalThread, description || undefined)
       }
     } catch (err) {
       setShipResult({ ok: false, reason: String(err).slice(0, 200) })
@@ -762,10 +835,20 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
     // a no-op (the input is decorative in the mock). Live mode: drive the real
     // compose stream — the agent parses the intent to a bounded StrategySpec.
     if (useMock || intent.length === 0) return
-    setLiveMessages([
+    // Append the turn — don't replace the thread. Assistant Q&A and previously
+    // compiled/received cards stay as readable history across turns and reloads.
+    // Only superseded placeholders are pruned: an unfinished turn's compiling/
+    // spec stubs, and any spec card without a persisted spec (its content lives
+    // in compose state that this new stream is about to overwrite).
+    setLiveMessages((prev) => [
+      ...prev.filter((m) => {
+        if (m.id.startsWith('a-compile-')) return false
+        if (m.id.startsWith('a-spec-')) return Boolean(m.spec)
+        return true
+      }),
       { id: `u-${Date.now()}`, role: 'user', kind: 'text', content: intent },
-      { id: `a-compile-${Date.now()}`, role: 'agent', kind: 'text', content: 'Compiling…' },
-      { id: `a-spec-${Date.now()}`, role: 'agent', kind: 'spec' },
+      { id: `a-compile-${Date.now() + 1}`, role: 'agent', kind: 'text', content: 'Compiling…' },
+      { id: `a-spec-${Date.now() + 2}`, role: 'agent', kind: 'spec' },
     ])
     void compose.compose(intent)
   }
@@ -782,12 +865,23 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
   const grouped = (list: Array<{ role?: string }>, i: number, role: 'agent' | 'user') =>
     list[i]?.role === role && list[i - 1]?.role !== role
 
+  // A ship receipt suppresses the ship CTA only while it is still the latest
+  // turn — a NEW user message re-arms the CTA for whatever compiles next (the
+  // old receipt stays above as read-only history).
+  const lastUserIdx = (() => {
+    for (let i = liveMessages.length - 1; i >= 0; i--) {
+      if (liveMessages[i]?.role === 'user') return i
+    }
+    return -1
+  })()
+  const shipBlocksCta = liveMessages.some((m, i) => m.kind === 'ship' && i > lastUserIdx)
+
   return (
     <div
-      className="flex flex-col flex-1 min-h-0"
+      className={`flex min-h-0 flex-col ${compact ? '' : 'flex-1'}`}
       aria-label="wave agent chat"
     >
-      <div className="px-3 pt-3 shrink-0">
+      <div className={`shrink-0 px-3 ${compact ? 'pt-2' : 'pt-3'}`}>
         <StreamNotifications enabled={!useMock} />
       </div>
 
@@ -795,7 +889,9 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
           start/end once, not per token. */}
       <div
         ref={threadRef}
-        className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2.5"
+        className={`flex flex-col gap-2.5 overflow-y-auto ${
+          compact ? 'max-h-[220px] px-3 py-2' : 'flex-1 px-4 py-4'
+        }`}
         role="log"
         aria-live="polite"
         aria-label="Conversation"
@@ -811,7 +907,7 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
           if (msg.type === 'safety-card') {
             return (
               <div key={msg.id} className={`flex gap-2.5 max-w-[85%] ${isAgent ? 'self-start' : 'self-end'}`}>
-                {firstOfGroup ? <AgentAvatar /> : <span className="w-7 shrink-0" aria-hidden="true" />}
+                {firstOfGroup ? <AgentAvatar /> : <span className="w-6 shrink-0" aria-hidden="true" />}
                 <div className="flex flex-col min-w-0">
                   {/* Replay of a real strategy → its REAL on-chain row; the mock
                       demo keeps the (by-design canned) placeholder card. */}
@@ -830,17 +926,17 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
 
           if (msg.type === 'ship-button') {
             return (
-              <div key={msg.id} className="w-full pl-9.5" style={{ paddingLeft: 40 }}>
+              <div key={msg.id} className="w-full" style={{ paddingLeft: 34 }}>
                 {shipped ? (
                   <PostShipMessage result={null} />
                 ) : (
                   <button
-                    onClick={handleShip}
-                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
-                    style={{ background: LISBOA, minHeight: '52px' }}
+                    onClick={() => (shipConfirming ? setShipConfirming(false) : armShip())}
+                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] hover:shadow-[0_6px_20px_rgba(42,157,143,0.35)] active:scale-[0.995]"
+                    style={{ background: shipConfirming ? '#E5484D' : LISBOA, minHeight: '52px' }}
                     aria-label="Confirm and ship strategy on-chain"
                   >
-                    Ship on-chain
+                    {shipConfirming ? 'Confirm: ship on-chain' : 'Ship on-chain'}
                   </button>
                 )}
               </div>
@@ -853,13 +949,13 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
               className={`flex gap-2.5 max-w-[85%] ${isAgent ? 'self-start' : 'self-end flex-row-reverse'}`}
             >
               {firstOfGroup ? (
-                isAgent ? <AgentAvatar /> : <UserAvatar address={sessionUser?.address} />
+                isAgent ? <AgentAvatar /> : <UserAvatar />
               ) : (
-                <span className="w-7 shrink-0" aria-hidden="true" />
+                <span className="w-6 shrink-0" aria-hidden="true" />
               )}
               <div className="flex flex-col min-w-0">
                 <div
-                  className={`px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed ${
+                  className={`px-3 py-2 font-sans text-[12px] text-wave-text leading-snug ${
                     isAgent ? 'glass-card rounded-[14px]' : 'rounded-[14px]'
                   }`}
                   style={
@@ -893,11 +989,12 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
           <div className="flex gap-2.5 self-start">
             <AgentAvatar />
             <div
-              className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed glass-card"
-              style={{ borderRadius: '4px 14px 14px 14px' }}
+              className="px-3 py-2 font-sans text-[12px] text-wave-text leading-snug glass-card"
+              style={{ borderRadius: '4px 12px 12px 12px' }}
             >
-              Describe your trading strategy in plain English. I&apos;ll compile
-              it to a bounded spec, check it for safety, and ship it on-chain.
+              Ask me anything about wave and market making — or describe a
+              strategy in plain English and I&apos;ll compile it to a bounded
+              spec, check it for safety, and ship it on-chain.
             </div>
           </div>
         )}
@@ -909,14 +1006,30 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
           // not a frozen word inside a bubble.
           const isCompileBubble = isAgent && msg.kind === 'text' && msg.id.startsWith('a-compile-')
           if (isCompileBubble) {
+            // Assistant lane: the streamed text IS the answer — render it live as a
+            // bubble (the `mode` frame precedes any text, so the lane is known from
+            // the first token). Strategy lane keeps the reasoning "Compiling…" block.
+            const assistantLive = compose.isStreaming && compose.mode === 'assistant'
             return (
               <div key={msg.id} className="flex gap-2.5 self-start w-[85%]">
-                {firstOfGroup ? <AgentAvatar /> : <span className="w-7 shrink-0" aria-hidden="true" />}
+                {firstOfGroup ? <AgentAvatar /> : <span className="w-6 shrink-0" aria-hidden="true" />}
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
-                  {compose.isStreaming && compose.progress ? (
+                  {assistantLive ? (
+                    compose.reply ? (
+                      <div
+                        className="px-3 py-2 font-sans text-[12px] text-wave-text leading-snug glass-card w-fit max-w-full whitespace-pre-wrap"
+                        style={{ borderRadius: '4px 14px 14px 14px' }}
+                        aria-live="polite"
+                      >
+                        {compose.reply}
+                      </div>
+                    ) : (
+                      <ThinkingBlock progress="" streaming />
+                    )
+                  ) : compose.isStreaming && compose.progress ? (
                     <ThinkingBlock progress={compose.progress} streaming />
                   ) : null}
-                  {!compose.isStreaming && (
+                  {!compose.isStreaming && compose.mode !== 'assistant' && (
                     <StepSeparator label="compiling" />
                   )}
                 </div>
@@ -924,13 +1037,17 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
             )
           }
           if (msg.kind === 'spec') {
+            // Assistant turn: no form card — drop the pending placeholder (the
+            // freeze effect removes it from the thread once the reply lands).
+            // Persisted look-back specs (msg.spec) always render.
+            if (compose.mode === 'assistant' && !msg.spec) return null
             // Look-back: the terminal spec message carries the final spec
             // (persisted), so the card renders REAL data even after the
             // stream state is gone — never placeholder dashes.
             const specForCard = msg.spec ?? compose.partial ?? compose.spec
             return (
               <div key={msg.id} className="flex gap-2.5 self-start w-[85%]">
-                <span className="w-7 shrink-0" aria-hidden="true" />
+                <span className="w-6 shrink-0" aria-hidden="true" />
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
                   <LiveSpecCard spec={specForCard} done={!!compose.spec || !!msg.spec} />
                   {compose.isStreaming && (
@@ -945,7 +1062,7 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
           if (msg.kind === 'ship' && msg.receipt) {
             return (
               <div key={msg.id} className="flex gap-2.5 self-start w-[85%]">
-                <span className="w-7 shrink-0" aria-hidden="true" />
+                <span className="w-6 shrink-0" aria-hidden="true" />
                 <div className="flex flex-col gap-1 min-w-0 flex-1 glass-card rounded-[14px] px-4 py-3" style={{ borderRadius: '4px 14px 14px 14px' }}>
                   <p className="font-sans text-[13px] font-semibold text-wave-text">
                     Live on-chain
@@ -961,12 +1078,12 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
               className={`flex gap-2.5 max-w-[85%] ${isAgent ? 'self-start' : 'self-end flex-row-reverse'}`}
             >
               {firstOfGroup ? (
-                isAgent ? <AgentAvatar /> : <UserAvatar address={sessionUser?.address} />
+                isAgent ? <AgentAvatar /> : <UserAvatar />
               ) : (
-                <span className="w-7 shrink-0" aria-hidden="true" />
+                <span className="w-6 shrink-0" aria-hidden="true" />
               )}
               <div
-                className={`px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed ${
+                className={`px-3 py-2 font-sans text-[12px] text-wave-text leading-snug ${
                   isAgent ? 'glass-card' : ''
                 }`}
                 style={
@@ -990,10 +1107,10 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
             compiled spec IS the form the agent filled; ship is the demo beat).
             Suppressed once a terminal ship message exists — the persisted
             receipt takes over (no duplicate ship card on look-back). */}
-        {!useMock && compose.spec && !liveMessages.some((m) => m.kind === 'ship') && (
+        {!useMock && compose.spec && !shipBlocksCta && (
           <>
             <div className="flex gap-2.5 self-start w-[85%]">
-              <span className="w-7 shrink-0" aria-hidden="true" />
+              <span className="w-6 shrink-0" aria-hidden="true" />
               <div className="flex flex-col gap-2 min-w-0 flex-1">
                 <InlineSafetyCard emit={emit} />
               </div>
@@ -1003,7 +1120,7 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
                 {compose.error}
               </p>
             ) : (
-              <div className="w-full flex flex-col gap-2" style={{ paddingLeft: 40 }}>
+              <div className="w-full flex flex-col gap-2" style={{ paddingLeft: 34 }}>
                 {shipped ? (
                   <PostShipMessage result={shipResult} />
                 ) : shipPending ? (
@@ -1019,19 +1136,53 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
                     />
                     Shipping on Sepolia…
                   </div>
+                ) : shipConfirming ? (
+                  kinds.includes('device') && kinds.includes('session') ? (
+                    <>
+                      <button
+                        onClick={() => void confirmShip('device')}
+                        className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] hover:shadow-[0_6px_20px_rgba(42,157,143,0.35)] active:scale-[0.995]"
+                        style={{ background: LISBOA, minHeight: '52px' }}
+                        aria-label="Confirm: ship on-chain as the Ledger device (destructive)"
+                      >
+                        Confirm: Ledger device
+                      </button>
+                      <button
+                        onClick={() => void confirmShip('session')}
+                        className="glass-btn w-full py-3.5 font-sans text-[15px] font-semibold text-wave-text rounded-[10px] transition-all duration-[220ms]"
+                        style={{ minHeight: '52px' }}
+                        aria-label="Confirm: ship on-chain as your connected wallet (destructive)"
+                      >
+                        Confirm: connected wallet
+                      </button>
+                    </>
+                  ) : kinds.includes('device') ? (
+                    <button
+                      onClick={() => void confirmShip('device')}
+                      className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] hover:shadow-[0_6px_20px_rgba(42,157,143,0.35)] active:scale-[0.995]"
+                      style={{ background: LISBOA, minHeight: '52px' }}
+                      aria-label="Confirm: ship on-chain with the Ledger device (destructive)"
+                    >
+                      Confirm: ship on-chain (Ledger)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => void confirmShip('session')}
+                      className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] hover:shadow-[0_6px_20px_rgba(42,157,143,0.35)] active:scale-[0.995]"
+                      style={{ background: LISBOA, minHeight: '52px' }}
+                      aria-label="Confirm: ship on-chain with your connected wallet (destructive)"
+                    >
+                      Confirm: ship on-chain (wallet)
+                    </button>
+                  )
                 ) : (
                   <button
-                    onClick={handleShip}
-                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] active:scale-[0.995]"
-                    style={{
-                      background: shipConfirming ? '#E5484D' : LISBOA,
-                      minHeight: '52px',
-                    }}
-                    aria-label={
-                      shipConfirming ? 'Confirm: ship strategy on-chain (destructive)' : 'Ship strategy on-chain'
-                    }
+                    onClick={armShip}
+                    className="w-full py-3.5 font-sans text-[15px] font-semibold text-white rounded-[10px] transition-all duration-[220ms] hover:brightness-110 hover:scale-[1.005] hover:shadow-[0_6px_20px_rgba(42,157,143,0.35)] active:scale-[0.995]"
+                    style={{ background: LISBOA, minHeight: '52px' }}
+                    aria-label="Ship strategy on-chain"
                   >
-                    {shipConfirming ? 'Confirm — ship on-chain (cannot be undone)' : 'Ship on-chain'}
+                    Ship on-chain
                   </button>
                 )}
                 {shipResult && !shipResult.ok && shipResult.reason && (
@@ -1056,10 +1207,10 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
             where the compose stream owns the thread). */}
         {useMock && !agentStrategy && (
           <div className="flex gap-2.5 self-start">
-            <span className="w-7 shrink-0" aria-hidden="true" />
+            <span className="w-6 shrink-0" aria-hidden="true" />
             <div className="flex flex-col min-w-0">
               <div
-                className="px-4 py-3 font-sans text-[14px] text-wave-text leading-relaxed glass-card"
+                className="px-3 py-2 font-sans text-[12px] text-wave-text leading-snug glass-card"
                 style={{ borderRadius: '4px 14px 14px 14px' }}
               >
                 {"This strategy's oracle has been stale for 4h. I want to pause execution. Approve?"}
@@ -1081,7 +1232,7 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
       )}
 
       {/* Input — glass pill */}
-      <div className="shrink-0 px-3 py-3" style={{ borderTop: '1px solid var(--glass-hairline)' }}>
+      <div className={`shrink-0 px-3 ${compact ? 'py-2' : 'py-3'}`} style={{ borderTop: '1px solid var(--glass-hairline)' }}>
         <form
           onSubmit={handleSend}
           className="flex items-center gap-1 rounded-[12px] pl-4 pr-1.5 py-1.5 glass-input"
@@ -1091,13 +1242,13 @@ export function AgentChat({ useMock = false }: AgentChatProps) {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="describe your strategy..."
-            className="flex-1 min-w-0 font-sans text-[14px] bg-transparent outline-none placeholder:text-wave-muted placeholder:italic text-wave-text"
+            placeholder="ask anything, or describe a strategy..."
+            className="flex-1 min-w-0 font-sans text-[12px] bg-transparent outline-none placeholder:text-wave-muted placeholder:italic text-wave-text"
             aria-label="Strategy description input"
           />
           <button
             type="submit"
-            className="w-9 h-9 flex items-center justify-center text-white rounded-[9px] transition-all duration-150 hover:brightness-110 shrink-0"
+            className="w-9 h-9 flex items-center justify-center text-white rounded-[9px] transition-all duration-150 hover:brightness-110 hover:scale-[1.06] hover:shadow-[0_4px_14px_rgba(42,157,143,0.4)] shrink-0"
             style={{ background: LISBOA }}
             aria-label="Send message"
           >

@@ -1,12 +1,15 @@
 'use client'
 
-// useShipApproval — the shared approval leg of the two-click ship, for BOTH
-// surfaces (compose page + create drawer). Returns the approval object the
-// agent verifies, or a terminal state the caller surfaces honestly.
+// useShipApproval — the shared approval leg of the two-click ship. The CALLER
+// picks the identity per ship (the approval kind), the gate mode says which
+// kinds are allowed:
 //
-//   device mode  → the Ledger Clear-Signs the hash-bound message (DMK)
-//   session mode → the Privy session wallet personal_signs the same message
-//   off          → null immediately (pre-gate behavior)
+//   device  → the Ledger Clear-Signs the hash-bound message (DMK); the
+//              strategy is AUTHORED by the device — the Ledger is the pool
+//              account, not a delegation from the session wallet
+//   session → the connected wallet personal_signs the same message
+//   both    → either, chosen at the confirm click (the prod default)
+//   off     → null immediately (kill-switch, pre-gate behavior)
 //
 // The message binds sha256(canonicalJson(spec)) — a signature for one
 // strategy never unlocks another.
@@ -16,8 +19,11 @@ import { useLedgerApproval, type LedgerPhase } from '@/hooks/use-ledger-approval
 import { approvalGateConfig } from '@/app/actions/ship'
 import { actionHashOf, approvalMessage } from '@/lib/ledger'
 
+export type GateMode = 'off' | 'session' | 'device' | 'both'
+export type ApprovalKind = 'device' | 'session'
+
 export type ShipApproval =
-  | { kind: 'device' | 'session'; address: string; message: string; signature: string }
+  | { kind: ApprovalKind; address: string; message: string; signature: string }
   | undefined
 
 export interface ObtainApprovalResult {
@@ -29,10 +35,18 @@ export interface ObtainApprovalResult {
   debug?: string
 }
 
+/** Which identity kinds the gate mode allows. */
+function allowedKinds(mode: GateMode): ApprovalKind[] {
+  if (mode === 'both') return ['device', 'session']
+  if (mode === 'device') return ['device']
+  if (mode === 'session') return ['session']
+  return []
+}
+
 export function useShipApproval() {
   const ledger = useLedgerApproval()
   const { wallets } = useWallets()
-  const [gateMode, setGateMode] = useState<'off' | 'session' | 'device'>('off')
+  const [gateMode, setGateMode] = useState<GateMode>('off')
 
   const refreshGate = useCallback(async () => {
     const cfg = await approvalGateConfig()
@@ -41,32 +55,40 @@ export function useShipApproval() {
   }, [])
 
   /**
-   * Obtain the approval for this exact spec. MUST be called inside the
-   * ship-confirm click handler (WebHID gesture requirement in device mode).
+   * Obtain the approval for this exact spec, as the CHOSEN identity. MUST be
+   * called inside the ship-confirm click handler (WebHID gesture requirement
+   * for the device kind).
    */
   const obtainApproval = useCallback(
     async (
       spec: unknown,
       description: string,
       sessionAddress: string | undefined,
+      kind: ApprovalKind,
     ): Promise<ObtainApprovalResult> => {
       const gate = await refreshGate()
       if (gate.mode === 'off') return { ok: true } // no approval needed
+      if (!allowedKinds(gate.mode).includes(kind)) {
+        return {
+          ok: false,
+          reason: `This deployment does not accept ${kind}-kind approvals (LEDGER_GATE=${gate.mode}).`,
+        }
+      }
       const message = approvalMessage(await actionHashOf(spec), description)
 
-      if (gate.mode === 'device') {
+      if (kind === 'device') {
         const res = await ledger.requestApproval({ message, expectedAddress: gate.approverAddress })
         if (res.status === 'rejected') {
           return {
             ok: false,
-            reason: res.reason ?? 'Cancelled on device — nothing was shipped.',
+            reason: res.reason ?? 'Cancelled on device. Nothing was shipped.',
             debug: res.debug,
           }
         }
         if (res.status === 'error' || !res.address || !res.signature) {
           return {
             ok: false,
-            reason: res.reason ?? 'Ledger approval failed — nothing was shipped.',
+            reason: res.reason ?? 'Ledger approval failed. Nothing was shipped.',
             debug: res.debug,
           }
         }
@@ -76,7 +98,7 @@ export function useShipApproval() {
         }
       }
 
-      // session mode — the connected wallet signs the same message
+      // session kind — the connected wallet signs the same message
       if (!sessionAddress) {
         return { ok: false, reason: 'Connect your wallet to approve the ship.' }
       }
@@ -108,6 +130,8 @@ export function useShipApproval() {
 
   return {
     gateMode,
+    refreshGate,
+    allowedKinds: allowedKinds(gateMode),
     obtainApproval,
     ledgerPhase: ledger.phase,
     ledgerReason: ledger.reason,

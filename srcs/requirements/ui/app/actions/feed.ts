@@ -7,6 +7,7 @@
 // action boundary — the client doesn't re-derive anything.
 import { getSimilarFeed } from '@/lib/data'
 import type { Strategy } from '@/lib/data'
+import { feedPulseSig } from '@/lib/feed-pulse'
 
 export interface SimilarMatch {
   strategy: Strategy
@@ -16,4 +17,11 @@ export interface SimilarMatch {
 
 export async function similarFeed(address: string): Promise<SimilarMatch[] | null> {
   return getSimilarFeed(address)
+}
+
+// The explore banner's poll — returns the live feed signature (lib/feed-pulse).
+// Read-only; cookies ride along so the pulse follows the same network the
+// page rendered with.
+export async function feedPulse(): Promise<string> {
+  return feedPulseSig()
 }

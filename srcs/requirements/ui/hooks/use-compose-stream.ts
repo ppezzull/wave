@@ -1,16 +1,20 @@
 'use client'
 
-// useComposeStream — drive the create-drawer's "watch the AI fill the form" beat.
+// useComposeStream — drive the create-drawer's chat lanes.
 //
-// POSTs the user's natural-language intent to /api/compile (which proxies the
-// wave compose agent's Mastra stream), then reads the SSE response with a manual
-// reader (EventSource is GET-only; /api/compile is POST). Parses each chunk per
+// POSTs the user's message to /api/compile (which proxies the agent's intent-
+// routed /stream/chat), then reads the SSE response with a manual reader
+// (EventSource is GET-only; /api/compile is POST). Parses each chunk per
 // Mastra's ChunkType shapes (mastra.ai/reference/streaming/ChunkType):
+//   - "mode"       → the lane the agent routed this turn into ("assistant" |
+//                    "strategy") — arrives before any lane content.
 //   - "object"     → progressive partial StrategySpec (top-level `object` field);
 //                    each successive one is more complete. The last is validated.
-//   - "text-delta" → reasoning prose (payload.text) — shown as "Compiling…".
+//   - "object-result" → the final validated StrategySpec.
+//   - "text-delta" → strategy lane: reasoning prose ("Compiling…"). assistant
+//                    lane: the answer itself — accumulated into `reply`.
 //   - "error"      → failure (payload.error).
-//   - "finish"     → terminal; the most-recent `object` chunk is the final spec.
+//   - "finish"     → terminal; strategy lane promotes the last `object` to spec.
 //
 // The parser tolerates BOTH standard SSE framing (`data: {...}\n\n`) and bare
 // newline-delimited JSON, so it survives either transport Mastra may use.
@@ -24,13 +28,19 @@ export interface StrategySpec {
   [k: string]: unknown
 }
 
+export type ComposeLane = 'assistant' | 'strategy'
+
 export interface ComposeStreamState {
   /** Most-recent partial StrategySpec (null until the first `object` chunk). */
   partial: StrategySpec | null
-  /** Final validated StrategySpec (null until the stream completes cleanly). */
+  /** Final validated StrategySpec (strategy lane only, clean finish). */
   spec: StrategySpec | null
   /** Latest reasoning/progress text for "Compiling…" affordances. */
   progress: string
+  /** Assistant-lane answer (mode === 'assistant'); accumulates like progress. */
+  reply: string
+  /** Lane the agent routed this turn into (null until the `mode` frame). */
+  mode: ComposeLane | null
   /** Error message if the stream failed; null otherwise. */
   error: string | null
   /** True while a stream is in flight. */
@@ -41,6 +51,8 @@ const EMPTY_STATE: ComposeStreamState = {
   partial: null,
   spec: null,
   progress: '',
+  reply: '',
+  mode: null,
   error: null,
   isStreaming: false,
 }
@@ -48,7 +60,7 @@ const EMPTY_STATE: ComposeStreamState = {
 type Frame = {
   type: string
   object?: StrategySpec
-  payload?: { text?: string; error?: unknown; [key: string]: unknown }
+  payload?: { text?: string; error?: unknown; mode?: string; [key: string]: unknown }
 }
 
 const LOG = '[wave:compose]'
@@ -81,6 +93,11 @@ function readStoredState(storageKey?: string): ComposeStreamState {
       partial: value.partial && typeof value.partial === 'object' ? value.partial : null,
       spec: value.spec && typeof value.spec === 'object' ? value.spec : null,
       progress: typeof value.progress === 'string' ? value.progress : '',
+      reply: typeof value.reply === 'string' ? value.reply : '',
+      mode:
+        value.mode === 'assistant' || value.mode === 'strategy'
+          ? (value.mode as ComposeLane)
+          : null,
       error: typeof value.error === 'string' ? value.error : null,
       // A page reload aborts a fetch; never revive an orphaned stream as active.
       isStreaming: false,
@@ -135,6 +152,10 @@ export function useComposeStream(storageKey?: string) {
   // successive objects; the final one is the validated StrategySpec).
   const lastObject = useRef<StrategySpec | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Lane + assistant reply, mirrored to refs so the text-delta handler and the
+  // completion block read current values (state updates lag the SSE loop).
+  const modeRef = useRef<ComposeLane | null>(null)
+  const replyRef = useRef('')
 
   useEffect(() => {
     if (!storageKey || state.isStreaming) return
@@ -151,6 +172,8 @@ export function useComposeStream(storageKey?: string) {
   const compose = useCallback(async (intent: string, scope?: { resource: string; thread: string }) => {
     // Reset for a fresh turn.
     lastObject.current = null
+    modeRef.current = null
+    replyRef.current = ''
     const t0 = Date.now()
     const counts: Record<string, number> = {}
     const bump = (type: string) => {
@@ -233,6 +256,15 @@ export function useComposeStream(storageKey?: string) {
           bump(frame.type)
 
           switch (frame.type) {
+            case 'mode': {
+              // The router's lane verdict — arrives before any lane content, so
+              // the UI can render the right affordance from the first token.
+              if (frame.payload?.mode === 'assistant' || frame.payload?.mode === 'strategy') {
+                modeRef.current = frame.payload.mode
+                setState((s) => ({ ...s, mode: frame.payload!.mode as ComposeLane }))
+              }
+              break
+            }
             case 'object':
             case 'object-result':
               // Progressive partials are `object`; the final validated StrategySpec
@@ -249,7 +281,14 @@ export function useComposeStream(storageKey?: string) {
               break
             case 'text-delta':
               if (typeof frame.payload?.text === 'string') {
-                setState((s) => ({ ...s, progress: s.progress + frame.payload!.text }))
+                // Assistant lane: the text IS the answer. Strategy lane: it's
+                // reasoning prose for the "Compiling…" affordance.
+                if (modeRef.current === 'assistant') replyRef.current += frame.payload.text
+                setState((s) => ({
+                  ...s,
+                  progress: s.progress + frame.payload!.text,
+                  reply: modeRef.current === 'assistant' ? s.reply + frame.payload!.text : s.reply,
+                }))
               }
               break
             case 'error': {
@@ -280,18 +319,24 @@ export function useComposeStream(storageKey?: string) {
           }
         }
       }
-      // Stream ended (finish or clean close). Promote the last object to spec.
-      const finalSpec = streamError ? null : lastObject.current
+      // Stream ended (finish or clean close). Strategy lane promotes the last
+      // object to spec; assistant lane exposes the accumulated reply instead.
+      const lane = modeRef.current
+      const isAssistant = lane === 'assistant'
+      const finalSpec = streamError || isAssistant ? null : lastObject.current
+      const reply = isAssistant && !streamError ? replyRef.current : ''
       console.info(LOG, 'client done', {
         ms: Date.now() - t0,
         counts,
+        lane,
         objectChunks: counts.object ?? 0,
         objectResult: counts['object-result'] ?? 0,
         hasSpec: Boolean(finalSpec),
         spec: summarizeSpec(finalSpec),
+        replyChars: reply.length,
         error: streamError,
       })
-      if (!streamError && !finalSpec) {
+      if (!streamError && !finalSpec && !isAssistant) {
         console.warn(
           LOG,
           'stream finished with no object/object-result — form will stay empty (structuredOutput missing or LLM derailed)',
@@ -302,6 +347,7 @@ export function useComposeStream(storageKey?: string) {
         partial: streamError ? null : s.partial,
         isStreaming: false,
         spec: finalSpec,
+        reply,
       }))
     } catch (err) {
       if (ctrl.signal.aborted) {

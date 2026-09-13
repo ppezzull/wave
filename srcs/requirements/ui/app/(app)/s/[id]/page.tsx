@@ -9,7 +9,7 @@ import { HashVerify } from '@/components/hash-verify'
 import { RetuneHistory } from '@/components/retune-history'
 import { StreamNotifications } from '@/components/stream-notifications'
 import { SwapHistory } from '@/components/swap-history'
-import { DetailPanelsSkeleton, PanelSkeleton } from '@/components/skeleton'
+import { MicroSkeleton } from '@/components/skeleton'
 
 export const dynamic = 'force-dynamic'
 export const dynamicParams = true
@@ -97,10 +97,10 @@ export default async function StrategyDetailPage({ params }: Props) {
 
           {/* Streaming sections: shells above render instantly; these fill as
               their server data resolves (micro-SSR per data section). */}
-          <Suspense fallback={<DetailPanelsSkeleton />}>
+          <Suspense fallback={<MicroSkeleton label="Verifying on-chain" className="py-6" />}>
             <DerivedPanels id={id} />
           </Suspense>
-          <Suspense fallback={<PanelSkeleton lines={3} label="Loading swaps" />}>
+          <Suspense fallback={<MicroSkeleton label="Loading swaps" className="py-6" />}>
             <SwapsSection id={id} />
           </Suspense>
 

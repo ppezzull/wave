@@ -1,19 +1,21 @@
 'use client'
 
-// CreateDrawer — the chat WINDOW (the only chat surface): right-docked by
-// default, draggable + resizable on desktop, docked sheet on mobile, minimize
-// pill. All conversation logic lives in components/agent-chat.tsx; this file
-// is the glassy chrome plus the collapsible conversation sidebar (MUI
-// x-chat's features.conversationList, wave-styled): the wallet's shipped
-// strategies as threads, one click to replay one.
-import { useState, useEffect, useRef, useCallback } from 'react'
-import Image from 'next/image'
-import { X, Minus, GripHorizontal, MessageSquare, PanelLeftClose, PanelLeft } from 'lucide-react'
+// CreateDrawer — the chat WINDOW (the only chat surface): a floating
+// bottom-right-docked window at every desktop size (draggable + resizable),
+// a full-width docked sheet on mobile, minimize pill. All conversation logic
+// lives in components/agent-chat.tsx; this file is the glassy chrome plus the
+// collapsible conversation sidebar (MUI x-chat's features.conversationList,
+// wave-styled): the wallet's shipped strategies as threads, one click to
+// replay one.
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { X, Minus, Bookmark, GripHorizontal, MessageSquare, PanelLeftClose, PanelLeft } from 'lucide-react'
 import { useDrawer } from './drawer-context'
-import { AgentChat } from './agent-chat'
+import { AgentChat, LIVE_CHAT_MESSAGES_KEY } from './agent-chat'
+import { saveToArchive, type ArchiveMessage } from '@/lib/chat-archive'
 import { ThreadRow } from './thread-row'
 import { useThreads } from '@/hooks/use-threads'
 import { ConnectButton } from './connect-button'
+import { MicroSkeleton } from '@/components/skeleton'
 
 // Desktop window defaults + constraints
 const DEFAULT_W = 560
@@ -48,9 +50,7 @@ function ConversationPane({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex-1 overflow-y-auto" role="listbox" aria-label="Your strategy threads">
         {threads.phase === 'resolving' || threads.phase === 'loading' ? (
-          <p className="px-3 py-3 font-sans text-[12px] text-wave-muted">
-            Loading your threads…
-          </p>
+          <MicroSkeleton label="Loading threads" className="px-3 py-4" />
         ) : threads.phase === 'disconnected' ? (
           <div className="px-3 py-3 flex flex-col gap-2.5 items-start">
             <p className="font-sans text-[12px] text-wave-muted">
@@ -60,7 +60,7 @@ function ConversationPane({ onClose }: { onClose: () => void }) {
           </div>
         ) : threads.threads.length === 0 ? (
           <p className="px-3 py-3 font-sans text-[12px] text-wave-muted">
-            No strategies yet — ship your first one and it becomes a thread.
+            No strategies yet. Ship your first one and it becomes a thread.
           </p>
         ) : (
           <ul>
@@ -76,22 +76,74 @@ function ConversationPane({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** Minimized chat chip — right-rail slot on desktop, fixed fallback on mobile. */
+export function MinimizedChatPill() {
+  const { state, restore, close } = useDrawer()
+  if (!state.open || !state.minimized) return null
+  const title = state.agentStrategy ? state.agentStrategy.authorHandle : 'New strategy'
+  return (
+    <div
+      className="mt-auto flex w-fit items-center gap-2 self-start rounded-full py-2 pl-4 pr-2 glass-panel"
+      style={{ borderRadius: 999 }}
+      role="dialog"
+      aria-label={`${title} (minimized)`}
+    >
+      <MessageSquare size={16} style={{ color: '#2A9D8F' }} aria-hidden="true" />
+      <button
+        onClick={restore}
+        className="font-sans text-[14px] font-semibold text-wave-text"
+        aria-label={`Restore ${title} chat`}
+      >
+        {title}
+      </button>
+      <button
+        onClick={close}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-wave-muted transition-colors hover:text-wave-text"
+        aria-label="Close chat"
+      >
+        <X size={16} aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function useSaveConversation() {
+  const [savedFlash, setSavedFlash] = useState(false)
+  const saveCurrentConversation = useCallback(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(LIVE_CHAT_MESSAGES_KEY) ?? '[]') as unknown
+      const messages = Array.isArray(raw) ? (raw as ArchiveMessage[]) : []
+      const saved = saveToArchive(messages)
+      setSavedFlash(Boolean(saved))
+      if (saved) setTimeout(() => setSavedFlash(false), 1600)
+    } catch {
+      // nothing to save
+    }
+  }, [])
+  return { savedFlash, saveCurrentConversation }
+}
+
+/** The chat floats at every desktop size now — no rail slot remains (the
+ *  minimized pill is fixed bottom-right). DockedChatPanel was removed with
+ *  the rail hosting. */
+
 export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
-  const { state, close, minimize, restore } = useDrawer()
+  const { state, close, minimize } = useDrawer()
   const { open, minimized, agentStrategy } = state
   const [showThreads, setShowThreads] = useState(false)
+  const { savedFlash, saveCurrentConversation } = useSaveConversation()
 
   const [isDesktop, setIsDesktop] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Track viewport so the floating window's fixed size/position only applies on
   // desktop. On mobile the panel is a full-width docked sheet.
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 768px)')
-    const update = () => setIsDesktop(mq.matches)
+  useLayoutEffect(() => {
+    const desktop = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsDesktop(desktop.matches)
     update()
-    mq.addEventListener('change', update)
-    return () => mq.removeEventListener('change', update)
+    desktop.addEventListener('change', update)
+    return () => desktop.removeEventListener('change', update)
   }, [])
 
   // Floating position (desktop only). null = use default bottom-right dock.
@@ -194,32 +246,12 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
 
   const title = agentStrategy ? agentStrategy.authorHandle : 'New strategy'
 
-  // --- Minimized pill ---
+  // Minimized: a fixed bottom-right chip at every desktop size (the rail no
+  // longer hosts the chat — it floats).
   if (minimized) {
     return (
-      <div className="fixed z-[60] bottom-4 right-4 md:bottom-6 md:right-6">
-        <div
-          className="flex items-center gap-2 rounded-full pl-4 pr-2 py-2 glass-panel"
-          style={{ borderRadius: 999 }}
-          role="dialog"
-          aria-label={`${title} (minimized)`}
-        >
-          <MessageSquare size={16} style={{ color: '#2A9D8F' }} aria-hidden="true" />
-          <button
-            onClick={restore}
-            className="font-sans text-[14px] font-semibold text-wave-text"
-            aria-label={`Restore ${title} chat`}
-          >
-            {title}
-          </button>
-          <button
-            onClick={close}
-            className="w-8 h-8 flex items-center justify-center text-wave-muted hover:text-wave-text rounded-full transition-colors"
-            aria-label="Close chat"
-          >
-            <X size={16} aria-hidden="true" />
-          </button>
-        </div>
+      <div className="fixed z-[60] bottom-4 right-4">
+        <MinimizedChatPill />
       </div>
     )
   }
@@ -232,6 +264,11 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
     ? undefined
     : pos
       ? { left: pos.x, top: pos.y, right: 'auto', bottom: 'auto', width: size.w, height: size.h }
+      // Farcaster-style dock: pinned to the TOP-right, aligned with the
+      // layout columns' top edge — a right-hand column until dragged away.
+      // Default dock: pinned BOTTOM-right — the chat is a floor-level window
+      // (the old top-right dock read as a second header; the rail no longer
+      // hosts it, so nothing sits under it but the page).
       : { right: PANEL_MARGIN, bottom: PANEL_MARGIN, width: size.w, height: size.h }
 
   return (
@@ -260,24 +297,10 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
             className="hidden md:block text-wave-muted shrink-0"
             aria-hidden="true"
           />
-          {/* Icon-only title: the wave mark carries the brand; the label stays
-              available to screen readers and as a hover tooltip. */}
-          <span
-            className="flex-1 flex items-center min-w-0"
-            title={title}
-            aria-label={title}
-            role="heading"
-            aria-level={2}
-          >
-            <Image
-              src="/wave-logo.png"
-              alt=""
-              width={22}
-              height={22}
-              className="h-[22px] w-[22px] shrink-0"
-            />
-            <span className="sr-only">{title}</span>
+          <span className="sr-only" role="heading" aria-level={2}>
+            {title}
           </span>
+          <span className="min-w-0 flex-1" aria-hidden="true" />
           {/* Window controls */}
           <button
             onClick={() => setShowThreads((v) => !v)}
@@ -290,6 +313,16 @@ export function CreateDrawer({ useMock = true }: { useMock?: boolean }) {
             ) : (
               <PanelLeft size={15} aria-hidden="true" />
             )}
+          </button>
+          <button
+            onClick={saveCurrentConversation}
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors shrink-0 ${
+              savedFlash ? 'text-wave-teal' : 'text-wave-muted hover:text-wave-text'
+            }`}
+            aria-label="Save conversation to your archive"
+            title={savedFlash ? 'Saved' : 'Save conversation'}
+          >
+            <Bookmark size={15} fill={savedFlash ? 'currentColor' : 'none'} aria-hidden="true" />
           </button>
           <button
             onClick={minimize}

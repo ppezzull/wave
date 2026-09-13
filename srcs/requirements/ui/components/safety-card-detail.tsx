@@ -42,8 +42,8 @@ export function SafetyCardDetail({ strategy }: { strategy: Strategy }) {
         {isPending ? (
           <p className="font-sans text-[13px] text-white/80">
             {strategy.description
-              ? 'The compiler rule pass did not complete — nothing is inferred.'
-              : 'No description to recompile — the rule pass cannot run.'}
+              ? 'The compiler rule pass did not complete. Nothing is inferred.'
+              : 'No description to recompile. The rule pass cannot run.'}
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -85,10 +85,6 @@ export function SafetyCardDetail({ strategy }: { strategy: Strategy }) {
               {guardOpcodes.length > 0
                 ? `Oracle guard in program: ${guardOpcodes.join(', ')}`
                 : 'No oracle-guard instruction in this program (constant-product only).'}
-            </p>
-            <p className="font-sans text-[10px] text-white/60 mt-1">
-              Deterministic compile-time rule pass (Zod → canonical → IR →
-              bytecode). Quote-grid settle simulation not run.
             </p>
           </div>
         )}

@@ -259,7 +259,7 @@ export function useLedgerApproval() {
         ledgerLog('sign.ok', { recovered, sigBytes: (signature.length - 2) / 2, v: output.v })
         if (input.expectedAddress && recovered.toLowerCase() !== input.expectedAddress.toLowerCase()) {
           setPhase('error')
-          const wrong = 'Wrong Ledger — this device is not the designated approver.'
+          const wrong = 'Wrong Ledger. This device is not the designated approver.'
           const detail = `recovered ${recovered}, expected ${input.expectedAddress}`
           setReason(wrong)
           setDebug(detail)

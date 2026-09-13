@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'wave - likes are liquidity',
+  title: 'wave · natural-language on-chain strategies',
   description: 'Ship on-chain trading strategies. The return is the signal.',
   generator: 'v0.app',
 }
@@ -36,7 +36,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${jetbrainsMono.variable} bg-wave-bg`}
     >
-      <body className="font-sans antialiased">
+      {/* suppressHydrationWarning: browser extensions (e.g. the debug
+          profile's shortcut manager) stamp attributes onto <body> before
+          React hydrates — attribute mismatches here are never ours. */}
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

@@ -9,7 +9,8 @@ import {
 } from '@/lib/data'
 import { StrategyCard } from '@/components/strategy-card'
 import { Footer } from '@/components/footer'
-import { PanelSkeleton, FeedSkeleton } from '@/components/skeleton'
+import { MicroSkeleton } from '@/components/skeleton'
+import { AuthorAvatar } from '@/components/generic-avatar'
 
 // Live profiles (not present at build) render dynamically; mock params are
 // generated so the mock build still prerenders the seed profile pages.
@@ -151,26 +152,12 @@ export default async function ProfilePage({ params }: Props) {
 
       {/* Profile identity */}
       <section
-        className="bg-wave-bg border-b border-wave-border px-4 py-6"
+        className="bg-wave-bg/85 backdrop-blur-md border-b border-wave-border px-4 py-6"
         aria-labelledby="profile-name"
       >
         <div className="w-full">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            {/* Avatar — profile image, or gradient fallback */}
-            <div
-              className="w-16 h-16 rounded-full shrink-0 overflow-hidden"
-              style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-              aria-hidden="true"
-            >
-              {profile.avatarUrl && (
-                // eslint-disable-next-line @nextjs/no-img-element
-                <img
-                  src={profile.avatarUrl || '/placeholder.svg'}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              )}
-            </div>
+            <AuthorAvatar url={profile.avatarUrl} size={64} />
 
             {/* Text block — handle only, no display name or bio */}
             <div className="flex flex-col gap-1 min-w-0">
@@ -189,10 +176,7 @@ export default async function ProfilePage({ params }: Props) {
           header + identity render instantly off the profile lookup. */}
       <Suspense
         fallback={
-          <>
-            <PanelSkeleton lines={2} className="rounded-none border-x-0" label="Loading stats" />
-            <FeedSkeleton rows={2} />
-          </>
+          <MicroSkeleton label="Loading profile" />
         }
       >
         <ProfileStatsAndStrategies profile={profile} />

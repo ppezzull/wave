@@ -52,13 +52,27 @@ export interface SubgraphSwap {
 
 const SUBGRAPH_URL =
   process.env.WAVE_SUBGRAPH_URL ??
-  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.5'
+  'https://api.studio.thegraph.com/query/1756983/wave/v0.0.7'
 
 const headers: Record<string, string> | undefined = process.env.WAVE_SUBGRAPH_KEY
   ? { Authorization: `Bearer ${process.env.WAVE_SUBGRAPH_KEY}` }
   : undefined
 
 const client = new GraphQLClient(SUBGRAPH_URL, headers ? { headers } : undefined)
+
+// ── per-network instances (Settings selector) ─────────────────────────────
+// The subgraph is NETWORK data: the selector (cookie, lib/networks.ts) picks
+// which endpoint each request reads. Cached per URL — one GraphQLClient and
+// one API object per network, reused across requests.
+const instances = new Map<string, ReturnType<typeof makeSubgraph>>()
+export function subgraphFor(url: string) {
+  let inst = instances.get(url)
+  if (!inst) {
+    inst = makeSubgraph(new GraphQLClient(url, headers ? { headers } : undefined))
+    instances.set(url, inst)
+  }
+  return inst
+}
 
 // The deployed subgraph may be the SPIKE — querying a production entity
 // (`strategies`/`swaps`) that doesn't exist on it returns a GraphQL error.
@@ -77,7 +91,7 @@ function isEntityNotDeployed(error: unknown): boolean {
   )
 }
 
-// Studio v0.0.4 predates StrategyDescribed AND the live v0.0.5 predates the author field
+// Studio v0.0.4 predates StrategyDescribed AND the live v0.0.6 predates the author field
 // (task #31, lands with v0.0.6): selecting either against those deploys fails the whole
 // query. That's a KNOWN old-deploy signature, not a bug — withOptionalStrategyFields
 // retries dropping the offending field (max 2) and the row mapper fills the documented
@@ -163,7 +177,8 @@ const toStrategy = (row: StrategyRow): SubgraphStrategy => ({
   lastSwapTimestamp: Number(row.lastSwapTimestamp),
 })
 
-export const subgraph = {
+function makeSubgraph(client: GraphQLClient) {
+  return {
   /** Production entity — empty while syncing / before any strategies seed. */
   async getStrategy(id: string): Promise<SubgraphStrategy | null> {
     if (!isStrategyId(id)) return null
@@ -309,4 +324,63 @@ export const subgraph = {
       throw error
     }
   },
+
+  /** Latest on-chain chat backup. null = none indexed yet. */
+  async getLatestChatVault(user: string): Promise<{
+    ciphertextHex: string
+    nonce: string
+    timestamp: string
+    txHash: string
+  } | null> {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(user)) return null
+    try {
+      const data = await client.request<{
+        chatVaults?: {
+          nonce: string
+          ciphertext: string
+          timestamp: string
+          transactionHash: string
+        }[]
+      }>(
+        `query($user: Bytes!) {
+          chatVaults(where: { user: $user }, orderBy: nonce, orderDirection: desc, first: 1) {
+            nonce ciphertext timestamp transactionHash
+          }
+        }`,
+        { user: user.toLowerCase() },
+      )
+      const row = data.chatVaults?.[0]
+      if (!row) return null
+      return {
+        ciphertextHex: row.ciphertext,
+        nonce: row.nonce,
+        timestamp: row.timestamp,
+        txHash: row.transactionHash,
+      }
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return null
+      console.warn('[subgraph.getLatestChatVault]', error)
+      return null
+    }
+  },
+
+  /** Latest IPFS CID for a wallet. null = no Author row indexed yet. */
+  async getAuthorAvatarCid(address: string): Promise<string | null> {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null
+    try {
+      const data = await client.request<{ author?: { avatarCid?: string } | null }>(
+        `query($id: ID!) { author(id: $id) { avatarCid } }`,
+        { id: address.toLowerCase() },
+      )
+      return data.author?.avatarCid || null
+    } catch (error) {
+      if (isEntityNotDeployed(error)) return null
+      console.warn('[subgraph.getAuthorAvatarCid]', error)
+      return null
+    }
+  },
 }
+}
+
+/** The env-configured default (sepolia). Per-request code uses subgraphFor(). */
+export const subgraph = subgraphFor(SUBGRAPH_URL)

@@ -115,7 +115,7 @@ export const strategies: Strategy[] = [
       '0x3a7f1c9e02d84b6f5a1e9c73d0b48f26a9c1e534d7b8069f2e4a15c8b3d9e072',
     status: 'active',
     cumulativeVolumeIn: '40000000000000000000',
-    cumulativeVolumeOut: '43065200000000000000', // (out-cap)/cap = +247.3%
+    cumulativeVolumeOut: '9334800000000000000', // (in−out)/cap = +247.3%
     swapCount: 312,
     lastSwapTimestamp: CURRENT_NOW - 7200, // 2h ago
     authorHandle: 'alice.eth',
@@ -173,7 +173,7 @@ export const strategies: Strategy[] = [
       '0x8b4e2c17f9a06d35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0653',
     status: 'active',
     cumulativeVolumeIn: '9000000000000000000',
-    cumulativeVolumeOut: '9455000000000000000', // +89.1%
+    cumulativeVolumeOut: '4545000000000000000', // (in−out)/cap = +89.1%
     swapCount: 87,
     lastSwapTimestamp: CURRENT_NOW - 9000, // 2h30m ago
     authorHandle: 'vitalik.wave.eth',
@@ -224,7 +224,7 @@ export const strategies: Strategy[] = [
       '0x5c1e9a37b8f042d6e19c8b74a0d365f2e8c1b9047d3a6e5f8c2b1d9a4e6c0371',
     status: 'active',
     cumulativeVolumeIn: '2000000000000000000',
-    cumulativeVolumeOut: '1839600000000000000', // -12.4%
+    cumulativeVolumeOut: '2260400000000000000', // (in−out)/cap = −12.4%
     swapCount: 44,
     lastSwapTimestamp: CURRENT_NOW - 21600, // 6h ago
     authorHandle: '0xdefi.eth',
@@ -266,7 +266,7 @@ export const strategies: Strategy[] = [
       '0x6d2e9a18c4f07b35e1c8b47d29f0a63e5c1d94b8072f6e3a5c19d8b47e2f0654',
     status: 'active',
     cumulativeVolumeIn: '11000000000000000000',
-    cumulativeVolumeOut: '11853600000000000000', // +34.7%
+    cumulativeVolumeOut: '7946400000000000000', // (in−out)/cap = +34.7%
     swapCount: 156,
     lastSwapTimestamp: CURRENT_NOW - 14400, // 4h ago
     authorHandle: 'quant.wave.eth',

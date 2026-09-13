@@ -45,7 +45,7 @@ const TIMEOUT_TAGS = new Set([
 const TAG_REASON: Record<string, { reason: string; kind?: 'rejected' | 'error' }> = {
   RefusedByUserDAError: {
     kind: 'rejected',
-    reason: 'Cancelled on device — nothing was shipped.',
+    reason: 'Cancelled on device. Nothing was shipped.',
   },
   NoAccessibleDeviceError: {
     reason: 'No Ledger was selected. Click Confirm and pick the device in the browser prompt.',
@@ -96,7 +96,7 @@ const TAG_REASON: Record<string, { reason: string; kind?: 'rejected' | 'error' }
     reason: 'The Ledger did not come online. Unlock it (PIN), then click Confirm again.',
   },
   ApprovalTimeout: {
-    reason: 'The Ledger did not confirm in time. When the device asks, press to sign — then click Confirm again.',
+    reason: 'The Ledger did not confirm in time. When the device asks, press to sign, then click Confirm again.',
   },
   DeviceBusyTimeout: {
     reason: 'The Ledger is busy with another request. Close Ledger Live if it is open, then try again.',
@@ -146,7 +146,7 @@ const TAG_REASON: Record<string, { reason: string; kind?: 'rejected' | 'error' }
   },
   InvalidStatusWordError: {
     reason:
-      'The Ledger returned an unexpected status — often an empty reply while signing. Enable blind signing in the Ethereum app settings, update the app, then click Confirm.',
+      'The Ledger returned an unexpected status, often an empty reply while signing. Enable blind signing in the Ethereum app settings, update the app, then click Confirm.',
   },
   InvalidResponseFormatError: {
     reason: 'The Ledger returned a malformed reply. Disconnect it, reconnect, then click Confirm.',
@@ -169,9 +169,9 @@ const TAG_REASON: Record<string, { reason: string; kind?: 'rejected' | 'error' }
 }
 
 const CODE_REASON: Record<string, string> = {
-  '5501': 'Cancelled on device — nothing was shipped.',
-  '6985': 'Cancelled on device — nothing was shipped.',
-  '6982': 'Cancelled on device — nothing was shipped.',
+  '5501': 'Cancelled on device. Nothing was shipped.',
+  '6985': 'Cancelled on device. Nothing was shipped.',
+  '6982': 'Cancelled on device. Nothing was shipped.',
   '5515': 'The Ledger is locked. Enter your PIN on the device, then click Confirm.',
   '6807': 'The Ethereum app is not installed. Install it via Ledger Live and try again.',
   '6980': 'The Ethereum app refused the message (status 6980). Enable blind signing in its settings and update the app via Ledger Live, then click Confirm.',
@@ -228,7 +228,7 @@ export function classifyLedgerFailure(err: unknown): LedgerFailure {
   if (isDeviceRejection(err) || tag === 'RefusedByUserDAError') {
     return {
       kind: 'rejected',
-      reason: 'Cancelled on device — nothing was shipped.',
+      reason: 'Cancelled on device. Nothing was shipped.',
       debug,
       clearSession: false,
     }

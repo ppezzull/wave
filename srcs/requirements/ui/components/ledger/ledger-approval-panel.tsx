@@ -12,8 +12,8 @@ const LABELS: Record<LedgerPhase, { text: string; color: string; pulse?: boolean
     color: '#2A9D8F',
     pulse: true,
   },
-  approved: { text: 'Approved on device — shipping…', color: '#2A9D8F' },
-  rejected: { text: 'Cancelled on device — nothing was shipped.', color: '#E5A458' },
+  approved: { text: 'Approved on device. Shipping…', color: '#2A9D8F' },
+  rejected: { text: 'Cancelled on device. Nothing was shipped.', color: '#E5A458' },
   error: { text: '', color: '#E5484D' }, // filled from reason
 }
 

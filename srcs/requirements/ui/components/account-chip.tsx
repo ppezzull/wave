@@ -12,12 +12,15 @@
 // The profile link: a live wallet HAS a profile — its address-keyed authorships
 // (/u/<address>, real since on-chain attribution). A server user (mock mode)
 // links to its named /u/[handle] profile.
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { BadgeCheck } from 'lucide-react'
 import type { CurrentUser } from './app-wrapper'
 import { useSessionUser } from '@/hooks/use-session-user'
 import { identityFromAddress } from '@/lib/identity'
 import { ConnectButton } from './connect-button'
+import { AuthorAvatar } from './generic-avatar'
+import { getAuthorAvatarUrl } from '@/app/actions/avatar'
 
 interface Props {
   currentUser: CurrentUser
@@ -31,6 +34,24 @@ function short(addr: string): string {
 
 export function AccountChip({ currentUser, collapsed = false, onNavClick }: Props) {
   const { sessionUser, ready } = useSessionUser()
+  const [graphAvatar, setGraphAvatar] = useState('')
+
+  useEffect(() => {
+    const addr = sessionUser?.address ?? currentUser.walletAddress
+    if (!addr) {
+      setGraphAvatar('')
+      return
+    }
+    if (
+      currentUser.avatarUrl &&
+      currentUser.walletAddress &&
+      addr.toLowerCase() === currentUser.walletAddress.toLowerCase()
+    ) {
+      setGraphAvatar(currentUser.avatarUrl)
+      return
+    }
+    void getAuthorAvatarUrl(addr).then(setGraphAvatar)
+  }, [sessionUser?.address, currentUser.walletAddress, currentUser.avatarUrl])
 
   // No session and not ready → render nothing (avoids hydration flash).
   if (!ready && !currentUser.walletAddress) return null
@@ -54,7 +75,7 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
   // The display handle is truncated, so route on the raw address, lowercase
   // (getProfile lowercases before querying). Mock/server users keep /u/[handle].
   const profileHref = sessionUser ? `/u/${address.toLowerCase()}` : `/u/${handle}`
-  const avatarUrl = sessionUser ? '' : currentUser.avatarUrl
+  const avatarUrl = graphAvatar || currentUser.avatarUrl
 
   return (
     <div className={collapsed ? 'flex flex-col items-center gap-2 px-2' : 'flex items-center gap-2 px-3'}>
@@ -66,20 +87,7 @@ export function AccountChip({ currentUser, collapsed = false, onNavClick }: Prop
         }`}
         aria-label={`Your profile, ${name}`}
       >
-        <div
-          className="w-10 h-10 rounded-full shrink-0 overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #2A9D8F, #0F3460)' }}
-          aria-hidden="true"
-        >
-          {avatarUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarUrl || '/placeholder.svg'}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          )}
-        </div>
+        <AuthorAvatar url={avatarUrl} size={40} />
         {!collapsed && (
           <div className="flex flex-col min-w-0 leading-tight">
             <span className="font-mono text-[15px] font-semibold text-wave-text truncate flex items-center gap-1">
